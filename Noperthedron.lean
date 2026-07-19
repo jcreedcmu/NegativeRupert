@@ -81,6 +81,8 @@ import Noperthedron.SolutionTable
 import Noperthedron.SolutionTable.Assemble
 import Noperthedron.SolutionTable.Basic
 import Noperthedron.SnubCube
+import Noperthedron.SnubCube.Certificate
+import Noperthedron.SnubCube.CertificateSmoke
 import Noperthedron.SolutionTable.Defs
 import Noperthedron.SolutionTable.Global
 import Noperthedron.SolutionTable.Load
