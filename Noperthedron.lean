@@ -80,6 +80,11 @@ import Noperthedron.SolutionTable.Global
 import Noperthedron.SolutionTable.Load
 import Noperthedron.SolutionTable.Local
 import Noperthedron.SolutionTable.Parse
+import Noperthedron.SnubCube
+import Noperthedron.SnubCube.Approx
+import Noperthedron.SnubCube.Index
+import Noperthedron.SnubCube.Tribonacci
+import Noperthedron.SnubCube.Vertices
 import Noperthedron.Tightening
 import Noperthedron.Util
 import Noperthedron.Vertices.Exact
