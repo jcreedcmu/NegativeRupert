@@ -1,6 +1,7 @@
 module
 
 public import Mathlib.Data.Finset.Max
+public import Noperthedron.Cayley
 public import Noperthedron.SnubCube.Tightening
 
 @[expose] public section
@@ -40,6 +41,51 @@ snub-cube symmetry increases its trace. -/
 def InFundamentalDomain (R : Matrix (Fin 3) (Fin 3) ℝ) : Prop :=
   ∀ g : VertexIndex, Matrix.trace (R * symmetryMatrix g) ≤ Matrix.trace R
 
+/-- A matrix in the max-trace Dirichlet cell has nonnegative trace.  This is
+the key fact excluding the angle-`pi` singularity of Cayley coordinates. -/
+theorem trace_nonneg_of_inFundamentalDomain
+    {R : Matrix (Fin 3) (Fin 3) ℝ} (hR : InFundamentalDomain R) :
+    0 ≤ Matrix.trace R := by
+  have hsum :
+      (∑ g : VertexIndex, Matrix.trace (R * symmetryMatrix g)) ≤
+        ∑ _g : VertexIndex, Matrix.trace R :=
+    Finset.sum_le_sum fun g _ => hR g
+  have hleft :
+      (∑ g : VertexIndex, Matrix.trace (R * symmetryMatrix g)) = 0 := by
+    rw [← Matrix.trace_sum, ← Matrix.mul_sum, sum_symmetryMatrix]
+    simp
+  rw [hleft] at hsum
+  norm_num at hsum ⊢
+  have hcard : (0 : ℝ) < Fintype.card VertexIndex := by
+    exact_mod_cast (Fintype.card_pos : 0 < Fintype.card VertexIndex)
+  nlinarith
+
+/-- The max-trace cell is contained in one bounded Cayley chart. -/
+theorem exists_bounded_cayley_of_inFundamentalDomain
+    (R : Matrix (Fin 3) (Fin 3) ℝ)
+    (hSO : R ∈ Matrix.specialOrthogonalGroup (Fin 3) ℝ)
+    (hfund : InFundamentalDomain R) :
+    ∃ x ∈ Set.Icc (-2 : ℝ) 2,
+      ∃ y ∈ Set.Icc (-2 : ℝ) 2,
+      ∃ z ∈ Set.Icc (-2 : ℝ) 2,
+        x ^ 2 + y ^ 2 + z ^ 2 ≤ 3 ∧ R = cayleyMatrix x y z := by
+  obtain ⟨x, y, z, hradius, hR⟩ :=
+    exists_cayleyMatrix_of_trace_nonneg R hSO
+      (trace_nonneg_of_inFundamentalDomain hfund)
+  have hxSq : x ^ 2 ≤ 3 := by
+    nlinarith [sq_nonneg y, sq_nonneg z]
+  have hySq : y ^ 2 ≤ 3 := by
+    nlinarith [sq_nonneg x, sq_nonneg z]
+  have hzSq : z ^ 2 ≤ 3 := by
+    nlinarith [sq_nonneg x, sq_nonneg y]
+  have hx : x ∈ Set.Icc (-2 : ℝ) 2 := by
+    constructor <;> nlinarith [sq_nonneg (x - 2), sq_nonneg (x + 2)]
+  have hy : y ∈ Set.Icc (-2 : ℝ) 2 := by
+    constructor <;> nlinarith [sq_nonneg (y - 2), sq_nonneg (y + 2)]
+  have hz : z ∈ Set.Icc (-2 : ℝ) 2 := by
+    constructor <;> nlinarith [sq_nonneg (z - 2), sq_nonneg (z + 2)]
+  exact ⟨x, hx, y, hy, z, hz, hradius, hR⟩
+
 /-- Every matrix has a right-symmetry representative in the Dirichlet cell.
 No analytic compactness is needed: this is a maximum over 24 values. -/
 theorem exists_mul_symmetry_inFundamentalDomain
@@ -56,8 +102,33 @@ theorem exists_mul_symmetry_inFundamentalDomain
 def _root_.MatrixPose.relativeRotation (p : MatrixPose) :
     Matrix (Fin 3) (Fin 3) ℝ := p.outerRot.valᵀ * p.innerRot.val
 
+theorem MatrixPose.relativeRotation_mem_SO3 (p : MatrixPose) :
+    p.relativeRotation ∈ Matrix.specialOrthogonalGroup (Fin 3) ℝ := by
+  have hout := (Matrix.mem_specialOrthogonalGroup_iff).mp p.outerRot.property
+  have houtT : p.outerRot.valᵀ ∈
+      Matrix.specialOrthogonalGroup (Fin 3) ℝ := by
+    rw [Matrix.mem_specialOrthogonalGroup_iff,
+      Matrix.mem_orthogonalGroup_iff]
+    constructor
+    · simpa only [Matrix.transpose_transpose] using
+        (Matrix.mem_orthogonalGroup_iff' (Fin 3) ℝ).mp hout.1
+    · simpa only [Matrix.det_transpose] using hout.2
+  exact Submonoid.mul_mem _ houtT p.innerRot.property
+
 def _root_.MatrixPose.InSnubFundamentalDomain (p : MatrixPose) : Prop :=
   InFundamentalDomain p.relativeRotation
+
+/-- Every normalized matrix pose has a bounded rational relative-rotation
+coordinate triple. -/
+theorem MatrixPose.exists_bounded_relative_cayley
+    (p : MatrixPose) (hfund : p.InSnubFundamentalDomain) :
+    ∃ x ∈ Set.Icc (-2 : ℝ) 2,
+      ∃ y ∈ Set.Icc (-2 : ℝ) 2,
+      ∃ z ∈ Set.Icc (-2 : ℝ) 2,
+        x ^ 2 + y ^ 2 + z ^ 2 ≤ 3 ∧
+          p.relativeRotation = cayleyMatrix x y z :=
+  exists_bounded_cayley_of_inFundamentalDomain p.relativeRotation
+    (relativeRotation_mem_SO3 p) hfund
 
 /-- After fixing an outer symmetry, a further inner symmetry selects the
 relative fundamental-domain representative. -/

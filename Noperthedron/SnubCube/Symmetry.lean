@@ -51,6 +51,14 @@ def symmetryMatrixInt (g : VertexIndex) : Matrix (Fin 3) (Fin 3) ℤ :=
 def symmetryMatrix (g : VertexIndex) : Matrix (Fin 3) (Fin 3) ℝ :=
   (symmetryMatrixInt g).map fun z => (z : ℝ)
 
+/-- The average of all rotational symmetry matrices is zero. -/
+theorem sum_symmetryMatrix :
+    ∑ g : VertexIndex, symmetryMatrix g = 0 := by
+  ext i j
+  change ∑ g : VertexIndex, (symmetryMatrixInt g i j : ℝ) = 0
+  norm_cast
+  fin_cases i <;> fin_cases j <;> decide +kernel
+
 private theorem symmetryMatrixInt_mul_transpose (g : VertexIndex) :
     symmetryMatrixInt g * (symmetryMatrixInt g)ᵀ = 1 := by
   obtain ⟨p, s⟩ := g
