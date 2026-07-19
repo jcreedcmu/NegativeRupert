@@ -1,6 +1,8 @@
 import Noperthedron.Basic
 import Noperthedron.BalancedSupport
 import Noperthedron.BalancedSupport.Basic
+import Noperthedron.BalancedSupport.Determinant
+import Noperthedron.BalancedSupport.Rupert
 import Noperthedron.Bounding
 import Noperthedron.Bounding.BoundingUtil
 import Noperthedron.Bounding.OpNorm
