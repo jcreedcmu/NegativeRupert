@@ -680,6 +680,8 @@ def cayley_edge_smoke(center, half_widths):
                     for q in range(24)]
         support_lower = min(ball[0]-ball[1] for ball in supports)
         strict_lower = max(ball[0]-ball[1] for ball in supports)
+        witness = max(range(24),
+                      key=lambda q: supports[q][0]-supports[q][1])
         minimum_support = (support_lower if minimum_support is None else
                            min(minimum_support, support_lower))
         minimum_strict = (strict_lower if minimum_strict is None else
@@ -698,14 +700,21 @@ def cayley_edge_smoke(center, half_widths):
         total_polys = [qpoly_add(a, b)
                        for a, b in zip(total_polys, contact_polys)]
         contacts.append({"outer_index": q0, "next_outer_index": q1,
-                         "inner_index": inner, "ball": balls[inner]})
+                         "inner_index": inner,
+                         "nonzero_witness": witness,
+                         "ball": balls[inner]})
     component_balls = [qpoly_eval_centered(poly, (x, y, z), (ex, ey, ez))
                        for poly in total_polys]
     total = ball_dot(view, component_balls)
     # The eventual Lean bridge will use a much smaller exact-vertex error;
     # retain a visible conservative prototype allowance for now.
     error = Q(len(cycle), 10**8)
-    lower = total[0]-total[1]-total_defect-error
+    # The polynomial is denominator-cleared.  Charge every support defect
+    # at the maximum Cayley denominator over the whole box.
+    endpoints = [(x-ex, x+ex), (y-ey, y+ey), (z-ez, z+ez)]
+    d_bound = Q(1) + sum(max(abs(lo), abs(hi))**2
+                         for lo, hi in endpoints)
+    lower = total[0]-total[1]-d_bound*total_defect-error
     if lower < 0:
         raise RuntimeError(
             f"edge displacement fails by {-float(lower):.6g}")
@@ -719,6 +728,7 @@ def cayley_edge_smoke(center, half_widths):
             "minimum_support_lower": minimum_support,
             "minimum_strict_support_lower": minimum_strict,
             "total_support_defect": total_defect,
+            "cayley_d_bound": d_bound,
             "displacement_ball": total,
             "error": error,
             "lower_bound": lower,
