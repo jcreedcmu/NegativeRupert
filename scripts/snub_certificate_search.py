@@ -531,6 +531,201 @@ def cayley_global_smoke(center, half_widths, direction_count: int,
     }
 
 
+def ball_dot(a, b):
+    return ball_sum3([ball_mul(x, y) for x, y in zip(a, b)])
+
+
+def ball_cross_const_left(a, b):
+    return [ball_sub(ball_scale(a[1], b[2]), ball_scale(a[2], b[1])),
+            ball_sub(ball_scale(a[2], b[0]), ball_scale(a[0], b[2])),
+            ball_sub(ball_scale(a[0], b[1]), ball_scale(a[1], b[0]))]
+
+
+def cayley_view_balls(theta, phi, etheta, ephi):
+    """Enclose the viewing unit vector over one outer-angle rectangle."""
+    st = (sin_q(theta), etheta + KAPPA)
+    ct = (cos_q(theta), etheta + KAPPA)
+    sp = (sin_q(phi), ephi + KAPPA)
+    cp = (cos_q(phi), ephi + KAPPA)
+    return [ball_mul(ct, sp), ball_mul(st, sp), cp]
+
+
+def edge_orientation_ball(view, q0, q1, q):
+    """`view · ((q1-q0) × (q-q0))` using rational vertices."""
+    edge = [a-b for a, b in zip(VERTICES_Q[q1], VERTICES_Q[q0])]
+    delta = [a-b for a, b in zip(VERTICES_Q[q], VERTICES_Q[q0])]
+    cross = cross3(edge, delta)
+    return ball_sum3([ball_scale(cross[i], view[i]) for i in range(3)])
+
+
+def cayley_edge_contact_ball(view, variables, q0, q1, inner_index):
+    """Denominator-cleared outward-edge displacement contact."""
+    edge = [a-b for a, b in zip(VERTICES_Q[q1], VERTICES_Q[q0])]
+    numerator = cayley_numerator_balls(*variables)
+    denom = cayley_denom_ball(*variables)
+    inner = VERTICES_Q[inner_index]
+    outer = VERTICES_Q[q0]
+    displacement = []
+    for i in range(3):
+        ni = ball_sum3([ball_scale(inner[j], numerator[i][j])
+                        for j in range(3)])
+        displacement.append(ball_sub(ni, ball_scale(outer[i], denom)))
+    cross = ball_cross_const_left(edge, displacement)
+    # Clockwise rotation of a CCW projected edge is its outward normal, so
+    # the planar inner product is minus this scalar triple product.
+    return ball_neg(ball_dot(view, cross))
+
+
+# Coefficients in the basis 1,x,y,z,x²,xy,xz,y²,yz,z².
+QUADRATIC_EXPONENTS = (
+    (0, 0, 0), (1, 0, 0), (0, 1, 0), (0, 0, 1),
+    (2, 0, 0), (1, 1, 0), (1, 0, 1),
+    (0, 2, 0), (0, 1, 1), (0, 0, 2))
+
+
+def qpoly_zero():
+    return [Q(0)] * 10
+
+
+def qpoly_add(a, b):
+    return [x+y for x, y in zip(a, b)]
+
+
+def qpoly_scale(q, a):
+    return [q*x for x in a]
+
+
+def qpoly_eval_centered(coefficients, centers, radii):
+    """Tight centered enclosure of a normalized quadratic polynomial."""
+    x, y, z = centers
+    rx, ry, rz = radii
+    c = coefficients
+    value = (c[0] + c[1]*x + c[2]*y + c[3]*z + c[4]*x*x +
+             c[5]*x*y + c[6]*x*z + c[7]*y*y + c[8]*y*z + c[9]*z*z)
+    gradient = [c[1] + 2*c[4]*x + c[5]*y + c[6]*z,
+                c[2] + c[5]*x + 2*c[7]*y + c[8]*z,
+                c[3] + c[6]*x + c[8]*y + 2*c[9]*z]
+    linear_radius = sum(abs(g)*r for g, r in zip(gradient, radii))
+    quadratic_radius = (abs(c[4])*rx*rx + abs(c[5])*rx*ry +
+                        abs(c[6])*rx*rz + abs(c[7])*ry*ry +
+                        abs(c[8])*ry*rz + abs(c[9])*rz*rz)
+    return value, linear_radius + quadratic_radius
+
+
+def cayley_numerator_qpolys():
+    one, x, y, z, xx, xy, xz, yy, yz, zz = range(10)
+    def p(**terms):
+        ans = qpoly_zero()
+        for name, value in terms.items():
+            ans[{"one": one, "x": x, "y": y, "z": z, "xx": xx,
+                 "xy": xy, "xz": xz, "yy": yy, "yz": yz,
+                 "zz": zz}[name]] = Q(value)
+        return ans
+    return [
+        [p(one=1, xx=1, yy=-1, zz=-1), p(xy=2, z=-2), p(xz=2, y=2)],
+        [p(xy=2, z=2), p(one=1, xx=-1, yy=1, zz=-1), p(yz=2, x=-2)],
+        [p(xz=2, y=-2), p(yz=2, x=2), p(one=1, xx=-1, yy=-1, zz=1)],
+    ]
+
+
+CAYLEY_NUMERATOR_QPOLYS = cayley_numerator_qpolys()
+CAYLEY_DENOM_QPOLY = [Q(1), 0, 0, 0, 1, 0, 0, 1, 0, 1]
+
+
+def cayley_edge_contact_qpolys(q0, q1, inner_index):
+    """Three coefficients of `-edge × (N P - d Q)` for one edge."""
+    edge = [a-b for a, b in zip(VERTICES_Q[q1], VERTICES_Q[q0])]
+    inner = VERTICES_Q[inner_index]
+    outer = VERTICES_Q[q0]
+    displacement = []
+    for i in range(3):
+        value = qpoly_zero()
+        for j in range(3):
+            value = qpoly_add(value, qpoly_scale(
+                inner[j], CAYLEY_NUMERATOR_QPOLYS[i][j]))
+        displacement.append(qpoly_add(
+            value, qpoly_scale(-outer[i], CAYLEY_DENOM_QPOLY)))
+    cross = [qpoly_add(qpoly_scale(edge[1], displacement[2]),
+                       qpoly_scale(-edge[2], displacement[1])),
+             qpoly_add(qpoly_scale(edge[2], displacement[0]),
+                       qpoly_scale(-edge[0], displacement[2])),
+             qpoly_add(qpoly_scale(edge[0], displacement[1]),
+                       qpoly_scale(-edge[1], displacement[0]))]
+    return [qpoly_scale(-1, value) for value in cross]
+
+
+def cayley_edge_smoke(center, half_widths):
+    """Search a pose-dependent projected-edge balanced-support certificate.
+
+    This prototype freezes only the outer silhouette cycle and one inner
+    vertex per edge.  Edge normals themselves vary with the outer pose and
+    sum identically to zero around the cycle.
+    """
+    theta, phi, x, y, z = center
+    etheta, ephi, ex, ey, ez = half_widths
+    view = cayley_view_balls(theta, phi, etheta, ephi)
+    frame = np.asarray([[float(q) for q in row]
+                        for row in frame_q(theta, phi)[:2]])
+    projected = VERTICES_EXACT @ frame.T
+    cycle = list(map(int, ConvexHull(projected).vertices))
+    variables = [(x, ex), (y, ey), (z, ez)]
+    contacts = []
+    total_polys = [qpoly_zero(), qpoly_zero(), qpoly_zero()]
+    minimum_support = None
+    minimum_strict = None
+    total_defect = Q(0)
+    for index, q0 in enumerate(cycle):
+        q1 = cycle[(index+1) % len(cycle)]
+        supports = [edge_orientation_ball(view, q0, q1, q)
+                    for q in range(24)]
+        support_lower = min(ball[0]-ball[1] for ball in supports)
+        strict_lower = max(ball[0]-ball[1] for ball in supports)
+        minimum_support = (support_lower if minimum_support is None else
+                           min(minimum_support, support_lower))
+        minimum_strict = (strict_lower if minimum_strict is None else
+                          min(minimum_strict, strict_lower))
+        if strict_lower <= 0:
+            raise RuntimeError(
+                f"projected edge may vanish strict={float(strict_lower):.6g}")
+        # `u·(K-Q) = -orientation`; its certified maximum is the support
+        # defect consumed by the balanced-support-with-defect theorem.
+        total_defect += max(Q(0), max(-(ball[0]-ball[1])
+                                      for ball in supports))
+        balls = [cayley_edge_contact_ball(view, variables, q0, q1, p)
+                 for p in range(24)]
+        inner = max(range(24), key=lambda p: balls[p][0]-balls[p][1])
+        contact_polys = cayley_edge_contact_qpolys(q0, q1, inner)
+        total_polys = [qpoly_add(a, b)
+                       for a, b in zip(total_polys, contact_polys)]
+        contacts.append({"outer_index": q0, "next_outer_index": q1,
+                         "inner_index": inner, "ball": balls[inner]})
+    component_balls = [qpoly_eval_centered(poly, (x, y, z), (ex, ey, ez))
+                       for poly in total_polys]
+    total = ball_dot(view, component_balls)
+    # The eventual Lean bridge will use a much smaller exact-vertex error;
+    # retain a visible conservative prototype allowance for now.
+    error = Q(len(cycle), 10**8)
+    lower = total[0]-total[1]-total_defect-error
+    if lower < 0:
+        raise RuntimeError(
+            f"edge displacement fails by {-float(lower):.6g}")
+    return {
+        "center": center,
+        "half_widths": half_widths,
+        "cycle": cycle,
+        "contacts": contacts,
+        "diagnostics": {
+            "edge_count": len(cycle),
+            "minimum_support_lower": minimum_support,
+            "minimum_strict_support_lower": minimum_strict,
+            "total_support_defect": total_defect,
+            "displacement_ball": total,
+            "error": error,
+            "lower_bound": lower,
+        },
+    }
+
+
 def validate_cayley_global_certificate(payload, samples: int, seed: int):
     """Monte Carlo audit of the analytic error budget used by the prototype."""
     rng = random.Random(seed)
@@ -660,16 +855,49 @@ def qjson(x):
     return x
 
 
-def best_tetrahedron(points):
+def best_tetrahedron(points, trial_limit: int = 50000):
+    """Choose a well-conditioned tetrahedron containing the origin.
+
+    Older smoke generation exhausted every four-subset of as many as eighty
+    hull vertices (about 1.6 million dense solves).  Tree generation needs
+    this operation at many outer-view boxes, so use a deterministic bounded
+    candidate family instead.  Acceptance and the eventual radius are still
+    recomputed with exact rational barycentric coordinates.
+    """
     floating = np.asarray([[float(x) for x in p] for p in points])
     hull = ConvexHull(floating)
-    candidates = hull.vertices
+    candidates = list(map(int, hull.vertices))
     best = (0.0, None)
-    # Keep this smoke search predictable even if the candidate hull grows.
-    if len(candidates) > 80:
-        order = np.argsort(np.linalg.norm(floating[candidates], axis=1))[-80:]
-        candidates = candidates[order]
-    for indices in itertools.combinations(candidates, 4):
+    if len(candidates) > 96:
+        order = np.argsort(np.linalg.norm(floating[candidates], axis=1))[-96:]
+        candidates = [candidates[i] for i in order]
+
+    total_combinations = math.comb(len(candidates), 4)
+    if total_combinations <= trial_limit:
+        candidate_sets = itertools.combinations(candidates, 4)
+    else:
+        rng = random.Random(0)
+        seen = set()
+
+        # Regular-tetrahedron support points supply several strong seeds.
+        tetra_normals = np.asarray([
+            [1, 1, 1], [1, -1, -1], [-1, 1, -1], [-1, -1, 1]],
+            dtype=float)
+        for shift in range(12):
+            angle = 2 * math.pi * shift / 12
+            ca, sa = math.cos(angle), math.sin(angle)
+            rotation = np.asarray([[ca, -sa, 0], [sa, ca, 0], [0, 0, 1]])
+            normals = tetra_normals @ rotation.T
+            indices = tuple(sorted(candidates[int(np.argmax(
+                floating[candidates] @ normal))] for normal in normals))
+            if len(set(indices)) == 4:
+                seen.add(indices)
+
+        while len(seen) < trial_limit:
+            seen.add(tuple(sorted(rng.sample(candidates, 4))))
+        candidate_sets = sorted(seen)
+
+    for indices in candidate_sets:
         p = floating[list(indices)]
         matrix = np.vstack((p.T, np.ones(4)))
         try:
@@ -795,6 +1023,101 @@ def local_smoke(theta: Q, phi: Q, half_width: Q, direction_count: int,
     return payload
 
 
+def cayley_local_smoke(center, half_widths, direction_count: int,
+                       direction_denominator: int):
+    """Search a strengthened equality-stratum Cayley local certificate.
+
+    Only the two outer angles enter the geometric certificate.  The relative
+    Cayley cube is accepted by the separate exact squared-radius condition;
+    no generic five-Euler-parameter mismatch budget is imposed.
+    """
+    theta, phi, x, y, z = center
+    etheta, ephi, ex, ey, ez = half_widths
+    pose = [theta, phi, theta, phi, Q(0)]
+    eps = [etheta, ephi, etheta, ephi, Q(0)]
+    frame = np.asarray([[float(q) for q in row]
+                        for row in frame_q(theta, phi)[:2]])
+    projected = VERTICES @ frame.T
+
+    supported = []
+    for k in range(direction_count):
+        angle = -math.pi + (2*math.pi*(k + 0.37))/direction_count
+        direction = direction_q(angle, direction_denominator)
+        scores = projected @ np.asarray([float(q) for q in direction])
+        for vertex in np.argsort(scores)[::-1][:3]:
+            vertex = int(vertex)
+            if local_supports(pose, eps, direction, vertex):
+                supported.append((angle, direction, vertex))
+                break
+
+    candidates = []
+    n = len(supported)
+    for ia, ib, ic in itertools.combinations(range(n), 3):
+        if ib-ia < n//8 or ic-ib < n//8 or n-(ic-ia) < n//8:
+            continue
+        rows = [supported[ia], supported[ib], supported[ic]]
+        directions = [row[1] for row in rows]
+        weights = determinant_weights(directions)
+        if min(weights) <= 0:
+            continue
+        vertices = [row[2] for row in rows]
+        point, _ = normalized_a(pose, directions, vertices)
+        candidates.append({"directions": directions, "vertices": vertices,
+                           "weights": weights, "point": point})
+
+    if len(candidates) < 4:
+        raise RuntimeError(f"only {len(candidates)} balanced candidates")
+    float_radius, chosen_indices = best_tetrahedron(
+        [row["point"] for row in candidates])
+    chosen = [candidates[i] for i in chosen_indices]
+    points = [row["point"] for row in chosen]
+    exact_axis_radius = exact_tetrahedron_axis_radius(points)
+    perturbation = etheta + ephi + CENTER_VECTOR_ERROR
+    cover_radius = Q(19, 20) * Q(4, 7) * exact_axis_radius
+    c = floor_to(cover_radius - perturbation, 10**6)
+    radius_sq = sum(
+        max(abs(value-width), abs(value+width))**2
+        for value, width in zip((x, y, z), (ex, ey, ez)))
+    if c <= 0 or radius_sq > c*c:
+        raise RuntimeError(
+            f"Cayley local radius failed c={float(c):.6g} "
+            f"radius={math.sqrt(float(radius_sq)):.6g}")
+
+    target_length = Q(7, 4) * (c + perturbation)
+    bary = []
+    for axis in range(3):
+        for sign in (1, -1):
+            target = [Q(0)]*3
+            target[axis] = sign*target_length
+            lam = barycentric(points, target)
+            if min(lam) < 0 or sum(lam, Q(0)) != 1:
+                raise AssertionError("invalid exact barycentric witness")
+            bary.append(lam)
+
+    inverse_action = {SYMMETRY_ACTION[0][i]: i for i in range(24)}
+    return {
+        "center": center,
+        "half_widths": half_widths,
+        "certificates": [{
+            "contacts": [{"index": inverse_action[v], "direction": d}
+                         for v, d in zip(row["vertices"], row["directions"])],
+        } for row in chosen],
+        "c": c,
+        "r": Q(0),
+        "diagnostics": {
+            "supported_directions": len(supported),
+            "balanced_candidates": len(candidates),
+            "floating_axis_radius": float_radius,
+            "exact_axis_radius": exact_axis_radius,
+            "cover_radius": cover_radius,
+            "axis_perturbation": perturbation,
+            "radius_sq": radius_sq,
+            "radius_slack": c*c-radius_sq,
+            "minimum_barycentric": min(x for row in bary for x in row),
+        },
+    }
+
+
 def global_smoke(center, half_widths, direction_count: int,
                  direction_denominator: int):
     """Find the strongest determinant-balanced global triple for one box.
@@ -903,6 +1226,23 @@ def main():
                                       default=1000)
     cayley_global_parser.add_argument("--audit-samples", type=int, default=10000)
     cayley_global_parser.add_argument("--seed", type=int, default=1)
+    cayley_local_parser = sub.add_parser("cayley-local-smoke")
+    cayley_local_parser.add_argument(
+        "--center", default="3/10,11/10,0,0,0",
+        help="theta,phi,x,y,z as comma-separated rationals")
+    cayley_local_parser.add_argument(
+        "--half-widths", default="1/200,1/200,1/200,1/200,1/200",
+        help="five comma-separated rational half-widths")
+    cayley_local_parser.add_argument("--directions", type=int, default=72)
+    cayley_local_parser.add_argument("--direction-denominator", type=int,
+                                     default=100)
+    cayley_edge_parser = sub.add_parser("cayley-edge-smoke")
+    cayley_edge_parser.add_argument(
+        "--center", default="3/10,11/10,1/5,1/10,0",
+        help="theta,phi,x,y,z as comma-separated rationals")
+    cayley_edge_parser.add_argument(
+        "--half-widths", default="1/100,1/100,1/100,1/100,1/100",
+        help="five comma-separated rational half-widths")
     args = parser.parse_args()
     if args.command == "local-smoke":
         result = local_smoke(Q(args.theta), Q(args.phi),
@@ -942,6 +1282,22 @@ def main():
         result["audit"] = validate_cayley_global_certificate(
             result, args.audit_samples, args.seed)
         print(json.dumps(qjson(result), indent=2))
+    elif args.command == "cayley-local-smoke":
+        center = [Q(x) for x in args.center.split(",")]
+        half_widths = [Q(x) for x in args.half_widths.split(",")]
+        if len(center) != 5 or len(half_widths) != 5:
+            parser.error("center and half-widths must each have five entries")
+        result = cayley_local_smoke(
+            center, half_widths, args.directions,
+            args.direction_denominator)
+        print(json.dumps(qjson(result), indent=2))
+    elif args.command == "cayley-edge-smoke":
+        center = [Q(x) for x in args.center.split(",")]
+        half_widths = [Q(x) for x in args.half_widths.split(",")]
+        if len(center) != 5 or len(half_widths) != 5:
+            parser.error("center and half-widths must each have five entries")
+        print(json.dumps(qjson(cayley_edge_smoke(center, half_widths)),
+                         indent=2))
 
 
 if __name__ == "__main__":

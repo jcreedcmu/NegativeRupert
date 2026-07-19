@@ -2,6 +2,7 @@ module
 
 public import Noperthedron.BalancedSupport.Basic
 public import Noperthedron.BalancedSupport.AxisFree
+public import Noperthedron.BalancedSupport.Cycle
 public import Noperthedron.BalancedSupport.Determinant
 public import Noperthedron.BalancedSupport.FiniteRotation
 public import Noperthedron.BalancedSupport.Global
