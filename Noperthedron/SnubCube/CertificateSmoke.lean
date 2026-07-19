@@ -7,42 +7,41 @@ public meta import Noperthedron.SnubCube.Certificate
 
 
 /-!
-# Shared-checker smoke certificate
+# Shared global-checker smoke certificate
 
-A zero-radius box with a comfortable width obstruction.  This deliberately
-small fixture verifies that the same `Box.Valid` proposition is accepted both
-by kernel reduction and by `native_decide` before a generated full tree is
-introduced.
+A positive-radius box with a comfortable balanced width obstruction.  It was
+produced by `scripts/snub_certificate_search.py global-smoke` and verifies
+that the same `Box.Valid` proposition is accepted both by kernel reduction
+and by `native_decide` before a generated full tree is introduced.
 -/
 
 namespace Noperthedron.SnubCube.Certificate
 
-def smokePose : Pose ℚ := {
-  θ₁ := -2634 / 1000
-  φ₁ := 1992 / 1000
-  θ₂ := -1527 / 1000
-  φ₂ := 1204 / 1000
-  α := -381 / 1000
-}
-
 def smokeInterval : PoseInterval ℚ :=
-  PoseInterval.mk smokePose smokePose (by rfl)
+  PoseInterval.mk
+    { θ₁ := -1 / 100, θ₂ := 99 / 100
+      φ₁ := -1 / 100, φ₂ := 99 / 100
+      α := -1 / 100 }
+    { θ₁ := 1 / 100, θ₂ := 101 / 100
+      φ₁ := 1 / 100, φ₂ := 101 / 100
+      α := 1 / 100 }
+    (by norm_num [Pose.le_iff])
 
 def smokeBox : Box := {
   interval := smokeInterval
   contact := ![
-    { innerIndex := VertexIndex.ofFin24 ⟨14, by omega⟩
-      outerIndex := VertexIndex.ofFin24 ⟨17, by omega⟩
-      direction := ![(1 : ℚ), 0]
-      weight := 1 },
-    { innerIndex := VertexIndex.ofFin24 ⟨5, by omega⟩
-      outerIndex := VertexIndex.ofFin24 ⟨16, by omega⟩
-      direction := ![(-1 : ℚ), 0]
-      weight := 1 },
-    { innerIndex := 0
+    { innerIndex := VertexIndex.ofFin24 18
       outerIndex := 0
-      direction := ![(0 : ℚ), 1]
-      weight := 0 }
+      direction := ![-1771 / 3229, -2700 / 3229]
+      weight := 20093700 / 39798421 },
+    { innerIndex := VertexIndex.ofFin24 5
+      outerIndex := 0
+      direction := ![8911 / 11089, 6600 / 11089]
+      weight := 2034600 / 11588881 },
+    { innerIndex := VertexIndex.ofFin24 19
+      outerIndex := 0
+      direction := ![1411 / 3589, 3300 / 3589]
+      weight := 12371100 / 35806381 }
   ]
 }
 

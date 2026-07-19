@@ -6,11 +6,11 @@ geometry is used only to select promising witnesses; every accepted witness
 is subsequently evaluated with ``fractions.Fraction`` using the same rounded
 Taylor data as Lean.
 
-The initial command, ``local-smoke``, searches for four balanced local
-certificates around a generic identity-symmetry equality pose and prints a
-complete JSON payload.  It is intentionally small enough to inspect and to
-turn into a Lean smoke theorem before building the adaptive five-dimensional
-tree.
+The ``local-smoke`` command searches for four balanced local certificates
+around a generic identity-symmetry equality pose.  The ``global-smoke``
+command searches for one balanced three-contact global certificate.  Both
+print complete JSON payloads small enough to inspect and turn into Lean smoke
+theorems before building the adaptive five-dimensional tree.
 """
 
 from __future__ import annotations
@@ -479,6 +479,68 @@ def local_smoke(theta: Q, phi: Q, half_width: Q, direction_count: int,
     return payload
 
 
+def global_smoke(center, half_widths, direction_count: int,
+                 direction_denominator: int):
+    """Find the strongest determinant-balanced global triple for one box.
+
+    Poses use the calculation-friendly order ``theta1, phi1, theta2, phi2,
+    alpha`` in this script.  Each sampled direction keeps the inner vertex
+    with the largest exact Taylor lower bound.  We then exhaustively compare
+    positively oriented triples, using their exact determinant weights.
+    """
+    interval = [(x-e, x+e) for x, e in zip(center, half_widths)]
+    eps = pose_eps(interval)
+    rows = []
+    for k in range(direction_count):
+        angle = -math.pi + (2*math.pi*(k + 0.37))/direction_count
+        direction = direction_q(angle, direction_denominator)
+        outer = max_h(center, eps[2], eps[3], direction)
+        inner_values = [fast_g(center, eps[4], eps[0], eps[1], direction, v)
+                        for v in VERTICES_Q]
+        inner_index = max(range(24), key=inner_values.__getitem__)
+        rows.append({
+            "angle": angle,
+            "direction": direction,
+            "inner_index": inner_index,
+            "outer": outer,
+            "inner": inner_values[inner_index],
+            "margin": inner_values[inner_index] - outer,
+        })
+
+    best = None
+    for indices in itertools.combinations(range(direction_count), 3):
+        chosen = [rows[i] for i in indices]
+        weights = determinant_weights([row["direction"] for row in chosen])
+        if min(weights) <= 0:
+            continue
+        margin = sum((weight*row["margin"]
+                      for weight, row in zip(weights, chosen)), Q(0))
+        normalized_margin = margin / sum(weights, Q(0))
+        if best is None or normalized_margin > best[0]:
+            best = (normalized_margin, margin, weights, chosen)
+    if best is None:
+        raise RuntimeError("no positively balanced direction triple")
+    normalized_margin, margin, weights, chosen = best
+    if margin < 0:
+        raise RuntimeError(
+            f"best global triple fails by {-float(normalized_margin):.6g}")
+    return {
+        "interval": interval,
+        "contacts": [{
+            "inner_index": row["inner_index"],
+            "outer_index": 0,
+            "direction": row["direction"],
+            "weight": weight,
+        } for weight, row in zip(weights, chosen)],
+        "diagnostics": {
+            "weighted_margin": margin,
+            "normalized_margin": normalized_margin,
+            "individual_margins": [row["margin"] for row in chosen],
+            "direction_angles": [row["angle"] for row in chosen],
+        },
+    }
+
+
 def main():
     parser = argparse.ArgumentParser()
     sub = parser.add_subparsers(dest="command", required=True)
@@ -488,11 +550,28 @@ def main():
     smoke.add_argument("--half-width", type=str, default="1/100000")
     smoke.add_argument("--directions", type=int, default=72)
     smoke.add_argument("--direction-denominator", type=int, default=100)
+    global_parser = sub.add_parser("global-smoke")
+    global_parser.add_argument(
+        "--center", default="0,0,1,1,0",
+        help="theta1,phi1,theta2,phi2,alpha as comma-separated rationals")
+    global_parser.add_argument(
+        "--half-widths", default="1/100,1/100,1/100,1/100,1/100",
+        help="five comma-separated rational half-widths")
+    global_parser.add_argument("--directions", type=int, default=72)
+    global_parser.add_argument("--direction-denominator", type=int, default=100)
     args = parser.parse_args()
     if args.command == "local-smoke":
         result = local_smoke(Q(args.theta), Q(args.phi),
                              Q(args.half_width), args.directions,
                              args.direction_denominator)
+        print(json.dumps(qjson(result), indent=2))
+    elif args.command == "global-smoke":
+        center = [Q(x) for x in args.center.split(",")]
+        half_widths = [Q(x) for x in args.half_widths.split(",")]
+        if len(center) != 5 or len(half_widths) != 5:
+            parser.error("center and half-widths must each have five entries")
+        result = global_smoke(center, half_widths, args.directions,
+                              args.direction_denominator)
         print(json.dumps(qjson(result), indent=2))
 
 
