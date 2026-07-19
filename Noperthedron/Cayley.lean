@@ -33,6 +33,20 @@ theorem cayleyDenom_pos (x y z : ℝ) : 0 < cayleyDenom x y z := by
 theorem cayleyDenom_ne (x y z : ℝ) : cayleyDenom x y z ≠ 0 :=
   ne_of_gt (cayleyDenom_pos x y z)
 
+/-- Polynomial numerator of the Cayley rotation, defined over any
+commutative ring so rational certificate evaluation uses the same formula. -/
+def cayleyNumeratorMatrix {R : Type} [CommRing R]
+    (x y z : R) : Matrix (Fin 3) (Fin 3) R :=
+  !![1 + x * x - y * y - z * z,
+      2 * (x * y - z),
+      2 * (x * z + y);
+     2 * (x * y + z),
+      1 - x * x + y * y - z * z,
+      2 * (y * z - x);
+     2 * (x * z - y),
+      2 * (y * z + x),
+      1 - x * x - y * y + z * z]
+
 /-- The rational rotation matrix with Cayley vector `(x, y, z)`. -/
 noncomputable def cayleyMatrix (x y z : ℝ) : Matrix (Fin 3) (Fin 3) ℝ :=
   let d := cayleyDenom x y z
@@ -43,8 +57,15 @@ noncomputable def cayleyMatrix (x y z : ℝ) : Matrix (Fin 3) (Fin 3) ℝ :=
       (1 - x ^ 2 + y ^ 2 - z ^ 2) / d,
       2 * (y * z - x) / d;
      2 * (x * z - y) / d,
-      2 * (y * z + x) / d,
+     2 * (y * z + x) / d,
       (1 - x ^ 2 - y ^ 2 + z ^ 2) / d]
+
+theorem cayleyMatrix_eq_div_numerator (x y z : ℝ) :
+    cayleyMatrix x y z = fun i j =>
+      cayleyNumeratorMatrix x y z i j / cayleyDenom x y z := by
+  ext i j
+  fin_cases i <;> fin_cases j <;>
+    simp [cayleyMatrix, cayleyNumeratorMatrix, pow_two]
 
 @[simp]
 theorem cayleyMatrix_zero : cayleyMatrix 0 0 0 = 1 := by

@@ -357,6 +357,78 @@ def fundamental_prune(interval):
     return (symmetry, slack, values[symmetry]) if slack > 0 else None
 
 
+def ball_const(q):
+    return (Q(q), Q(0))
+
+
+def ball_add(a, b):
+    return (a[0] + b[0], a[1] + b[1])
+
+
+def ball_neg(a):
+    return (-a[0], a[1])
+
+
+def ball_sub(a, b):
+    return ball_add(a, ball_neg(b))
+
+
+def ball_scale(q, a):
+    return (q * a[0], abs(q) * a[1])
+
+
+def ball_mul(a, b):
+    return (a[0] * b[0],
+            abs(a[0]) * b[1] + a[1] * abs(b[0]) + a[1] * b[1])
+
+
+def cayley_numerator_balls(x, y, z):
+    one = ball_const(1)
+    two = Q(2)
+    xx, yy, zz = ball_mul(x, x), ball_mul(y, y), ball_mul(z, z)
+    xy, xz, yz = ball_mul(x, y), ball_mul(x, z), ball_mul(y, z)
+    return [
+        [ball_sub(ball_sub(ball_add(one, xx), yy), zz),
+         ball_scale(two, ball_sub(xy, z)),
+         ball_scale(two, ball_add(xz, y))],
+        [ball_scale(two, ball_add(xy, z)),
+         ball_sub(ball_add(ball_sub(one, xx), yy), zz),
+         ball_scale(two, ball_sub(yz, x))],
+        [ball_scale(two, ball_sub(xz, y)),
+         ball_scale(two, ball_add(yz, x)),
+         ball_add(ball_sub(ball_sub(one, xx), yy), zz)],
+    ]
+
+
+def ball_sum3(values):
+    return ball_add(ball_add(values[0], values[1]), values[2])
+
+
+def cayley_advantage_ball(x, y, z, g):
+    numerator = cayley_numerator_balls(x, y, z)
+    symmetry = symmetry_matrix_q(g)
+    rows = []
+    for i in range(3):
+        rows.append(ball_sum3([
+            ball_scale(symmetry[j][i] - Q(int(j == i)), numerator[i][j])
+            for j in range(3)
+        ]))
+    return ball_sum3(rows)
+
+
+def cayley_prune_box(center, half_widths):
+    variables = [(c, r) for c, r in zip(center, half_widths)]
+    balls = [cayley_advantage_ball(*variables, g) for g in range(24)]
+    g = max(range(24), key=lambda i: balls[i][0] - balls[i][1])
+    return {
+        "center": center,
+        "half_widths": half_widths,
+        "symmetry": g,
+        "advantage_ball": balls[g],
+        "lower_bound": balls[g][0] - balls[g][1],
+    }
+
+
 def prune_sample(half_width: Q, samples: int, denominator: int, seed: int):
     """Estimate exact prune coverage on the bounded fundamental root.
 
@@ -676,6 +748,10 @@ def main():
     domain_parser.add_argument("--seed", type=int, default=1)
     domain_parser.add_argument("--directions", type=int, default=24)
     domain_parser.add_argument("--direction-denominator", type=int, default=100)
+    cayley_prune_parser = sub.add_parser("cayley-prune")
+    cayley_prune_parser.add_argument("--center", type=str, default="0,0,1")
+    cayley_prune_parser.add_argument(
+        "--half-widths", type=str, default="1/100,1/100,1/100")
     args = parser.parse_args()
     if args.command == "local-smoke":
         result = local_smoke(Q(args.theta), Q(args.phi),
@@ -698,6 +774,11 @@ def main():
         result = global_domain_sample(
             Q(args.half_width), args.samples, args.denominator, args.seed,
             args.directions, args.direction_denominator)
+        print(json.dumps(qjson(result), indent=2))
+    elif args.command == "cayley-prune":
+        center = [Q(x) for x in args.center.split(",")]
+        half_widths = [Q(x) for x in args.half_widths.split(",")]
+        result = cayley_prune_box(center, half_widths)
         print(json.dumps(qjson(result), indent=2))
 
 

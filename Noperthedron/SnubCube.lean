@@ -4,6 +4,9 @@ public import Noperthedron.SnubCube.Approx
 public import Noperthedron.SnubCube.Certificate
 public import Noperthedron.SnubCube.CertificateSmoke
 public import Noperthedron.SnubCube.CayleyPose
+public import Noperthedron.SnubCube.CayleyFundamentalPrune
+public import Noperthedron.SnubCube.CayleyFundamentalPruneSmoke
+public import Noperthedron.SnubCube.CayleyInterval
 public import Noperthedron.SnubCube.FundamentalDomain
 public import Noperthedron.SnubCube.FundamentalPrune
 public import Noperthedron.SnubCube.FundamentalPruneSmoke

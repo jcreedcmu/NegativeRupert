@@ -52,12 +52,27 @@ instance {R : Type} [PartialOrder R] [DecidableLE R] :
     DecidableLE (CayleyPose R) :=
   fun p q => decidable_of_iff _ (le_iff p q).symm
 
-/-- Closed rational root used by the future checked solution tree. -/
-def rootInterval : NonemptyInterval (CayleyPose ℝ) :=
+/-- Closed rational root used by the checked solution tree. -/
+def rootInterval (R : Type) [Field R] [LinearOrder R] [IsStrictOrderedRing R] :
+    NonemptyInterval (CayleyPose R) :=
   NonemptyInterval.mk
     ⟨{ θ := 0, φ := 0, x := -2, y := -2, z := -2 },
       { θ := 2, φ := 2, x := 2, y := 2, z := 2 }⟩
     (by rw [le_iff]; norm_num)
+
+/-- Componentwise rational-to-real conversion. -/
+def toReal (p : CayleyPose ℚ) : CayleyPose ℝ where
+  θ := p.θ
+  φ := p.φ
+  x := p.x
+  y := p.y
+  z := p.z
+
+@[simp] theorem toReal_θ (p : CayleyPose ℚ) : p.toReal.θ = (p.θ : ℝ) := rfl
+@[simp] theorem toReal_φ (p : CayleyPose ℚ) : p.toReal.φ = (p.φ : ℝ) := rfl
+@[simp] theorem toReal_x (p : CayleyPose ℚ) : p.toReal.x = (p.x : ℝ) := rfl
+@[simp] theorem toReal_y (p : CayleyPose ℚ) : p.toReal.y = (p.y : ℝ) := rfl
+@[simp] theorem toReal_z (p : CayleyPose ℚ) : p.toReal.z = (p.z : ℝ) := rfl
 
 /-- Turn the five parameters and a planar translation into a full matrix
 pose.  The inner rotation is `outer * relative`. -/
@@ -126,7 +141,7 @@ five-dimensional Cayley root, still carrying its arbitrary translation and
 the exact fundamental-domain condition. -/
 theorem exists_cayley_translated_pose (p : MatrixPose) :
     ∃ gi go : VertexIndex, ∃ δ : ℝ, ∃ q : CayleyPose ℝ, ∃ offset : ℝ²,
-      q ∈ CayleyPose.rootInterval ∧
+      q ∈ CayleyPose.rootInterval ℝ ∧
       (q.matrixPoseWithOffset offset).InSnubFundamentalDomain ∧
       q.matrixPoseWithOffset offset =
         (p.rightSnubSymmetries gi go).rotateBy δ := by
@@ -141,7 +156,7 @@ theorem exists_cayley_translated_pose (p : MatrixPose) :
     { θ := euler.θ₂, φ := euler.φ₂, x := x, y := y, z := z }
   have heulerComponents := heuler
   rw [NonemptyInterval.mem_def, Pose.le_iff, Pose.le_iff] at heulerComponents
-  have hq : q ∈ CayleyPose.rootInterval := by
+  have hq : q ∈ CayleyPose.rootInterval ℝ := by
     rw [NonemptyInterval.mem_def, CayleyPose.le_iff, CayleyPose.le_iff]
     dsimp only [q, CayleyPose.rootInterval]
     exact ⟨
@@ -171,7 +186,7 @@ theorem exists_cayley_translated_pose (p : MatrixPose) :
 
 /-- It suffices to exclude translated Cayley poses in the bounded root. -/
 theorem no_matrixPose_of_no_cayley_translated_pose
-    (h : ¬ ∃ q ∈ CayleyPose.rootInterval, ∃ offset : ℝ²,
+    (h : ¬ ∃ q ∈ CayleyPose.rootInterval ℝ, ∃ offset : ℝ²,
       (q.matrixPoseWithOffset offset).InSnubFundamentalDomain ∧
       RupertPose (q.matrixPoseWithOffset offset)
         normalizedExactPolyhedron.hull) :
