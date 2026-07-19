@@ -8,6 +8,7 @@ import Noperthedron.BalancedSupport.Global
 import Noperthedron.BalancedSupport.LocalRigidity
 import Noperthedron.BalancedSupport.Rupert
 import Noperthedron.BalancedSupport.Rodrigues
+import Noperthedron.BalancedSupport.RotationDistance
 import Noperthedron.BalancedSupport.TranslatedPose
 import Noperthedron.Bounding
 import Noperthedron.Bounding.BoundingUtil

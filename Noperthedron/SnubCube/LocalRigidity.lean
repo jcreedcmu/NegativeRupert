@@ -2,6 +2,7 @@ module
 
 public import Noperthedron.BalancedSupport.AxisFree
 public import Noperthedron.BalancedSupport.LocalRigidity
+public import Noperthedron.BalancedSupport.RotationDistance
 public import Noperthedron.SnubCube.Symmetry
 
 @[expose] public section
@@ -24,6 +25,123 @@ open Noperthedron.BalancedSupport
 /-- Relative inner/outer rotation after removing symmetry `g`. -/
 def relativeRotationAtSymmetry (p : MatrixPose) (g : VertexIndex) : SO3 :=
   relativeRotation p * (symmetry g)⁻¹
+
+noncomputable def so3CLM (r : SO3) : ℝ³ →L[ℝ] ℝ³ :=
+  r.val.toEuclideanLin.toContinuousLinearMap
+
+private noncomputable def so3Frame (r : SO3) : ℝ³ ≃ₗᵢ[ℝ] ℝ³ :=
+  Bounding.OrthogonalGroup.toLinearIsometryEquiv ⟨r.val, r.property.1⟩
+
+private theorem so3CLM_eq_frame (r : SO3) :
+    so3CLM r = (so3Frame r).toLinearIsometry.toContinuousLinearMap := by
+  rfl
+
+private theorem so3CLM_mul (r s : SO3) :
+    so3CLM (r * s) = so3CLM r ∘L so3CLM s := by
+  ext v
+  simp [so3CLM, Matrix.mulVec_mulVec]
+
+@[simp] private theorem so3CLM_one : so3CLM (1 : SO3) = 1 := by
+  ext v
+  simp [so3CLM]
+
+private theorem so3CLM_norm (r : SO3) : ‖so3CLM r‖ = 1 := by
+  rw [so3CLM_eq_frame]
+  exact (so3Frame r).toLinearIsometry.norm_toContinuousLinearMap
+
+private theorem so3CLM_left_norm (r : SO3) (A : ℝ³ →L[ℝ] ℝ³) :
+    ‖so3CLM r ∘L A‖ = ‖A‖ := by
+  rw [so3CLM_eq_frame]
+  exact (so3Frame r).toLinearIsometry.norm_toContinuousLinearMap_comp
+
+private theorem so3CLM_right_norm (A : ℝ³ →L[ℝ] ℝ³) (r : SO3) :
+    ‖A ∘L so3CLM r‖ = ‖A‖ := by
+  rw [so3CLM_eq_frame]
+  exact ContinuousLinearMap.opNorm_comp_linearIsometryEquiv A (so3Frame r)
+
+private theorem norm_so3CLM_inv_sub_inv (r s : SO3) :
+    ‖so3CLM r⁻¹ - so3CLM s⁻¹‖ = ‖so3CLM r - so3CLM s‖ := by
+  have hdecomp : so3CLM r⁻¹ - so3CLM s⁻¹ =
+      so3CLM r⁻¹ ∘L (so3CLM s - so3CLM r) ∘L so3CLM s⁻¹ := by
+    ext v
+    have hr (x : ℝ³) : so3CLM r⁻¹ (so3CLM r x) = x := by
+      rw [← ContinuousLinearMap.comp_apply, ← so3CLM_mul]
+      simp
+    have hs (x : ℝ³) : so3CLM s (so3CLM s⁻¹ x) = x := by
+      rw [← ContinuousLinearMap.comp_apply, ← so3CLM_mul]
+      simp
+    simp only [sub_apply, ContinuousLinearMap.comp_apply]
+    rw [hs, map_sub, hr]
+  rw [hdecomp, so3CLM_left_norm, so3CLM_right_norm, norm_sub_rev]
+
+theorem norm_relativeRotationAtSymmetry_sub_le
+    (p q : MatrixPose) (g : VertexIndex) :
+    ‖so3CLM (relativeRotationAtSymmetry p g) -
+        so3CLM (relativeRotationAtSymmetry q g)‖ ≤
+      ‖so3CLM p.innerRot - so3CLM q.innerRot‖ +
+        ‖so3CLM p.outerRot - so3CLM q.outerRot‖ := by
+  rw [relativeRotationAtSymmetry, relativeRotationAtSymmetry,
+    so3CLM_mul, so3CLM_mul]
+  rw [← ContinuousLinearMap.sub_comp, so3CLM_right_norm]
+  rw [relativeRotation, relativeRotation, so3CLM_mul, so3CLM_mul]
+  apply (norm_comp_sub_comp_le (so3CLM p.outerRot⁻¹) (so3CLM p.innerRot)
+    (so3CLM q.outerRot⁻¹) (so3CLM q.innerRot)
+    (by rw [so3CLM_norm]) (by rw [so3CLM_norm])).trans
+  rw [norm_so3CLM_inv_sub_inv]
+  linarith [norm_sub_rev (so3CLM p.outerRot) (so3CLM q.outerRot)]
+
+/-- The relative rotation, after removing a fixed snub-cube symmetry, is
+Lipschitz in the five Euler coordinates.  The planar translations do not
+appear because they do not affect either rotation. -/
+theorem norm_relativeRotationAtSymmetry_matrixPoseWithOffset_sub_le
+    (p q : Pose ℝ) (offset offset₀ : ℝ²) (g : VertexIndex) :
+    ‖so3CLM (relativeRotationAtSymmetry (p.matrixPoseWithOffset offset) g) -
+        so3CLM (relativeRotationAtSymmetry (q.matrixPoseWithOffset offset₀) g)‖ ≤
+      |p.α - q.α| + |p.φ₁ - q.φ₁| + |p.θ₁ - q.θ₁| +
+        (|p.φ₂ - q.φ₂| + |p.θ₂ - q.θ₂|) := by
+  apply (norm_relativeRotationAtSymmetry_sub_le
+    (p.matrixPoseWithOffset offset) (q.matrixPoseWithOffset offset₀) g).trans
+  simp only [Pose.matrixPoseWithOffset, Pose.matrixPoseOfPose, so3CLM]
+  rw [← rotRM_eq_rotRM_mat, ← rotRM_eq_rotRM_mat,
+    ← rotRM_eq_rotRM_mat, ← rotRM_eq_rotRM_mat]
+  have hin := norm_rotRM_sub_le p.θ₁ p.φ₁ p.α q.θ₁ q.φ₁ q.α
+  have hout := norm_rotRM_sub_le p.θ₂ p.φ₂ 0 q.θ₂ q.φ₂ 0
+  norm_num at hout
+  linarith
+
+/-- A rational bound on the five Euler-coordinate differences bounds the
+operator-norm distance from a chosen equality stratum. -/
+theorem norm_relativeRotationAtSymmetry_matrixPoseWithOffset_one_le
+    (p center : Pose ℝ) (offset centerOffset : ℝ²) (g : VertexIndex) (r : ℝ)
+    (hcenter :
+      relativeRotationAtSymmetry (center.matrixPoseWithOffset centerOffset) g = 1)
+    (hbox :
+      |p.α - center.α| + |p.φ₁ - center.φ₁| + |p.θ₁ - center.θ₁| +
+          (|p.φ₂ - center.φ₂| + |p.θ₂ - center.θ₂|) ≤ r) :
+    ‖so3CLM (relativeRotationAtSymmetry (p.matrixPoseWithOffset offset) g) - 1‖ ≤ r := by
+  have h := norm_relativeRotationAtSymmetry_matrixPoseWithOffset_sub_le
+    p center offset centerOffset g
+  rw [hcenter, so3CLM_one] at h
+  exact h.trans hbox
+
+/-- Division-free local-angle test obtained directly from a pose box.  This
+is the form intended for generated rational local certificates. -/
+theorem AxisAngle.ratio_of_pose_box
+    (p center : Pose ℝ) (offset centerOffset : ℝ²) (g : VertexIndex)
+    (a : AxisAngle ((relativeRotationAtSymmetry
+      (p.matrixPoseWithOffset offset) g).val.toEuclideanLin.toContinuousLinearMap))
+    (c r : ℝ) (hc : 0 ≤ c) (hr : 0 ≤ r)
+    (hcenter :
+      relativeRotationAtSymmetry (center.matrixPoseWithOffset centerOffset) g = 1)
+    (hbox :
+      |p.α - center.α| + |p.φ₁ - center.φ₁| + |p.θ₁ - center.θ₁| +
+          (|p.φ₂ - center.φ₂| + |p.θ₂ - center.θ₂|) ≤ r)
+    (hsmall : r ^ 2 * (1 + c ^ 2) ≤ 4 * c ^ 2) :
+    1 - Real.cos a.angle ≤ |Real.sin a.angle| * c := by
+  apply a.ratio_of_norm_bound c r hc hr
+  · exact norm_relativeRotationAtSymmetry_matrixPoseWithOffset_one_le
+      p center offset centerOffset g r hcenter hbox
+  · exact hsmall
 
 /-- Orthonormal frame used by the outer shadow. -/
 noncomputable def outerFrame (p : MatrixPose) : ℝ³ ≃ₗᵢ[ℝ] ℝ³ :=
