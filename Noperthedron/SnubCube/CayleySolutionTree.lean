@@ -1,6 +1,6 @@
 module
 
-public import Noperthedron.SnubCube.CayleyGlobalCertificate
+public import Noperthedron.SnubCube.CayleyEdgeCertificate
 
 @[expose] public section
 
@@ -8,9 +8,9 @@ public import Noperthedron.SnubCube.CayleyGlobalCertificate
 /-!
 # Flat mixed solution trees in bounded Cayley coordinates
 
-A row is either a binary midpoint split or one of the three independently
-checked leaf types: local rigidity, polynomial balanced support, and
-fundamental-domain pruning.  Child identifiers must increase, making the
+A row is either a binary midpoint split or one of the four independently
+checked leaf types: local rigidity, frozen polynomial balanced support,
+pose-dependent edge-cycle support, and fundamental-domain pruning.  Child identifiers must increase, making the
 flat table a well-founded proof tree while retaining an executable validity
 predicate suitable for both kernel `decide` and `native_decide`.
 -/
@@ -41,18 +41,21 @@ inductive Row where
   | split (id lowerChild upperChild : ℕ) (coordinate : Fin 5)
       (interval : Interval)
   | global (id : ℕ) (box : CayleyGlobalCertificate.Box)
+  | edge (id : ℕ) (box : CayleyEdgeCertificate.Box)
   | localLeaf (id : ℕ) (box : CayleyLocalCertificate.Box)
   | prune (id : ℕ) (box : CayleyFundamentalPrune.Box)
 
 def Row.id : Row → ℕ
   | .split id .. => id
   | .global id .. => id
+  | .edge id .. => id
   | .localLeaf id .. => id
   | .prune id .. => id
 
 def Row.interval : Row → Interval
   | .split _ _ _ _ interval => interval
   | .global _ box => box.interval
+  | .edge _ box => box.interval
   | .localLeaf _ box => box.interval
   | .prune _ box => box.interval
 
@@ -68,6 +71,7 @@ def Row.ValidAt (get : ℕ → Row) (size : ℕ) : Row → Prop
       (get lowerChild).interval = interval.lowerHalf coordinate ∧
       (get upperChild).interval = interval.upperHalf coordinate
   | .global _ box => box.Valid
+  | .edge _ box => box.Valid
   | .localLeaf _ box => box.Valid
   | .prune _ box => box.Valid
 
@@ -95,6 +99,11 @@ theorem valid_imp_noRupert_ix (get : ℕ → Row) (size : ℕ)
       unfold NoRupert
       rintro ⟨p, hp, offset, -, hrupert⟩
       exact CayleyGlobalCertificate.Box.valid_imp_not_translated_rupert
+        box hvalid p hp offset hrupert
+  | edge id box =>
+      unfold NoRupert
+      rintro ⟨p, hp, offset, -, hrupert⟩
+      exact CayleyEdgeCertificate.Box.valid_imp_not_translated_rupert
         box hvalid p hp offset hrupert
   | localLeaf id box =>
       unfold NoRupert

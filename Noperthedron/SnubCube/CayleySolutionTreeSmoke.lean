@@ -4,10 +4,12 @@ public import Noperthedron.SnubCube.CayleySolutionTree
 public import Noperthedron.SnubCube.CayleyGlobalCertificateSmoke
 public import Noperthedron.SnubCube.CayleyLocalCertificateSmoke
 public import Noperthedron.SnubCube.CayleyFundamentalPruneSmoke
+public import Noperthedron.SnubCube.CayleyEdgeCertificateSmoke
 public meta import Noperthedron.SnubCube.CayleySolutionTree
 public meta import Noperthedron.SnubCube.CayleyGlobalCertificateSmoke
 public meta import Noperthedron.SnubCube.CayleyLocalCertificateSmoke
 public meta import Noperthedron.SnubCube.CayleyFundamentalPruneSmoke
+public meta import Noperthedron.SnubCube.CayleyEdgeCertificateSmoke
 
 @[expose] public section
 
@@ -15,8 +17,8 @@ public meta import Noperthedron.SnubCube.CayleyFundamentalPruneSmoke
 /-!
 # Mixed Cayley solution-tree smoke test
 
-The reachable three-row subtree bisects a positive-radius global box.  Two
-additional checked rows exercise the local and pruning constructors.  The
+The reachable three-row subtree bisects a positive-radius global box.  Three
+additional checked rows exercise the local, pruning, and edge constructors.  The
 same finite row-validity proposition is evaluated by the kernel and by
 native code, after which the recursive semantic theorem excludes every
 translated Rupert pose in the parent box.
@@ -42,18 +44,19 @@ def smokeGet : ℕ → Row
   | 2 => .global 2 upperGlobalBox
   | 3 => .localLeaf 3 CayleyLocalCertificateSmoke.smokeBox
   | 4 => .prune 4 CayleyFundamentalPruneSmoke.smokeBox
+  | 5 => .edge 5 CayleyEdgeCertificateSmoke.smokeBox
   | _ => default
 
-theorem smoke_rows_valid_kernel : RowsValidAt smokeGet 5 := by
+theorem smoke_rows_valid_kernel : RowsValidAt smokeGet 6 := by
   decide +kernel
 
-theorem smoke_rows_valid_native : RowsValidAt smokeGet 5 := by
+theorem smoke_rows_valid_native : RowsValidAt smokeGet 6 := by
   native_decide
 
 theorem smoke_excludes_translated_pose :
     NoRupert CayleyGlobalCertificateSmoke.smokeInterval := by
   simpa [smokeGet, Row.interval] using
-    valid_imp_noRupert_ix smokeGet 5 smoke_rows_valid_kernel 0 (by norm_num)
+    valid_imp_noRupert_ix smokeGet 6 smoke_rows_valid_kernel 0 (by norm_num)
 
 end Noperthedron.SnubCube.CayleySolutionTreeSmoke
 
