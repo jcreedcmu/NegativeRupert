@@ -521,6 +521,50 @@ theorem not_rupertPose_of_axisFree_geometric_certificates_of_perturbation
   rw [← hA_eq j]
   exact hj
 
+/-- Direct-axis-cover form of the perturbation theorem.  In generated
+certificates `hcover` can be discharged by six rational barycentric witnesses
+and `octahedral_axis_cover`. -/
+theorem not_rupertPose_of_axisFree_geometric_certificates_of_cover_perturbation
+    {J κ : Type} [Fintype J] [Nonempty J] [Fintype κ] [Nonempty κ]
+    (p : MatrixPose) (g : VertexIndex)
+    (a : AxisAngle
+      ((relativeRotationAtSymmetry p g).val.toEuclideanLin.toContinuousLinearMap))
+    (index : J → κ → VertexIndex)
+    (weight : J → κ → ℝ) (direction : J → κ → ℝ²)
+    (A normalizedA centerNormalizedA : J → ℝ³) (B : J → ℝ)
+    (c δ : ℝ)
+    (hB : ∀ j, 0 < B j)
+    (hA : ∀ j, A j = B j • normalizedA j)
+    (hcover : ∀ axis : ℝ³, ‖axis‖ = 1 →
+      ∃ j, c + δ ≤ ⟪axis, centerNormalizedA j⟫)
+    (hmove : ∀ j, ‖normalizedA j - centerNormalizedA j‖ ≤ δ)
+    (hA_eq : ∀ j, A j = firstVariationVector p (weight j) (direction j)
+      (fun i => normalizedExactVertex (symmetryAction g (index j i))))
+    (hB_eq : ∀ j, B j = ∑ i, weight j i *
+      (‖direction j i‖ *
+        ‖normalizedExactVertex (symmetryAction g (index j i))‖))
+    (hratio : 1 - Real.cos a.angle ≤ |Real.sin a.angle| * c)
+    (hdirection : ∀ j i, direction j i ≠ 0)
+    (hweight : ∀ j i, 0 ≤ weight j i)
+    (hweight_pos : ∀ j, ∃ i, 0 < weight j i)
+    (hbalance : ∀ j, ∑ i, weight j i • direction j i = 0)
+    (hsupport : ∀ j i k,
+      ⟪direction j i, outerProjectionLinear p (normalizedExactVertex k)⟫ ≤
+        ⟪direction j i, outerProjectionLinear p
+          (normalizedExactVertex (symmetryAction g (index j i)))⟫) :
+    ¬ RupertPose p normalizedExactPolyhedron.hull := by
+  obtain ⟨j, hj⟩ := exists_axis_certificate_dominating_remainder_of_cover_perturbation
+    centerNormalizedA normalizedA A B c δ |Real.sin a.angle| (1 - Real.cos a.angle)
+    (abs_nonneg _) hB hA hcover hmove hratio a.signedAxis a.signedAxis_norm
+  apply not_rupertPose_of_symmetry_axisAngle_certificate p g a
+    (index j) (weight j) (direction j)
+    (hdirection j) (hweight j) (hweight_pos j) (hbalance j) (hsupport j)
+  rw [← hB_eq j]
+  rw [axisAngle_weighted_first_identity a p (weight j) (direction j)
+    (fun i => normalizedExactVertex (symmetryAction g (index j i)))]
+  rw [← hA_eq j]
+  exact hj
+
 end Noperthedron.SnubCube
 
 end
