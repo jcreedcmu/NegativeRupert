@@ -16,6 +16,7 @@ theorems before building the adaptive five-dimensional tree.
 from __future__ import annotations
 
 import argparse
+import functools
 import itertools
 import json
 import math
@@ -562,9 +563,15 @@ def edge_orientation_ball(view, q0, q1, q):
 
 def edge_orientation_q(view, q0, q1, q):
     """Rational orientation for a projectively normalized view vector."""
+    return qdot(view, edge_cross_q(q0, q1, q))
+
+
+@functools.lru_cache(maxsize=None)
+def edge_cross_q(q0, q1, q):
+    """Cached coefficient vector for one projective support expression."""
     edge = [a-b for a, b in zip(VERTICES_Q[q1], VERTICES_Q[q0])]
     delta = [a-b for a, b in zip(VERTICES_Q[q], VERTICES_Q[q0])]
-    return qdot(view, cross3(edge, delta))
+    return tuple(cross3(edge, delta))
 
 
 def silhouette_cycle_for_view(view):
@@ -654,6 +661,7 @@ CAYLEY_NUMERATOR_QPOLYS = cayley_numerator_qpolys()
 CAYLEY_DENOM_QPOLY = [Q(1), 0, 0, 0, 1, 0, 0, 1, 0, 1]
 
 
+@functools.lru_cache(maxsize=None)
 def cayley_edge_contact_qpolys(q0, q1, inner_index):
     """Three coefficients of `-edge × (N P - d Q)` for one edge."""
     edge = [a-b for a, b in zip(VERTICES_Q[q1], VERTICES_Q[q0])]
@@ -673,7 +681,7 @@ def cayley_edge_contact_qpolys(q0, q1, inner_index):
                        qpoly_scale(-edge[0], displacement[2])),
              qpoly_add(qpoly_scale(edge[0], displacement[1]),
                        qpoly_scale(-edge[1], displacement[0]))]
-    return [qpoly_scale(-1, value) for value in cross]
+    return tuple(tuple(qpoly_scale(-1, value)) for value in cross)
 
 
 def best_edge_cycles_for_view(relative_center, view, max_length=4,
@@ -693,32 +701,62 @@ def best_edge_cycles_for_view(relative_center, view, max_length=4,
             if q0 == q1:
                 continue
             edge = VERTICES_EXACT[q0] - VERTICES_EXACT[q1]
-            support = max(view @ np.cross(edge, vertex-VERTICES_EXACT[q0])
-                          for vertex in VERTICES_EXACT)
-            contact = max(view @ np.cross(
-                edge, numerator @ vertex-d*VERTICES_EXACT[q0])
-                for vertex in VERTICES_EXACT)
+            support = float(np.max(
+                np.cross(edge, VERTICES_EXACT-VERTICES_EXACT[q0]) @ view))
+            displacement = VERTICES_EXACT @ numerator.T - \
+                d*VERTICES_EXACT[q0]
+            contact = float(np.max(np.cross(edge, displacement) @ view))
             rewards[q0, q1] = contact-d*support
+    # Enumerate all cycles of lengths 2--4 with NumPy broadcasts.  The old
+    # nested Python permutations dominated adaptive-tree generation.
+    score_arrays = []
+    if max_length >= 2:
+        score_arrays.append((2, (rewards + rewards.T) / 2))
+    if max_length >= 3:
+        score3 = (rewards[:, :, None] + rewards[None, :, :] +
+                  rewards.T[:, None, :]) / 3
+        score_arrays.append((3, score3))
+    if max_length >= 4:
+        score4 = (rewards[:, :, None, None] +
+                  rewards[None, :, :, None] +
+                  rewards[None, None, :, :] +
+                  rewards.T[:, None, None, :]) / 4
+        indices = np.arange(24)
+        score4 = np.where(indices[:, None, None, None] ==
+                          indices[None, None, :, None], -math.inf, score4)
+        score4 = np.where(indices[None, :, None, None] ==
+                          indices[None, None, None, :], -math.inf, score4)
+        score_arrays.append((4, score4))
+    candidates = []
+    take = max(32, count*16)
+    for length, scores in score_arrays:
+        flat = scores.ravel()
+        amount = min(take, flat.size)
+        top = np.argpartition(flat, flat.size-amount)[-amount:]
+        for flat_index in top:
+            cycle = tuple(int(i) for i in np.unravel_index(flat_index,
+                                                            scores.shape))
+            if len(set(cycle)) != length:
+                continue
+            # Quotient cyclic rotations to avoid returning the same cycle
+            # several times among the top candidates.
+            rotations = [cycle[i:]+cycle[:i] for i in range(length)]
+            canonical = min(rotations)
+            candidates.append((float(flat[flat_index]), canonical))
     best = []
-    for length in range(2, max_length+1):
-        for vertices in itertools.combinations(range(24), length):
-            start = vertices[0]
-            for tail in itertools.permutations(vertices[1:]):
-                cycle = (start,) + tail
-                score = sum(rewards[cycle[i], cycle[(i+1) % length]]
-                            for i in range(length))
-                # Mean surplus compares cycles without favoring repetition.
-                mean = score/length
-                if len(best) < count or mean > best[0][0]:
-                    best.append((mean, cycle))
-                    best.sort()
-                    if len(best) > count:
-                        best.pop(0)
+    seen = set()
+    for item in sorted(candidates, reverse=True):
+        if item[1] in seen:
+            continue
+        seen.add(item[1])
+        best.append(item)
+        if len(best) == count:
+            break
     if not best:
         raise RuntimeError("no nondegenerate edge cycle")
     return [(list(cycle), {"point_mean_surplus": mean,
                            "point_total_surplus": mean*len(cycle)})
-            for mean, cycle in reversed(best)]
+            for mean, cycle in best]
 
 
 def best_cayley_edge_cycle(center, max_length=4):
@@ -819,7 +857,7 @@ def cayley_edge_smoke(center, half_widths, cycle=None,
 
 
 def simplex_edge_smoke(relative_center, relative_half_widths, triangle,
-                       cycle=None):
+                       cycle=None, inner_indices=None):
     """Certify one relative Cayley box uniformly over a view triangle.
 
     The triangle vertices are rational nonnegative vectors whose coordinates
@@ -863,17 +901,21 @@ def simplex_edge_smoke(relative_center, relative_half_widths, triangle,
         total_defect += max(-value for row in support_values for value in row) \
             + SUPPORT_ERROR
 
-        best_inner = None
-        for inner in range(24):
+        if inner_indices is None:
+            best_inner = None
+            for inner in range(24):
+                polynomials = cayley_edge_contact_qpolys(q0, q1, inner)
+                component_balls = [qpoly_eval_centered(poly, variables, radii)
+                                   for poly in polynomials]
+                lower = min(qdot(view, [ball[0] for ball in component_balls]) -
+                            qdot(view, [ball[1] for ball in component_balls])
+                            for view in triangle)
+                if best_inner is None or lower > best_inner[0]:
+                    best_inner = (lower, inner, polynomials)
+            _, inner, polynomials = best_inner
+        else:
+            inner = inner_indices[index]
             polynomials = cayley_edge_contact_qpolys(q0, q1, inner)
-            component_balls = [qpoly_eval_centered(poly, variables, radii)
-                               for poly in polynomials]
-            lower = min(qdot(view, [ball[0] for ball in component_balls]) -
-                        qdot(view, [ball[1] for ball in component_balls])
-                        for view in triangle)
-            if best_inner is None or lower > best_inner[0]:
-                best_inner = (lower, inner, polynomials)
-        _, inner, polynomials = best_inner
         total_polys = [qpoly_add(a, b)
                        for a, b in zip(total_polys, polynomials)]
         contacts.append({"outer_index": q0,
@@ -913,6 +955,130 @@ def simplex_edge_smoke(relative_center, relative_half_widths, triangle,
     }
 
 
+@functools.lru_cache(maxsize=None)
+def cayley_edge_contact_qpolys_float(q0, q1, inner_index):
+    return np.asarray(cayley_edge_contact_qpolys(q0, q1, inner_index),
+                      dtype=float)
+
+
+def qpoly_eval_centered_float(coefficients, centers, radii):
+    """Vectorized floating version of the exact quadratic ball evaluator."""
+    c = np.asarray(coefficients)
+    x, y, z = centers
+    rx, ry, rz = radii
+    monomials = np.asarray([1, x, y, z, x*x, x*y, x*z, y*y, y*z, z*z])
+    value = c @ monomials
+    gradient = np.stack((
+        c[..., 1] + 2*c[..., 4]*x + c[..., 5]*y + c[..., 6]*z,
+        c[..., 2] + c[..., 5]*x + 2*c[..., 7]*y + c[..., 8]*z,
+        c[..., 3] + c[..., 6]*x + c[..., 8]*y + 2*c[..., 9]*z), axis=-1)
+    linear_radius = np.sum(np.abs(gradient) * np.asarray(radii), axis=-1)
+    quadratic_radius = (
+        np.abs(c[..., 4])*rx*rx + np.abs(c[..., 5])*rx*ry +
+        np.abs(c[..., 6])*rx*rz + np.abs(c[..., 7])*ry*ry +
+        np.abs(c[..., 8])*ry*rz + np.abs(c[..., 9])*rz*rz)
+    return value, linear_radius + quadratic_radius
+
+
+def simplex_edge_float_screen(relative_center, relative_half_widths,
+                              triangle, cycle=None, optimize_contacts=True):
+    """Fast witness selection and rejection before exact rational checking.
+
+    A positive result is only a heuristic: accepted leaves are always rerun
+    through ``simplex_edge_smoke``.  A comfortably negative result saves the
+    far more expensive Fraction computation at internal subdivision nodes.
+    """
+    views = np.asarray([[float(q) for q in view] for view in triangle])
+    centroid = np.mean(views, axis=0)
+    if cycle is None:
+        cycle = silhouette_cycle_for_view(centroid)
+    centers = np.asarray([float(q) for q in relative_center])
+    radii = np.asarray([float(q) for q in relative_half_widths])
+    total_polys = np.zeros((3, 10))
+    total_defect = 0.0
+    minimum_strict = math.inf
+    witnesses = []
+    choices = []
+    edge_polys = []
+    for index, q0 in enumerate(cycle):
+        q1 = cycle[(index+1) % len(cycle)]
+        crosses = np.asarray([
+            [float(q) for q in edge_cross_q(q0, q1, k)]
+            for k in range(24)])
+        support_values = views @ crosses.T
+        witness_scores = np.min(support_values, axis=0)
+        witness = int(np.argmax(witness_scores))
+        strict = witness_scores[witness] - float(SUPPORT_ERROR)
+        minimum_strict = min(minimum_strict, strict)
+        total_defect += float(np.max(-support_values)) + float(SUPPORT_ERROR)
+
+        all_polys = np.asarray([
+            cayley_edge_contact_qpolys_float(q0, q1, inner)
+            for inner in range(24)])
+        value, radius = qpoly_eval_centered_float(
+            all_polys, centers, radii)
+        # Shape is (inner vertex, vector component).  Dot each component ball
+        # with each projective triangle vertex and retain the worst vertex.
+        lower = np.min(views @ value.T - views @ radius.T, axis=0)
+        inner = int(np.argmax(lower))
+        total_polys += all_polys[inner]
+        choices.append(inner)
+        witnesses.append(witness)
+        edge_polys.append(all_polys)
+
+    if optimize_contacts:
+        # Coordinate descent chooses contacts for the radius of the *summed*
+        # polynomial, retaining cancellations that independent edge choices
+        # can destroy.
+        for _ in range(2):
+            changed = False
+            for edge_index, all_polys in enumerate(edge_polys):
+                base = total_polys - all_polys[choices[edge_index]]
+                candidate_polys = all_polys + base[None, :, :]
+                value, radius = qpoly_eval_centered_float(
+                    candidate_polys, centers, radii)
+                lower = np.min(views @ value.T - views @ radius.T, axis=0)
+                inner = int(np.argmax(lower))
+                if inner != choices[edge_index]:
+                    total_polys = base + all_polys[inner]
+                    choices[edge_index] = inner
+                    changed = True
+            if not changed:
+                break
+
+    value, radius = qpoly_eval_centered_float(total_polys, centers, radii)
+    displacement_lower = float(np.min(views @ value - views @ radius))
+    endpoint_abs = np.maximum(np.abs(centers-radii), np.abs(centers+radii))
+    d_bound = 1 + float(np.sum(endpoint_abs**2))
+    error = len(cycle) * 10 * d_bound * float(KAPPA)
+    lower = displacement_lower - d_bound*total_defect - error
+    return {"cycle": cycle,
+            "contacts": list(zip(choices, witnesses)),
+            "inner_indices": choices,
+            "minimum_strict_support_lower": minimum_strict,
+            "lower_bound": lower}
+
+
+def screened_simplex_edge_smoke(relative_center, relative_half_widths,
+                                triangle, cycle=None):
+    """Exact certificate search with a sound-use-only floating prefilter."""
+    screen = simplex_edge_float_screen(
+        relative_center, relative_half_widths, triangle, cycle)
+    # Near zero we still ask exact arithmetic.  Only clearly failed internal
+    # nodes are rejected from floating arithmetic alone.
+    if screen["minimum_strict_support_lower"] < -1e-7:
+        raise RuntimeError(
+            "simplex projected edge may vanish "
+            f"strict={screen['minimum_strict_support_lower']:.6g}")
+    if screen["lower_bound"] < -1e-7:
+        raise RuntimeError(
+            "simplex edge displacement fails by "
+            f"{-screen['lower_bound']:.6g}")
+    return simplex_edge_smoke(
+        relative_center, relative_half_widths, triangle, screen["cycle"],
+        screen["inner_indices"])
+
+
 def split_simplex_triangle(triangle):
     a, b, c = triangle
     ab = [(x+y)/2 for x, y in zip(a, b)]
@@ -943,7 +1109,7 @@ def simplex_edge_cover(relative_center, relative_half_widths, max_depth,
         triangle, depth = stack.pop()
         nodes += 1
         try:
-            leaves.append(simplex_edge_smoke(
+            leaves.append(screened_simplex_edge_smoke(
                 relative_center, relative_half_widths, triangle))
             continue
         except RuntimeError as exc:
@@ -954,7 +1120,7 @@ def simplex_edge_cover(relative_center, relative_half_widths, max_depth,
                     for cycle, _ in best_edge_cycles_for_view(
                             relative_center, centroid, 4, optimized_count):
                         try:
-                            leaves.append(simplex_edge_smoke(
+                            leaves.append(screened_simplex_edge_smoke(
                                 relative_center, relative_half_widths,
                                 triangle, cycle))
                             optimized_leaves += 1
@@ -1125,6 +1291,141 @@ def cayley_relative_prune_tree(target_half_width: Q):
             "nodes": nodes, "pruned_leaves": pruned,
             "retained_leaves": retained, "max_depth": max_depth,
             "retained_examples": retained_centers}
+
+
+def projective_mixed_profile(coarse_half_width: Q, target_half_width: Q,
+                             base_view_depth: int, max_view_depth: int,
+                             optimized_count: int, max_nodes: int):
+    """Count a joint relative-Cayley/projective-view adaptive tree.
+
+    This is a fast floating exploration, not certificate data.  Every future
+    accepted Lean leaf must still pass ``simplex_edge_smoke`` exactly.  The
+    profile first shares fundamental-domain pruning down to a coarse relative
+    scale.  Only retained boxes open the two chamber triangles; hard triangle
+    cells then alternate view and relative subdivision.
+    """
+    e0 = (Q(1), Q(0), Q(0))
+    m01 = (Q(1, 2), Q(1, 2), Q(0))
+    m02 = (Q(1, 2), Q(0), Q(1, 2))
+    center_view = (Q(1, 3), Q(1, 3), Q(1, 3))
+    roots = [(e0, m01, center_view), (e0, center_view, m02)]
+    counts = {"nodes": 0, "relative_splits": 0, "view_roots": 0,
+              "view_splits": 0, "prune_leaves": 0,
+              "projective_leaves": 0, "optimized_leaves": 0,
+              "uncovered_leaves": 0}
+    exact_audit = {"attempted": 0, "passed": 0, "failed": 0}
+    gaps = []
+    accepted_widths = []
+
+    class NodeLimit(RuntimeError):
+        pass
+
+    def node(kind):
+        counts["nodes"] += 1
+        if counts["nodes"] > max_nodes:
+            raise NodeLimit
+        counts[kind] += 1
+
+    def split_relative(center, widths, triangle, view_depth):
+        coordinate = max(range(3), key=lambda i: widths[i])
+        child_widths = list(widths)
+        child_widths[coordinate] /= 2
+        node("relative_splits")
+        for sign in (-1, 1):
+            child_center = list(center)
+            child_center[coordinate] += sign*child_widths[coordinate]
+            if cayley_prune_box(child_center, child_widths)["lower_bound"] > 0:
+                node("prune_leaves")
+            else:
+                explore_triangle(child_center, child_widths,
+                                 triangle, view_depth)
+
+    def explore_triangle(center, widths, triangle, view_depth):
+        screen = simplex_edge_float_screen(center, widths, triangle)
+        if (screen["minimum_strict_support_lower"] > 1e-7 and
+                screen["lower_bound"] > 1e-7):
+            node("projective_leaves")
+            accepted_widths.append(max(widths))
+            # A small deterministic exact audit catches drift between the
+            # floating screen and the executable rational checker.
+            if exact_audit["attempted"] < 25:
+                exact_audit["attempted"] += 1
+                try:
+                    simplex_edge_smoke(center, widths, triangle,
+                                       screen["cycle"],
+                                       screen["inner_indices"])
+                    exact_audit["passed"] += 1
+                except RuntimeError:
+                    exact_audit["failed"] += 1
+            return
+        if view_depth < base_view_depth:
+            node("view_splits")
+            for child in split_simplex_triangle(triangle):
+                explore_triangle(center, widths, child, view_depth+1)
+            return
+        if max(widths) > target_half_width:
+            split_relative(center, widths, triangle, view_depth)
+            return
+        if view_depth < max_view_depth:
+            node("view_splits")
+            for child in split_simplex_triangle(triangle):
+                explore_triangle(center, widths, child, view_depth+1)
+            return
+        if optimized_count:
+            centroid = [sum((view[i] for view in triangle), Q(0))/3
+                        for i in range(3)]
+            for cycle, _ in best_edge_cycles_for_view(
+                    center, centroid, 4, optimized_count):
+                candidate = simplex_edge_float_screen(
+                    center, widths, triangle, cycle)
+                if (candidate["minimum_strict_support_lower"] > 1e-7 and
+                        candidate["lower_bound"] > 1e-7):
+                    node("optimized_leaves")
+                    accepted_widths.append(max(widths))
+                    return
+        node("uncovered_leaves")
+        if len(gaps) < 20:
+            gaps.append({"center": list(center), "half_widths": list(widths),
+                         "triangle": triangle, "view_depth": view_depth,
+                         "strict": screen["minimum_strict_support_lower"],
+                         "lower_bound": screen["lower_bound"]})
+
+    def pre_prune(center, widths):
+        if cayley_prune_box(center, widths)["lower_bound"] > 0:
+            node("prune_leaves")
+            return
+        if max(widths) > coarse_half_width:
+            coordinate = max(range(3), key=lambda i: widths[i])
+            child_widths = list(widths)
+            child_widths[coordinate] /= 2
+            node("relative_splits")
+            for sign in (-1, 1):
+                child_center = list(center)
+                child_center[coordinate] += sign*child_widths[coordinate]
+                pre_prune(child_center, child_widths)
+            return
+        node("view_roots")
+        for triangle in roots:
+            explore_triangle(center, widths, triangle, 0)
+
+    halted = False
+    try:
+        pre_prune([Q(0), Q(0), Q(0)], [Q(2), Q(2), Q(2)])
+    except NodeLimit:
+        halted = True
+    width_frequencies = {}
+    for width in accepted_widths:
+        key = str(width)
+        width_frequencies[key] = width_frequencies.get(key, 0) + 1
+    return {"coarse_half_width": coarse_half_width,
+            "target_half_width": target_half_width,
+            "base_view_depth": base_view_depth,
+            "max_view_depth": max_view_depth,
+            "optimized_count": optimized_count,
+            "max_nodes": max_nodes, "halted_at_node_limit": halted,
+            "counts": counts, "exact_audit": exact_audit,
+            "accepted_width_frequencies": width_frequencies,
+            "gap_examples": gaps}
 
 
 def validate_cayley_global_certificate(payload, samples: int, seed: int):
@@ -1670,6 +1971,13 @@ def main():
     simplex_edge_parser.add_argument("--max-depth", type=int, default=4)
     simplex_edge_parser.add_argument("--optimized-count", type=int, default=0)
     simplex_edge_parser.add_argument("--outer-chamber", action="store_true")
+    mixed_profile_parser = sub.add_parser("projective-mixed-profile")
+    mixed_profile_parser.add_argument("--coarse-half-width", default="1/16")
+    mixed_profile_parser.add_argument("--target-half-width", default="1/128")
+    mixed_profile_parser.add_argument("--base-view-depth", type=int, default=3)
+    mixed_profile_parser.add_argument("--max-view-depth", type=int, default=5)
+    mixed_profile_parser.add_argument("--optimized-count", type=int, default=4)
+    mixed_profile_parser.add_argument("--max-nodes", type=int, default=100000)
     args = parser.parse_args()
     if args.command == "local-smoke":
         result = local_smoke(Q(args.theta), Q(args.phi),
@@ -1752,6 +2060,12 @@ def main():
         summary["uncovered_leaves"] = len(result["failures"])
         summary["failure_examples"] = result["failures"][:10]
         print(json.dumps(qjson(summary), indent=2))
+    elif args.command == "projective-mixed-profile":
+        result = projective_mixed_profile(
+            Q(args.coarse_half_width), Q(args.target_half_width),
+            args.base_view_depth, args.max_view_depth, args.optimized_count,
+            args.max_nodes)
+        print(json.dumps(qjson(result), indent=2))
 
 
 if __name__ == "__main__":
