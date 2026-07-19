@@ -78,6 +78,36 @@ theorem not_rupertPose_of_balanced_support
     exact inner_vertex_mem_outer_interior p poly (Pi i) hrupert
   · simpa [innerPoint, outerPoint] using hdisplacement
 
+/-- Full-pose bridge for approximate supports.  The `defect` allowance makes
+the certificate stable while the active silhouette changes. -/
+theorem not_rupertPose_of_balanced_support_with_defect
+    {ι κ : Type} [Fintype ι] [Fintype κ] [Nonempty κ]
+    (poly : Polyhedron ι ℝ³) (p : MatrixPose)
+    (Pi Qi : κ → ι) (μ : κ → ℝ) (u : κ → ℝ²) (defect : κ → ℝ)
+    (hu : ∀ i, u i ≠ 0)
+    (hμ : ∀ i, 0 ≤ μ i) (hμpos : ∃ i, 0 < μ i)
+    (hbalance : ∑ i, μ i • u i = 0)
+    (hsupport : ∀ i y, y ∈ outerVertexSet p poly →
+      ⟪u i, y⟫ ≤
+        ⟪u i, proj_xyL (p.outerRot.val.toEuclideanLin (poly.v (Qi i)))⟫ + defect i)
+    (hdisplacement : ∑ i, μ i * defect i ≤ ∑ i, μ i *
+      ⟪u i, proj_xyL (p.innerRot.val.toEuclideanLin (poly.v (Pi i))) -
+        proj_xyL (p.outerRot.val.toEuclideanLin (poly.v (Qi i)))⟫) :
+    ¬ RupertPose p poly.hull := by
+  intro hrupert
+  let innerPoint : κ → ℝ² := fun i =>
+    proj_xyL (p.innerRot.val.toEuclideanLin (poly.v (Pi i)))
+  let outerPoint : κ → ℝ² := fun i =>
+    proj_xyL (p.outerRot.val.toEuclideanLin (poly.v (Qi i)))
+  refine not_strictly_contained_of_balanced_support_with_defect
+    (outerVertexSet p poly) μ u innerPoint outerPoint defect p.innerOffset
+    hu hμ hμpos hbalance ?_ ?_ ?_
+  · simpa [outerPoint] using hsupport
+  · intro i
+    rw [← project_inner_apply, ← outerShadow_poly_hull_eq]
+    exact inner_vertex_mem_outer_interior p poly (Pi i) hrupert
+  · simpa [innerPoint, outerPoint] using hdisplacement
+
 end Noperthedron.BalancedSupport
 
 end

@@ -84,6 +84,53 @@ theorem not_strictly_contained_of_balanced_support
   exact (not_lt_of_ge hdisplacement)
     (weighted_displacement_neg μ u innerPoint outerPoint t hμ hμpos hbalance hstrict)
 
+/-- Defect form of `weighted_displacement_neg`.  If the selected outer point
+is only within `defect i` of the true support line, the weighted displacement
+is strictly below the weighted total defect. -/
+theorem weighted_displacement_lt_defect {κ : Type} [Fintype κ] [Nonempty κ]
+    (μ : κ → ℝ) (u innerPoint outerPoint : κ → ℝ²) (defect : κ → ℝ) (t : ℝ²)
+    (hμ : ∀ i, 0 ≤ μ i) (hμpos : ∃ i, 0 < μ i)
+    (hbalance : ∑ i, μ i • u i = 0)
+    (hstrict : ∀ i,
+      ⟪u i, innerPoint i + t⟫ < ⟪u i, outerPoint i⟫ + defect i) :
+    ∑ i, μ i * ⟪u i, innerPoint i - outerPoint i⟫ <
+      ∑ i, μ i * defect i := by
+  have hsum :
+      ∑ i, μ i * ⟪u i, innerPoint i + t⟫ <
+        ∑ i, μ i * (⟪u i, outerPoint i⟫ + defect i) := by
+    refine Finset.sum_lt_sum ?_ ?_
+    · intro i _
+      exact mul_le_mul_of_nonneg_left (hstrict i).le (hμ i)
+    · obtain ⟨i, hi⟩ := hμpos
+      exact ⟨i, Finset.mem_univ i, mul_lt_mul_of_pos_left (hstrict i) hi⟩
+  rw [sum_weighted_inner_add_eq μ u innerPoint t hbalance] at hsum
+  simp_rw [mul_add, Finset.sum_add_distrib] at hsum
+  simp_rw [inner_sub_right, mul_sub, Finset.sum_sub_distrib]
+  linarith
+
+/-- Approximate supporting lines still give a balanced obstruction when the
+weighted displacement pays for all support defects.  This is the form used
+to stitch certificate regions across silhouette transitions. -/
+theorem not_strictly_contained_of_balanced_support_with_defect
+    {κ : Type} [Fintype κ] [Nonempty κ]
+    (V : Set ℝ²) (μ : κ → ℝ) (u innerPoint outerPoint : κ → ℝ²)
+    (defect : κ → ℝ) (t : ℝ²)
+    (hu : ∀ i, u i ≠ 0)
+    (hμ : ∀ i, 0 ≤ μ i) (hμpos : ∃ i, 0 < μ i)
+    (hbalance : ∑ i, μ i • u i = 0)
+    (hsupport : ∀ i y, y ∈ V →
+      ⟪u i, y⟫ ≤ ⟪u i, outerPoint i⟫ + defect i)
+    (hinner : ∀ i, innerPoint i + t ∈ interior (convexHull ℝ V))
+    (hdisplacement : ∑ i, μ i * defect i ≤
+      ∑ i, μ i * ⟪u i, innerPoint i - outerPoint i⟫) :
+    False := by
+  have hstrict (i : κ) :
+      ⟪u i, innerPoint i + t⟫ < ⟪u i, outerPoint i⟫ + defect i :=
+    inner_lt_of_mem_interior_convexHull (hu i) (hsupport i) (hinner i)
+  exact (not_lt_of_ge hdisplacement)
+    (weighted_displacement_lt_defect μ u innerPoint outerPoint defect t
+      hμ hμpos hbalance hstrict)
+
 end Noperthedron.BalancedSupport
 
 end
