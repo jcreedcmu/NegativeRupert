@@ -19,6 +19,7 @@ import argparse
 import itertools
 import json
 import math
+import random
 from fractions import Fraction as Q
 
 import numpy as np
@@ -29,6 +30,7 @@ KAPPA = Q(1, 10**10)
 TRIBONACCI_Q = Q(1839286755214161, 10**15)
 ROTATION_ERROR = 3 * KAPPA + KAPPA * KAPPA
 CENTER_VECTOR_ERROR = 2 * KAPPA + KAPPA * KAPPA
+CENTER_RELATIVE_ERROR = 2 * ROTATION_ERROR + ROTATION_ERROR * ROTATION_ERROR
 
 PERMUTATIONS = (
     (0, 1, 2), (0, 2, 1), (1, 0, 2),
@@ -332,6 +334,109 @@ def mismatch_radius(interval, symmetry_index):
             + sum(eps, Q(0))), frobenius_sq
 
 
+def trace_advantages_q(pose):
+    """Exact rational scores used by ``FundamentalPrune.Box.Valid``."""
+    inner = rot_rm_q(pose[0], pose[1], pose[4])
+    outer = rot_rm_q(pose[2], pose[3], Q(0))
+    relative = matmul(transpose(outer), inner)
+    identity = [[Q(int(i == j)) for j in range(3)] for i in range(3)]
+    values = []
+    for g in range(24):
+        product = matmul(relative, matsub(symmetry_matrix_q(g), identity))
+        values.append(sum((product[i][i] for i in range(3)), Q(0)))
+    return values
+
+
+def fundamental_prune(interval):
+    """Return the best symmetry and exact slack, or ``None`` if uncertified."""
+    pose = pose_center(interval)
+    values = trace_advantages_q(pose)
+    symmetry = max(range(24), key=values.__getitem__)
+    threshold = 6 * (CENTER_RELATIVE_ERROR + sum(pose_eps(interval), Q(0)))
+    slack = values[symmetry] - threshold
+    return (symmetry, slack, values[symmetry]) if slack > 0 else None
+
+
+def prune_sample(half_width: Q, samples: int, denominator: int, seed: int):
+    """Estimate exact prune coverage on the bounded fundamental root.
+
+    Sampling only chooses centers; every prune decision uses the exact same
+    rational Taylor arithmetic and strict inequality as Lean.
+    """
+    root = [(Q(-4), Q(4)), (Q(0), Q(4)), (Q(0), Q(2)),
+            (Q(0), Q(2)), (Q(-4), Q(4))]
+    rng = random.Random(seed)
+    pruned = 0
+    inside_at_center = 0
+    slacks = []
+    symmetry_counts = [0] * 24
+    for _ in range(samples):
+        center = []
+        for lo, hi in root:
+            ilo = math.ceil(float((lo + half_width) * denominator))
+            ihi = math.floor(float((hi - half_width) * denominator))
+            center.append(Q(rng.randint(ilo, ihi), denominator))
+        values = trace_advantages_q(center)
+        if max(values) <= 0:
+            inside_at_center += 1
+        interval = [(x - half_width, x + half_width) for x in center]
+        result = fundamental_prune(interval)
+        if result is not None:
+            symmetry, slack, _ = result
+            pruned += 1
+            symmetry_counts[symmetry] += 1
+            slacks.append(float(slack))
+    quantiles = ([float(x) for x in np.quantile(slacks, [.01, .1, .5, .9])]
+                 if slacks else [])
+    return {
+        "half_width": half_width,
+        "samples": samples,
+        "pruned": pruned,
+        "pruned_fraction": pruned / samples,
+        "center_in_domain_fraction": inside_at_center / samples,
+        "pruned_slack_quantiles_01_10_50_90": quantiles,
+        "symmetry_counts": symmetry_counts,
+    }
+
+
+def global_domain_sample(half_width: Q, samples: int, denominator: int,
+                         seed: int, directions: int,
+                         direction_denominator: int):
+    """Test global certificates at centers lying in the exact Dirichlet cell."""
+    root = [(Q(-4), Q(4)), (Q(0), Q(4)), (Q(0), Q(2)),
+            (Q(0), Q(2)), (Q(-4), Q(4))]
+    rng = random.Random(seed)
+    accepted = 0
+    attempts = 0
+    margins = []
+    while accepted < samples:
+        attempts += 1
+        center = []
+        for lo, hi in root:
+            ilo = math.ceil(float((lo + half_width) * denominator))
+            ihi = math.floor(float((hi - half_width) * denominator))
+            center.append(Q(rng.randint(ilo, ihi), denominator))
+        if max(trace_advantages_q(center)) > 0:
+            continue
+        accepted += 1
+        try:
+            result = global_smoke(center, [half_width] * 5, directions,
+                                  direction_denominator)
+        except RuntimeError:
+            continue
+        margins.append(float(result["diagnostics"]["normalized_margin"]))
+    quantiles = ([float(x) for x in np.quantile(margins, [.01, .1, .5, .9])]
+                 if margins else [])
+    return {
+        "half_width": half_width,
+        "domain_samples": samples,
+        "raw_attempts": attempts,
+        "global_certified": len(margins),
+        "global_certified_fraction": len(margins) / samples,
+        "margin_quantiles_01_10_50_90": quantiles,
+    }
+
+
 def qjson(x):
     if isinstance(x, Q):
         return f"{x.numerator}/{x.denominator}"
@@ -559,6 +664,18 @@ def main():
         help="five comma-separated rational half-widths")
     global_parser.add_argument("--directions", type=int, default=72)
     global_parser.add_argument("--direction-denominator", type=int, default=100)
+    prune_parser = sub.add_parser("prune-sample")
+    prune_parser.add_argument("--half-width", type=str, default="1/100")
+    prune_parser.add_argument("--samples", type=int, default=10000)
+    prune_parser.add_argument("--denominator", type=int, default=10000)
+    prune_parser.add_argument("--seed", type=int, default=1)
+    domain_parser = sub.add_parser("global-domain-sample")
+    domain_parser.add_argument("--half-width", type=str, default="1/20")
+    domain_parser.add_argument("--samples", type=int, default=100)
+    domain_parser.add_argument("--denominator", type=int, default=10000)
+    domain_parser.add_argument("--seed", type=int, default=1)
+    domain_parser.add_argument("--directions", type=int, default=24)
+    domain_parser.add_argument("--direction-denominator", type=int, default=100)
     args = parser.parse_args()
     if args.command == "local-smoke":
         result = local_smoke(Q(args.theta), Q(args.phi),
@@ -572,6 +689,15 @@ def main():
             parser.error("center and half-widths must each have five entries")
         result = global_smoke(center, half_widths, args.directions,
                               args.direction_denominator)
+        print(json.dumps(qjson(result), indent=2))
+    elif args.command == "prune-sample":
+        result = prune_sample(Q(args.half_width), args.samples,
+                              args.denominator, args.seed)
+        print(json.dumps(qjson(result), indent=2))
+    elif args.command == "global-domain-sample":
+        result = global_domain_sample(
+            Q(args.half_width), args.samples, args.denominator, args.seed,
+            args.directions, args.direction_denominator)
         print(json.dumps(qjson(result), indent=2))
 
 

@@ -42,38 +42,41 @@ private lemma matrix_sub_clm (A B : Matrix (Fin 3) (Fin 3) ℝ) :
   ext v
   simp [Matrix.toLpLin_apply]
 
-private lemma abs_trace_mul_le_eighteen_opNorm
+private lemma abs_trace_mul_le_six_opNorm
     (A H : Matrix (Fin 3) (Fin 3) ℝ)
-    (hH : ∀ i j, |H i j| ≤ 2) :
+    (hH : ∑ i, ∑ j, |H j i| ≤ 6) :
     |Matrix.trace (A * H)| ≤
-      18 * ‖A.toEuclideanLin.toContinuousLinearMap‖ := by
+      6 * ‖A.toEuclideanLin.toContinuousLinearMap‖ := by
   rw [Matrix.trace]
   calc
     |∑ i, ∑ j, A i j * H j i| ≤ ∑ i, |∑ j, A i j * H j i| :=
       Finset.abs_sum_le_sum_abs _ _
     _ ≤ ∑ i, ∑ j, |A i j * H j i| :=
       Finset.sum_le_sum fun _ _ => Finset.abs_sum_le_sum_abs _ _
-    _ ≤ ∑ _i : Fin 3, ∑ _j : Fin 3,
-        ‖A.toEuclideanLin.toContinuousLinearMap‖ * 2 := by
+    _ ≤ ∑ i : Fin 3, ∑ j : Fin 3,
+        ‖A.toEuclideanLin.toContinuousLinearMap‖ * |H j i| := by
       apply Finset.sum_le_sum
       intro i _
       apply Finset.sum_le_sum
       intro j _
       rw [abs_mul]
-      exact mul_le_mul (abs_matrix_entry_le_opNorm A i j) (hH j i)
-        (abs_nonneg _) (norm_nonneg _)
-    _ = 18 * ‖A.toEuclideanLin.toContinuousLinearMap‖ := by
-      simp
-      ring
+      exact mul_le_mul_of_nonneg_right
+        (abs_matrix_entry_le_opNorm A i j) (abs_nonneg _)
+    _ = ‖A.toEuclideanLin.toContinuousLinearMap‖ *
+        (∑ i, ∑ j, |H j i|) := by
+      simp only [Finset.mul_sum]
+    _ ≤ ‖A.toEuclideanLin.toContinuousLinearMap‖ * 6 :=
+      mul_le_mul_of_nonneg_left hH (norm_nonneg _)
+    _ = 6 * ‖A.toEuclideanLin.toContinuousLinearMap‖ := by ring
 
-private lemma symmetry_sub_one_entry_le_two (g : VertexIndex) (i j : Fin 3) :
-    |(symmetryMatrix g - 1) i j| ≤ 2 := by
-  change |(symmetryMatrixInt g i j : ℝ) - (if i = j then 1 else 0)| ≤ 2
-  have hz : |symmetryMatrixInt g i j - (if i = j then 1 else 0)| ≤
-      (2 : ℤ) := by
+private lemma symmetry_sub_one_abs_sum_le_six (g : VertexIndex) :
+    ∑ i, ∑ j, |(symmetryMatrix g - 1) j i| ≤ 6 := by
+  change ∑ i, ∑ j,
+    |(symmetryMatrixInt g j i : ℝ) - (if j = i then 1 else 0)| ≤ 6
+  have hz : ∑ i, ∑ j,
+      |symmetryMatrixInt g j i - (if j = i then 1 else 0)| ≤ (6 : ℤ) := by
     obtain ⟨p, s⟩ := g
-    fin_cases p <;> fin_cases s <;> fin_cases i <;> fin_cases j <;>
-      decide +kernel
+    fin_cases p <;> fin_cases s <;> decide +kernel
   exact_mod_cast hz
 
 /-- Trace improvement of symmetry `g` over the identity representative. -/
@@ -89,10 +92,10 @@ private theorem traceAdvantage_sub (R S : Matrix (Fin 3) (Fin 3) ℝ)
 theorem abs_traceAdvantage_sub_le
     (R S : Matrix (Fin 3) (Fin 3) ℝ) (g : VertexIndex) :
     |traceAdvantage R g - traceAdvantage S g| ≤
-      18 * ‖(R - S).toEuclideanLin.toContinuousLinearMap‖ := by
+      6 * ‖(R - S).toEuclideanLin.toContinuousLinearMap‖ := by
   rw [traceAdvantage_sub]
-  exact abs_trace_mul_le_eighteen_opNorm _ _
-    (symmetry_sub_one_entry_le_two g)
+  exact abs_trace_mul_le_six_opNorm _ _
+    (symmetry_sub_one_abs_sum_le_six g)
 
 theorem traceAdvantage_pos_not_inFundamentalDomain
     {R : Matrix (Fin 3) (Fin 3) ℝ} {g : VertexIndex}
@@ -143,7 +146,7 @@ def Box.approxAdvantage (box : Box) : ℚ :=
 
 def Box.Valid (box : Box) : Prop :=
   box.center ∈ fourInterval ℚ ∧
-    18 * (centerApproxRadius + box.eulerRadius) < box.approxAdvantage
+    6 * (centerApproxRadius + box.eulerRadius) < box.approxAdvantage
 
 instance (box : Box) : Decidable box.Valid := by
   unfold Box.Valid
@@ -429,7 +432,7 @@ theorem Box.valid_imp_not_inFundamentalDomain
   have hmove' :
       |traceAdvantage p.relativeRotation box.symmetryIndex -
           traceAdvantage centerPose.relativeRotation box.symmetryIndex| ≤
-        18 * (box.eulerRadius : ℝ) :=
+        6 * (box.eulerRadius : ℝ) :=
     hmove.trans (mul_le_mul_of_nonneg_left hrot (by norm_num))
   have hcenterNorm := box.center_relative_approx h
   have hcenterAbs := abs_traceAdvantage_sub_le
@@ -437,20 +440,20 @@ theorem Box.valid_imp_not_inFundamentalDomain
   have hcenterAbs' :
       |traceAdvantage centerPose.relativeRotation box.symmetryIndex -
           traceAdvantage approxR box.symmetryIndex| ≤
-        18 * (centerApproxRadius : ℝ) := by
+        6 * (centerApproxRadius : ℝ) := by
     apply hcenterAbs.trans
     apply mul_le_mul_of_nonneg_left _ (by norm_num)
     rw [matrix_sub_clm]
     simpa only [approxR, Box.approxRelativeCLM, centerPose] using hcenterNorm
   have hadvantage :
-      18 * ((centerApproxRadius : ℝ) + (box.eulerRadius : ℝ)) <
+      6 * ((centerApproxRadius : ℝ) + (box.eulerRadius : ℝ)) <
         traceAdvantage approxR box.symmetryIndex := by
     have hadvantageQ := h.2
     have hadvantageR :
-        (18 * (centerApproxRadius + box.eulerRadius) : ℚ) <
+        (6 * (centerApproxRadius + box.eulerRadius) : ℚ) <
           box.approxAdvantage := hadvantageQ
     have hcast :
-        ((18 * (centerApproxRadius + box.eulerRadius) : ℚ) : ℝ) <
+        ((6 * (centerApproxRadius + box.eulerRadius) : ℚ) : ℝ) <
           (box.approxAdvantage : ℝ) := by exact_mod_cast hadvantageR
     simpa only [Rat.cast_mul, Rat.cast_ofNat, Rat.cast_add,
       box.approxAdvantage_cast, approxR] using hcast
