@@ -1,8 +1,8 @@
 module
 
 public import Noperthedron.SnubCube.Certificate
+public import Noperthedron.SnubCube.FundamentalPrune
 public import Noperthedron.SnubCube.LocalCertificate
-public import Noperthedron.SnubCube.Tightening
 public import Noperthedron.SolutionTable.Defs
 
 @[expose] public section
@@ -11,7 +11,7 @@ public import Noperthedron.SolutionTable.Defs
 /-!
 # Flat checked solution trees for the snub cube
 
-Rows are either binary interval splits or one of the two sound certificate
+Rows are either binary interval splits or one of three sound certificate
 leaf types.  Validity is parameterized by a total row getter, so generated
 data can use a fast runtime array for `native_decide` and chunked literal
 functions for kernel checking without changing the mathematical theorem.
@@ -87,16 +87,17 @@ lemma mem_interval_imp_mem_some_part (q : Pose ℝ) (iv : Interval)
 
 def NoRupert (iv : Interval) : Prop :=
   ¬ ∃ q ∈ Interval.toReal iv, ∃ offset : ℝ²,
-    RupertPose (q.matrixPoseWithOffset offset)
-      normalizedExactPolyhedron.hull
+    (q.matrixPoseWithOffset offset).InSnubFundamentalDomain ∧
+      RupertPose (q.matrixPoseWithOffset offset)
+        normalizedExactPolyhedron.hull
 
 lemma noRupert_parts (p : Param) (iv : Interval) (N : ℕ) [NeZero N]
     (h : ∀ n : Fin N,
       NoRupert (Noperthedron.Solution.Interval.nth_part p iv N n)) :
     NoRupert iv := by
-  rintro ⟨q, hq, offset, hrupert⟩
+  rintro ⟨q, hq, offset, hfund, hrupert⟩
   obtain ⟨n, hn⟩ := mem_interval_imp_mem_some_part q iv p N hq
-  exact h n ⟨q, hn, offset, hrupert⟩
+  exact h n ⟨q, hn, offset, hfund, hrupert⟩
 
 lemma noRupert_halves (p : Param) (iv : Interval)
     (hlower : NoRupert (Noperthedron.Solution.Interval.lower_half p iv))
@@ -112,16 +113,19 @@ inductive Row where
   | split (id lowerChild upperChild : ℕ) (param : Param) (interval : Interval)
   | global (id : ℕ) (box : Certificate.Box)
   | localLeaf (id : ℕ) (box : LocalCertificate.Box)
+  | prune (id : ℕ) (box : FundamentalPrune.Box)
 
 def Row.id : Row → ℕ
   | .split id .. => id
   | .global id .. => id
   | .localLeaf id .. => id
+  | .prune id .. => id
 
 def Row.interval : Row → Interval
   | .split _ _ _ _ interval => interval
   | .global _ box => box.interval
   | .localLeaf _ box => box.interval
+  | .prune _ box => box.interval
 
 instance : Inhabited Row where
   default := .split 0 0 0 .θ₁
@@ -139,6 +143,7 @@ def Row.ValidAt (get : ℕ → Row) (size : ℕ) : Row → Prop
         Noperthedron.Solution.Interval.upper_half param interval
   | .global _ box => box.Valid
   | .localLeaf _ box => box.Valid
+  | .prune _ box => box.Valid
 
 instance (get : ℕ → Row) (size : ℕ) (row : Row) :
     Decidable (row.ValidAt get size) := by
@@ -160,6 +165,10 @@ private theorem local_realInterval (box : LocalCertificate.Box) :
     box.realInterval = Interval.toReal box.interval := by
   rfl
 
+private theorem prune_realInterval (box : FundamentalPrune.Box) :
+    box.realInterval = Interval.toReal box.interval := by
+  rfl
+
 theorem valid_imp_noRupert_ix (get : ℕ → Row) (size : ℕ)
     (rowsValid : RowsValidAt get size) (i : ℕ) (hi : i < size) :
     NoRupert (get i).interval := by
@@ -169,17 +178,33 @@ theorem valid_imp_noRupert_ix (get : ℕ → Row) (size : ℕ)
   | global id box =>
       unfold NoRupert
       change ¬ ∃ q ∈ Interval.toReal box.interval, ∃ offset : ℝ²,
-        RupertPose (q.matrixPoseWithOffset offset)
-          normalizedExactPolyhedron.hull
+        (q.matrixPoseWithOffset offset).InSnubFundamentalDomain ∧
+          RupertPose (q.matrixPoseWithOffset offset)
+            normalizedExactPolyhedron.hull
       rw [← global_realInterval]
+      rintro ⟨q, hq, offset, -, hrupert⟩
       exact Certificate.valid_imp_no_translated_rupert_in_interval box hvalid
+        ⟨q, hq, offset, hrupert⟩
   | localLeaf id box =>
       unfold NoRupert
       change ¬ ∃ q ∈ Interval.toReal box.interval, ∃ offset : ℝ²,
-        RupertPose (q.matrixPoseWithOffset offset)
-          normalizedExactPolyhedron.hull
+        (q.matrixPoseWithOffset offset).InSnubFundamentalDomain ∧
+          RupertPose (q.matrixPoseWithOffset offset)
+            normalizedExactPolyhedron.hull
       rw [← local_realInterval]
+      rintro ⟨q, hq, offset, -, hrupert⟩
       exact LocalCertificate.valid_imp_no_translated_rupert_in_interval box hvalid
+        ⟨q, hq, offset, hrupert⟩
+  | prune id box =>
+      unfold NoRupert
+      change ¬ ∃ q ∈ Interval.toReal box.interval, ∃ offset : ℝ²,
+        (q.matrixPoseWithOffset offset).InSnubFundamentalDomain ∧
+          RupertPose (q.matrixPoseWithOffset offset)
+            normalizedExactPolyhedron.hull
+      rw [← prune_realInterval]
+      rintro ⟨q, hq, offset, hfund, -⟩
+      exact FundamentalPrune.Box.valid_imp_not_inFundamentalDomain
+        box hvalid hq offset hfund
   | split id lowerChild upperChild param interval =>
       obtain ⟨hlower, hupper, hlowerSize, hupperSize,
         hlowerInterval, hupperInterval⟩ := hvalid
@@ -195,38 +220,40 @@ decreasing_by
   · have : id = i := by simpa [Row.id, hrow] using hid
     omega
 
-/-- Rational version of the exact reduced root box. -/
-def reducedPoseIntervalQ : Interval :=
+/-- Rational version of the exact fundamental-domain root box. -/
+def fundamentalPoseIntervalQ : Interval :=
   PoseInterval.mk
-    { θ₁ := 0, θ₂ := 0, φ₁ := 0, φ₂ := 0, α := -4 }
-    { θ₁ := 2, θ₂ := 2, φ₁ := 2, φ₂ := 2, α := 4 }
+    { θ₁ := -4, θ₂ := 0, φ₁ := 0, φ₂ := 0, α := -4 }
+    { θ₁ := 4, θ₂ := 2, φ₁ := 4, φ₂ := 2, α := 4 }
     (by rw [Pose.le_iff]; norm_num)
 
-theorem reducedPoseIntervalQ_toReal :
-    Interval.toReal reducedPoseIntervalQ = reducedPoseInterval := by
-  ext <;> norm_num [Interval.toReal, reducedPoseIntervalQ,
-    reducedPoseInterval, Pose.toReal]
+theorem fundamentalPoseIntervalQ_toReal :
+    Interval.toReal fundamentalPoseIntervalQ = fundamentalPoseInterval := by
+  ext <;> norm_num [Interval.toReal, fundamentalPoseIntervalQ,
+    fundamentalPoseInterval, Pose.toReal]
 
 structure ValidTable where
   get : ℕ → Row
   size : ℕ
   nonempty : 0 < size
   rowsValid : RowsValidAt get size
-  root_interval : (get 0).interval = reducedPoseIntervalQ
+  root_interval : (get 0).interval = fundamentalPoseIntervalQ
 
-theorem ValidTable.no_reduced_translated_rupert (table : ValidTable) :
-    ¬ ∃ q ∈ reducedPoseInterval, ∃ offset : ℝ²,
-      RupertPose (q.matrixPoseWithOffset offset)
-        normalizedExactPolyhedron.hull := by
+theorem ValidTable.no_fundamental_translated_rupert (table : ValidTable) :
+    ¬ ∃ q ∈ fundamentalPoseInterval, ∃ offset : ℝ²,
+      (q.matrixPoseWithOffset offset).InSnubFundamentalDomain ∧
+        RupertPose (q.matrixPoseWithOffset offset)
+          normalizedExactPolyhedron.hull := by
   have hroot := valid_imp_noRupert_ix table.get table.size table.rowsValid 0
     table.nonempty
-  rw [table.root_interval, NoRupert, reducedPoseIntervalQ_toReal] at hroot
+  rw [table.root_interval, NoRupert, fundamentalPoseIntervalQ_toReal] at hroot
   exact hroot
 
 theorem ValidTable.no_matrixPose (table : ValidTable) :
     ¬ ∃ p : MatrixPose,
       RupertPose p normalizedExactPolyhedron.hull :=
-  no_matrixPose_of_no_reduced_translated_pose table.no_reduced_translated_rupert
+  no_matrixPose_of_no_fundamental_translated_pose
+    table.no_fundamental_translated_rupert
 
 end Noperthedron.SnubCube.SolutionTree
 

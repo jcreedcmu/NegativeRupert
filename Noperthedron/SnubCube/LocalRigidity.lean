@@ -89,6 +89,17 @@ private theorem norm_so3CLM_inv_sub_inv (r s : SO3) :
     rw [hs, map_sub, hr]
   rw [hdecomp, so3CLM_left_norm, so3CLM_right_norm, norm_sub_rev]
 
+theorem norm_relativeRotation_sub_le (p q : MatrixPose) :
+    ‖so3CLM (relativeRotation p) - so3CLM (relativeRotation q)‖ ≤
+      ‖so3CLM p.innerRot - so3CLM q.innerRot‖ +
+        ‖so3CLM p.outerRot - so3CLM q.outerRot‖ := by
+  rw [relativeRotation, relativeRotation, so3CLM_mul, so3CLM_mul]
+  apply (norm_comp_sub_comp_le (so3CLM p.outerRot⁻¹) (so3CLM p.innerRot)
+    (so3CLM q.outerRot⁻¹) (so3CLM q.innerRot)
+    (by rw [so3CLM_norm]) (by rw [so3CLM_norm])).trans
+  rw [norm_so3CLM_inv_sub_inv]
+  linarith [norm_sub_rev (so3CLM p.outerRot) (so3CLM q.outerRot)]
+
 theorem norm_relativeRotationAtSymmetry_sub_le
     (p q : MatrixPose) (g : VertexIndex) :
     ‖so3CLM (relativeRotationAtSymmetry p g) -
@@ -98,12 +109,7 @@ theorem norm_relativeRotationAtSymmetry_sub_le
   rw [relativeRotationAtSymmetry, relativeRotationAtSymmetry,
     so3CLM_mul, so3CLM_mul]
   rw [← ContinuousLinearMap.sub_comp, so3CLM_right_norm]
-  rw [relativeRotation, relativeRotation, so3CLM_mul, so3CLM_mul]
-  apply (norm_comp_sub_comp_le (so3CLM p.outerRot⁻¹) (so3CLM p.innerRot)
-    (so3CLM q.outerRot⁻¹) (so3CLM q.innerRot)
-    (by rw [so3CLM_norm]) (by rw [so3CLM_norm])).trans
-  rw [norm_so3CLM_inv_sub_inv]
-  linarith [norm_sub_rev (so3CLM p.outerRot) (so3CLM q.outerRot)]
+  exact norm_relativeRotation_sub_le p q
 
 /-- Distance from the symmetry stratum is bounded by the direct inner-matrix
 mismatch.  This avoids choosing Euler coordinates for an equality pose. -/
@@ -140,6 +146,24 @@ theorem norm_relativeRotationAtSymmetry_matrixPoseWithOffset_sub_le
         (|p.φ₂ - q.φ₂| + |p.θ₂ - q.θ₂|) := by
   apply (norm_relativeRotationAtSymmetry_sub_le
     (p.matrixPoseWithOffset offset) (q.matrixPoseWithOffset offset₀) g).trans
+  simp only [Pose.matrixPoseWithOffset, Pose.matrixPoseOfPose, so3CLM]
+  rw [← rotRM_eq_rotRM_mat, ← rotRM_eq_rotRM_mat,
+    ← rotRM_eq_rotRM_mat, ← rotRM_eq_rotRM_mat]
+  have hin := norm_rotRM_sub_le p.θ₁ p.φ₁ p.α q.θ₁ q.φ₁ q.α
+  have hout := norm_rotRM_sub_le p.θ₂ p.φ₂ 0 q.θ₂ q.φ₂ 0
+  norm_num at hout
+  linarith
+
+/-- The unadjusted relative rotation is likewise Lipschitz in the five Euler
+coordinates. -/
+theorem norm_relativeRotation_matrixPoseWithOffset_sub_le
+    (p q : Pose ℝ) (offset offset₀ : ℝ²) :
+    ‖so3CLM (relativeRotation (p.matrixPoseWithOffset offset)) -
+        so3CLM (relativeRotation (q.matrixPoseWithOffset offset₀))‖ ≤
+      |p.α - q.α| + |p.φ₁ - q.φ₁| + |p.θ₁ - q.θ₁| +
+        (|p.φ₂ - q.φ₂| + |p.θ₂ - q.θ₂|) := by
+  apply (norm_relativeRotation_sub_le
+    (p.matrixPoseWithOffset offset) (q.matrixPoseWithOffset offset₀)).trans
   simp only [Pose.matrixPoseWithOffset, Pose.matrixPoseOfPose, so3CLM]
   rw [← rotRM_eq_rotRM_mat, ← rotRM_eq_rotRM_mat,
     ← rotRM_eq_rotRM_mat, ← rotRM_eq_rotRM_mat]

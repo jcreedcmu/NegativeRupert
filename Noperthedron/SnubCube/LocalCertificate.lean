@@ -240,7 +240,7 @@ private theorem rotRMQCLM_eq_comp (theta phi alpha : ℚ) :
     Matrix.ofLp_toLpLin, Matrix.toLin'_apply]
   rw [hmap, Matrix.mulVec_mulVec]
 
-private theorem rotRMQ_difference_norm_bounded
+theorem rotRMQ_difference_norm_bounded
     (theta phi alpha : ℚ)
     (hθ : (theta : ℝ) ∈ Set.Icc (-4 : ℝ) 4)
     (hφ : (phi : ℝ) ∈ Set.Icc (-4 : ℝ) 4)
