@@ -109,6 +109,17 @@ theorem norm_relativeRotationAtSymmetry_matrixPoseWithOffset_sub_le
   norm_num at hout
   linarith
 
+theorem norm_outerRot_matrixPoseWithOffset_sub_le
+    (p q : Pose ℝ) (offset offset₀ : ℝ²) :
+    ‖so3CLM (p.matrixPoseWithOffset offset).outerRot -
+        so3CLM (q.matrixPoseWithOffset offset₀).outerRot‖ ≤
+      |p.φ₂ - q.φ₂| + |p.θ₂ - q.θ₂| := by
+  simp only [Pose.matrixPoseWithOffset, Pose.matrixPoseOfPose, so3CLM]
+  rw [← rotRM_eq_rotRM_mat, ← rotRM_eq_rotRM_mat]
+  have h := norm_rotRM_sub_le p.θ₂ p.φ₂ 0 q.θ₂ q.φ₂ 0
+  norm_num at h
+  exact h
+
 /-- A rational bound on the five Euler-coordinate differences bounds the
 operator-norm distance from a chosen equality stratum. -/
 theorem norm_relativeRotationAtSymmetry_matrixPoseWithOffset_one_le
@@ -152,6 +163,29 @@ noncomputable def outerFrame (p : MatrixPose) : ℝ³ ≃ₗᵢ[ℝ] ℝ³ :=
 noncomputable def outerLift (p : MatrixPose) (u : ℝ²) : ℝ³ :=
   (outerFrame p).symm (inject_xy u)
 
+private theorem norm_inject_xy (u : ℝ²) : ‖inject_xy u‖ = ‖u‖ := by
+  rw [← sq_eq_sq₀ (norm_nonneg _) (norm_nonneg _)]
+  simp [PiLp.norm_sq_eq_of_L2, Fin.sum_univ_two, Fin.sum_univ_three, inject_xy]
+
+private theorem outerLift_eq_inv_apply (p : MatrixPose) (u : ℝ²) :
+    outerLift p u = so3CLM p.outerRot⁻¹ (inject_xy u) := by
+  have hforward : so3CLM p.outerRot (outerLift p u) = inject_xy u := by
+    change outerFrame p ((outerFrame p).symm (inject_xy u)) = inject_xy u
+    exact (outerFrame p).apply_symm_apply (inject_xy u)
+  have hinv (x : ℝ³) : so3CLM p.outerRot⁻¹ (so3CLM p.outerRot x) = x := by
+    rw [← ContinuousLinearMap.comp_apply, ← so3CLM_mul]
+    simp
+  rw [← hforward, hinv]
+
+theorem norm_outerLift_sub_le (p q : MatrixPose) (u : ℝ²) :
+    ‖outerLift p u - outerLift q u‖ ≤
+      ‖so3CLM p.outerRot - so3CLM q.outerRot‖ * ‖u‖ := by
+  rw [outerLift_eq_inv_apply, outerLift_eq_inv_apply]
+  rw [← sub_apply]
+  apply ((so3CLM p.outerRot⁻¹ - so3CLM q.outerRot⁻¹).le_opNorm
+    (inject_xy u)).trans_eq
+  rw [norm_so3CLM_inv_sub_inv, norm_inject_xy]
+
 private theorem inner_proj_xy (u : ℝ²) (v : ℝ³) :
     ⟪u, proj_xyL v⟫ = ⟪inject_xy u, v⟫ := by
   simp [PiLp.inner_apply, proj_xyL, proj_xy_mat, inject_xy,
@@ -170,6 +204,98 @@ noncomputable def firstVariationVector
     {κ : Type} [Fintype κ] (p : MatrixPose)
     (weight : κ → ℝ) (direction : κ → ℝ²) (vertex : κ → ℝ³) : ℝ³ :=
   ∑ i, weight i • cross3 (vertex i) (outerLift p (direction i))
+
+/-- A balanced certificate's first-variation vector is Lipschitz in the
+outer rotation.  Its natural remainder budget is also its Lipschitz scale. -/
+theorem norm_firstVariationVector_sub_le
+    {κ : Type} [Fintype κ] (p q : MatrixPose)
+    (weight : κ → ℝ) (direction : κ → ℝ²) (vertex : κ → ℝ³)
+    (hweight : ∀ i, 0 ≤ weight i) :
+    ‖firstVariationVector p weight direction vertex -
+        firstVariationVector q weight direction vertex‖ ≤
+      (∑ i, weight i * (‖direction i‖ * ‖vertex i‖)) *
+        ‖so3CLM p.outerRot - so3CLM q.outerRot‖ := by
+  have hsum : firstVariationVector p weight direction vertex -
+      firstVariationVector q weight direction vertex =
+      ∑ i, weight i • cross3 (vertex i)
+        (outerLift p (direction i) - outerLift q (direction i)) := by
+    simp only [firstVariationVector, ← Finset.sum_sub_distrib]
+    apply Finset.sum_congr rfl
+    intro i _
+    rw [← smul_sub, cross3_sub_right]
+  rw [hsum]
+  apply (norm_sum_le _ _).trans
+  calc
+    ∑ i, ‖weight i • cross3 (vertex i)
+          (outerLift p (direction i) - outerLift q (direction i))‖
+        ≤ ∑ i, weight i * (‖direction i‖ * ‖vertex i‖) *
+          ‖so3CLM p.outerRot - so3CLM q.outerRot‖ := by
+      apply Finset.sum_le_sum
+      intro i _
+      rw [norm_smul, Real.norm_eq_abs, abs_of_nonneg (hweight i)]
+      have hcross := cross3_norm_le (vertex i)
+        (outerLift p (direction i) - outerLift q (direction i))
+      have hlift := norm_outerLift_sub_le p q (direction i)
+      calc
+        weight i *
+            ‖cross3 (vertex i)
+              (outerLift p (direction i) - outerLift q (direction i))‖
+            ≤ weight i *
+              (‖vertex i‖ *
+                ‖outerLift p (direction i) - outerLift q (direction i)‖) :=
+          mul_le_mul_of_nonneg_left hcross (hweight i)
+        _ ≤ weight i *
+              (‖vertex i‖ *
+                (‖so3CLM p.outerRot - so3CLM q.outerRot‖ * ‖direction i‖)) := by
+          exact mul_le_mul_of_nonneg_left
+            (mul_le_mul_of_nonneg_left hlift (norm_nonneg _)) (hweight i)
+        _ = weight i * (‖direction i‖ * ‖vertex i‖) *
+              ‖so3CLM p.outerRot - so3CLM q.outerRot‖ := by ring
+    _ = (∑ i, weight i * (‖direction i‖ * ‖vertex i‖)) *
+          ‖so3CLM p.outerRot - so3CLM q.outerRot‖ := by
+      rw [Finset.sum_mul]
+
+/-- After division by its positive remainder budget, a first-variation
+vector is 1-Lipschitz in the outer rotation. -/
+theorem norm_normalizedFirstVariation_sub_le
+    {κ : Type} [Fintype κ] (p q : MatrixPose)
+    (weight : κ → ℝ) (direction : κ → ℝ²) (vertex : κ → ℝ³)
+    (normalized currentCenter : ℝ³) (B : ℝ)
+    (hweight : ∀ i, 0 ≤ weight i) (hB : 0 < B)
+    (hbudget : B = ∑ i, weight i * (‖direction i‖ * ‖vertex i‖))
+    (hcurrent : firstVariationVector p weight direction vertex = B • normalized)
+    (hcenter : firstVariationVector q weight direction vertex = B • currentCenter) :
+    ‖normalized - currentCenter‖ ≤
+      ‖so3CLM p.outerRot - so3CLM q.outerRot‖ := by
+  have h := norm_firstVariationVector_sub_le p q weight direction vertex hweight
+  rw [← hbudget] at h
+  have hsub : firstVariationVector p weight direction vertex -
+      firstVariationVector q weight direction vertex =
+      B • (normalized - currentCenter) := by
+    rw [hcurrent, hcenter, smul_sub]
+  rw [hsub, norm_smul, Real.norm_eq_abs, abs_of_pos hB] at h
+  nlinarith
+
+/-- Pose-coordinate form used by local rows: normalized axis-coverage vectors
+lose at most the two-coordinate outer Euler distance. -/
+theorem norm_normalizedFirstVariation_matrixPoseWithOffset_sub_le
+    {κ : Type} [Fintype κ]
+    (p center : Pose ℝ) (offset centerOffset : ℝ²)
+    (weight : κ → ℝ) (direction : κ → ℝ²) (vertex : κ → ℝ³)
+    (normalized centerNormalized : ℝ³) (B : ℝ)
+    (hweight : ∀ i, 0 ≤ weight i) (hB : 0 < B)
+    (hbudget : B = ∑ i, weight i * (‖direction i‖ * ‖vertex i‖))
+    (hcurrent : firstVariationVector (p.matrixPoseWithOffset offset)
+      weight direction vertex = B • normalized)
+    (hcenter : firstVariationVector (center.matrixPoseWithOffset centerOffset)
+      weight direction vertex = B • centerNormalized) :
+    ‖normalized - centerNormalized‖ ≤
+      |p.φ₂ - center.φ₂| + |p.θ₂ - center.θ₂| := by
+  exact (norm_normalizedFirstVariation_sub_le
+    (p.matrixPoseWithOffset offset) (center.matrixPoseWithOffset centerOffset)
+    weight direction vertex normalized centerNormalized B
+    hweight hB hbudget hcurrent hcenter).trans
+      (norm_outerRot_matrixPoseWithOffset_sub_le p center offset centerOffset)
 
 theorem axisAngle_weighted_first_identity
     {κ : Type} [Fintype κ] {Q : ℝ³ →L[ℝ] ℝ³} (a : AxisAngle Q)
@@ -348,6 +474,52 @@ theorem not_rupertPose_of_axisFree_geometric_certificates
   · exact hweight_pos
   · exact hbalance
   · exact hsupport
+
+/-- Perturbation-stable geometric axis-free obstruction.  Axis coverage is
+certified once at a center configuration with radius `c + δ`; pointwise
+movement of each normalized first-variation vector by at most `δ` leaves
+the required radius `c` at the current pose. -/
+theorem not_rupertPose_of_axisFree_geometric_certificates_of_perturbation
+    {J κ : Type} [Fintype J] [Nonempty J] [Fintype κ] [Nonempty κ]
+    (p : MatrixPose) (g : VertexIndex)
+    (a : AxisAngle
+      ((relativeRotationAtSymmetry p g).val.toEuclideanLin.toContinuousLinearMap))
+    (index : J → κ → VertexIndex)
+    (weight : J → κ → ℝ) (direction : J → κ → ℝ²)
+    (A normalizedA centerNormalizedA : J → ℝ³) (B : J → ℝ)
+    (c δ : ℝ)
+    (hcδ : 0 ≤ c + δ)
+    (hB : ∀ j, 0 < B j)
+    (hA : ∀ j, A j = B j • normalizedA j)
+    (hball : Metric.closedBall (0 : ℝ³) (c + δ) ⊆
+      convexHull ℝ {centerNormalizedA j | j})
+    (hmove : ∀ j, ‖normalizedA j - centerNormalizedA j‖ ≤ δ)
+    (hA_eq : ∀ j, A j = firstVariationVector p (weight j) (direction j)
+      (fun i => normalizedExactVertex (symmetryAction g (index j i))))
+    (hB_eq : ∀ j, B j = ∑ i, weight j i *
+      (‖direction j i‖ *
+        ‖normalizedExactVertex (symmetryAction g (index j i))‖))
+    (hratio : 1 - Real.cos a.angle ≤ |Real.sin a.angle| * c)
+    (hdirection : ∀ j i, direction j i ≠ 0)
+    (hweight : ∀ j i, 0 ≤ weight j i)
+    (hweight_pos : ∀ j, ∃ i, 0 < weight j i)
+    (hbalance : ∀ j, ∑ i, weight j i • direction j i = 0)
+    (hsupport : ∀ j i k,
+      ⟪direction j i, outerProjectionLinear p (normalizedExactVertex k)⟫ ≤
+        ⟪direction j i, outerProjectionLinear p
+          (normalizedExactVertex (symmetryAction g (index j i)))⟫) :
+    ¬ RupertPose p normalizedExactPolyhedron.hull := by
+  obtain ⟨j, hj⟩ := exists_axis_certificate_dominating_remainder_of_perturbation
+    centerNormalizedA normalizedA A B c δ |Real.sin a.angle| (1 - Real.cos a.angle)
+    hcδ (abs_nonneg _) hB hA hball hmove hratio a.signedAxis a.signedAxis_norm
+  apply not_rupertPose_of_symmetry_axisAngle_certificate p g a
+    (index j) (weight j) (direction j)
+    (hdirection j) (hweight j) (hweight_pos j) (hbalance j) (hsupport j)
+  rw [← hB_eq j]
+  rw [axisAngle_weighted_first_identity a p (weight j) (direction j)
+    (fun i => normalizedExactVertex (symmetryAction g (index j i)))]
+  rw [← hA_eq j]
+  exact hj
 
 end Noperthedron.SnubCube
 

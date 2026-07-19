@@ -1,7 +1,7 @@
 module
 
 public import Noperthedron.Bounding.OrthEquivRotz
-public import Mathlib.LinearAlgebra.CrossProduct
+public import Mathlib.Geometry.Euclidean.Angle.Unoriented.CrossProduct
 
 @[expose] public section
 
@@ -27,6 +27,16 @@ noncomputable def zRemainder (v : ℝ³) : ℝ³ := !₂[-v 0, -v 1, 0]
 product. -/
 noncomputable def cross3 (v w : ℝ³) : ℝ³ :=
   WithLp.toLp 2 (v.ofLp ⨯₃ w.ofLp)
+
+theorem cross3_norm_le (v w : ℝ³) : ‖cross3 v w‖ ≤ ‖v‖ * ‖w‖ := by
+  rw [cross3, InnerProductGeometry.norm_ofLp_crossProduct]
+  exact (mul_le_mul_of_nonneg_left (Real.sin_le_one _)
+    (mul_nonneg (norm_nonneg v) (norm_nonneg w))).trans_eq (mul_one _)
+
+theorem cross3_sub_right (u v w : ℝ³) :
+    cross3 u (v - w) = cross3 u v - cross3 u w := by
+  ext i
+  fin_cases i <;> simp [cross3, cross_apply] <;> ring
 
 /-- The standard unit z vector. -/
 noncomputable def zAxis : ℝ³ := !₂[0, 0, 1]
