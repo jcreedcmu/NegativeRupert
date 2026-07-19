@@ -182,6 +182,51 @@ theorem not_rupertPose_of_axisAngle_certificate
           outerProjectionLinear p (poly.v (index i))⟫
     simpa only [← map_sub] using hdisp
 
+/-- Symmetry-reindexed version of the local certificate.  The tracked inner
+vertex `innerIndex i` may differ from its supporting outer vertex
+`outerIndex i`; `htracks` states that, after removing a polyhedron symmetry,
+their displacement is the small rotation `Q`. -/
+theorem not_rupertPose_of_reindexed_axisAngle_certificate
+    {ι κ : Type} [Fintype ι] [Fintype κ] [Nonempty κ]
+    (poly : Polyhedron ι ℝ³) (p : MatrixPose)
+    {Q : ℝ³ →L[ℝ] ℝ³} (a : AxisAngle Q)
+    (innerIndex outerIndex : κ → ι)
+    (weight : κ → ℝ) (direction : κ → ℝ²)
+    (hdirection : ∀ i, direction i ≠ 0)
+    (hweight : ∀ i, 0 ≤ weight i) (hweight_pos : ∃ i, 0 < weight i)
+    (hbalance : ∑ i, weight i • direction i = 0)
+    (htracks : ∀ i,
+      proj_xyL (p.innerRot.val.toEuclideanLin (poly.v (innerIndex i))) =
+        outerProjectionLinear p (Q (poly.v (outerIndex i))))
+    (hsupport : ∀ i j,
+      ⟪direction i, outerProjectionLinear p (poly.v j)⟫ ≤
+        ⟪direction i, outerProjectionLinear p (poly.v (outerIndex i))⟫)
+    (hdominates :
+      (1 - Real.cos a.angle) *
+          (∑ i, weight i * (‖direction i‖ * ‖poly.v (outerIndex i)‖)) ≤
+        Real.sin a.angle *
+          (∑ i, weight i *
+            ⟪direction i,
+              outerProjectionLinear p (a.first (poly.v (outerIndex i)))⟫)) :
+    ¬ RupertPose p poly.hull := by
+  refine not_rupertPose_of_balanced_support poly p innerIndex outerIndex
+    weight direction hdirection hweight hweight_pos hbalance ?_ ?_
+  · rintro i y ⟨v, ⟨j, rfl⟩, rfl⟩
+    change ⟪direction i,
+        proj_xyL (p.outerRot.val.toEuclideanLin (poly.v j))⟫ ≤
+      ⟪direction i,
+        proj_xyL (p.outerRot.val.toEuclideanLin (poly.v (outerIndex i)))⟫
+    simpa [outerProjectionLinear] using hsupport i j
+  · have hdisp := axisAngle_weighted_displacement_nonneg a
+      (outerProjectionLinear p) (outerProjectionLinear_norm_le p)
+      weight direction (fun i => poly.v (outerIndex i)) hweight hdominates
+    simp_rw [htracks]
+    change 0 ≤ ∑ i, weight i *
+      ⟪direction i,
+        outerProjectionLinear p (Q (poly.v (outerIndex i))) -
+          outerProjectionLinear p (poly.v (outerIndex i))⟫
+    simpa only [← map_sub] using hdisp
+
 end Noperthedron.BalancedSupport
 
 end
