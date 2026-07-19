@@ -127,11 +127,180 @@ def rzQ (alpha : ℚ) : Matrix (Fin 3) (Fin 3) ℚ :=
      sinℚ alpha,  cosℚ alpha, 0;
      0, 0, 1]
 
+def frameApprox : Matrix (Fin 3) (Fin 3)
+    RationalApprox.DistLeKappaEntry :=
+  !![(.msin, .one), (.cos, .one), (.zero, .zero);
+     (.mcos, .cos), (.msin, .cos), (.one, .sin);
+     (.cos, .sin), (.sin, .sin), (.one, .cos)]
+
+def rz3Approx : Matrix (Fin 3) (Fin 3)
+    RationalApprox.DistLeKappaEntry :=
+  !![(.one, .cos), (.one, .msin), (.zero, .zero);
+     (.one, .sin), (.one, .cos), (.zero, .zero);
+     (.zero, .zero), (.zero, .zero), (.one, .one)]
+
+noncomputable def frameQCLM (theta phi : ℚ) : ℝ³ →L[ℝ] ℝ³ :=
+  ((frameQ theta phi).map fun x => (x : ℝ)).toEuclideanLin.toContinuousLinearMap
+
+noncomputable def rzQCLM (alpha : ℚ) : ℝ³ →L[ℝ] ℝ³ :=
+  ((rzQ alpha).map fun x => (x : ℝ)).toEuclideanLin.toContinuousLinearMap
+
+private theorem frameQ_difference_norm_bounded
+    (theta phi : ℚ) (hθ : (theta : ℝ) ∈ Set.Icc (-4 : ℝ) 4)
+    (hφ : (phi : ℝ) ∈ Set.Icc (-4 : ℝ) 4) :
+    ‖rotRM (theta : ℝ) (phi : ℝ) 0 - frameQCLM theta phi‖ ≤
+      RationalApprox.κ := by
+  let θ4 : Set.Icc (-4 : ℝ) 4 := ⟨theta, hθ⟩
+  let φ4 : Set.Icc (-4 : ℝ) 4 := ⟨phi, hφ⟩
+  have hactual : rotRM (theta : ℝ) (phi : ℝ) 0 =
+      RationalApprox.clinActual frameApprox θ4 φ4 := by
+    rw [rotRM_eq_rotRM_mat]
+    unfold RationalApprox.clinActual
+    apply congrArg (fun M : Matrix (Fin 3) (Fin 3) ℝ =>
+      M.toEuclideanLin.toContinuousLinearMap)
+    ext i j
+    fin_cases i <;> fin_cases j <;>
+      simp [rotRM_mat, Rz_mat, Ry_mat, frameApprox, θ4, φ4,
+        Matrix.mul_apply, Fin.sum_univ_three] <;> ring
+  have happrox : frameQCLM theta phi =
+      RationalApprox.clinApprox frameApprox θ4 φ4 := by
+    unfold frameQCLM RationalApprox.clinApprox
+    apply congrArg (fun M : Matrix (Fin 3) (Fin 3) ℝ =>
+      M.toEuclideanLin.toContinuousLinearMap)
+    ext i j
+    fin_cases i <;> fin_cases j <;>
+      simp [frameQ, frameApprox, θ4, φ4, sinℚ_match, cosℚ_match]
+  rw [hactual, happrox]
+  exact RationalApprox.norm_matrix_actual_approx_le_kappa
+    (m := ⟨3, by norm_num⟩) (n := ⟨3, by norm_num⟩)
+    frameApprox θ4 φ4
+
+private theorem rzQ_difference_norm_bounded
+    (alpha : ℚ) (hα : (alpha : ℝ) ∈ Set.Icc (-4 : ℝ) 4) :
+    ‖RzL (alpha : ℝ) - rzQCLM alpha‖ ≤ RationalApprox.κ := by
+  let z4 : Set.Icc (-4 : ℝ) 4 := ⟨0, by norm_num⟩
+  let α4 : Set.Icc (-4 : ℝ) 4 := ⟨alpha, hα⟩
+  have hactual : RzL (alpha : ℝ) =
+      RationalApprox.clinActual rz3Approx z4 α4 := by
+    unfold RzL RationalApprox.clinActual
+    apply congrArg (fun M : Matrix (Fin 3) (Fin 3) ℝ =>
+      M.toEuclideanLin.toContinuousLinearMap)
+    ext i j
+    fin_cases i <;> fin_cases j <;> simp [Rz_mat, rz3Approx, z4, α4]
+  have happrox : rzQCLM alpha =
+      RationalApprox.clinApprox rz3Approx z4 α4 := by
+    unfold rzQCLM RationalApprox.clinApprox
+    apply congrArg (fun M : Matrix (Fin 3) (Fin 3) ℝ =>
+      M.toEuclideanLin.toContinuousLinearMap)
+    ext i j
+    fin_cases i <;> fin_cases j <;>
+      simp [rzQ, rz3Approx, z4, α4, sinℚ_match, cosℚ_match]
+  rw [hactual, happrox]
+  exact RationalApprox.norm_matrix_actual_approx_le_kappa
+    (m := ⟨3, by norm_num⟩) (n := ⟨3, by norm_num⟩)
+    rz3Approx z4 α4
+
+/-- Conservative full-rotation approximation error. -/
+def rotationError : ℚ := 3 * κℚ + κℚ ^ 2
+
 def rotRMQ (theta phi alpha : ℚ) : Matrix (Fin 3) (Fin 3) ℚ :=
   rzQ alpha * frameQ theta phi
 
+noncomputable def rotRMQCLM (theta phi alpha : ℚ) : ℝ³ →L[ℝ] ℝ³ :=
+  ((rotRMQ theta phi alpha).map fun x => (x : ℝ)).toEuclideanLin.toContinuousLinearMap
+
+private theorem rotRM_eq_rz_comp (theta phi alpha : ℝ) :
+    rotRM theta phi alpha = RzL alpha ∘L rotRM theta phi 0 := by
+  have hmat : rotRM_mat theta phi alpha =
+      Rz_mat alpha * rotRM_mat theta phi 0 := by
+    simp only [rotRM_mat]
+    rw [← Matrix.mul_assoc, ← Matrix.mul_assoc,
+      Bounding.Rz_mat_mul_Rz_mat, Bounding.Rz_mat_mul_Rz_mat]
+    rw [add_comm]
+    simp only [add_zero]
+    rw [Bounding.Rz_mat_mul_Rz_mat]
+  rw [rotRM_eq_rotRM_mat, rotRM_eq_rotRM_mat]
+  ext v
+  simp only [ContinuousLinearMap.comp_apply, RzL,
+    LinearMap.coe_toContinuousLinearMap', Matrix.ofLp_toLpLin,
+    Matrix.toLin'_apply]
+  rw [hmat, Matrix.mulVec_mulVec]
+
+private theorem rotRMQCLM_eq_comp (theta phi alpha : ℚ) :
+    rotRMQCLM theta phi alpha = rzQCLM alpha ∘L frameQCLM theta phi := by
+  have hmap : ((rotRMQ theta phi alpha).map fun x => (x : ℝ)) =
+      ((rzQ alpha).map fun x => (x : ℝ)) *
+        ((frameQ theta phi).map fun x => (x : ℝ)) := by
+    ext i j
+    simp only [rotRMQ, Matrix.map_apply, Matrix.mul_apply]
+    push_cast
+    rfl
+  ext v
+  simp only [rotRMQCLM, rzQCLM, frameQCLM,
+    ContinuousLinearMap.comp_apply, LinearMap.coe_toContinuousLinearMap',
+    Matrix.ofLp_toLpLin, Matrix.toLin'_apply]
+  rw [hmap, Matrix.mulVec_mulVec]
+
+private theorem rotRMQ_difference_norm_bounded
+    (theta phi alpha : ℚ)
+    (hθ : (theta : ℝ) ∈ Set.Icc (-4 : ℝ) 4)
+    (hφ : (phi : ℝ) ∈ Set.Icc (-4 : ℝ) 4)
+    (hα : (alpha : ℝ) ∈ Set.Icc (-4 : ℝ) 4) :
+    ‖rotRM (theta : ℝ) (phi : ℝ) (alpha : ℝ) -
+        rotRMQCLM theta phi alpha‖ ≤ (rotationError : ℝ) := by
+  have hframe := frameQ_difference_norm_bounded theta phi hθ hφ
+  have hrz := rzQ_difference_norm_bounded alpha hα
+  have hexactFrame : ‖rotRM (theta : ℝ) (phi : ℝ) 0‖ = 1 := by
+    simp only [rotRM]
+    rw [Bounding.Rz_preserves_op_norm, Bounding.Rz_preserves_op_norm,
+      Bounding.Ry_preserves_op_norm, Bounding.Rz_norm_one]
+  have hframeNorm : ‖frameQCLM theta phi‖ ≤ 1 + RationalApprox.κ :=
+    RationalApprox.approx_norm_le hexactFrame.le hframe
+  rw [rotRM_eq_rz_comp, rotRMQCLM_eq_comp]
+  have hdecomp :
+      RzL (alpha : ℝ) ∘L rotRM (theta : ℝ) (phi : ℝ) 0 -
+          rzQCLM alpha ∘L frameQCLM theta phi =
+        RzL (alpha : ℝ) ∘L
+            (rotRM (theta : ℝ) (phi : ℝ) 0 - frameQCLM theta phi) +
+          (RzL (alpha : ℝ) - rzQCLM alpha) ∘L frameQCLM theta phi := by
+    ext v
+    simp
+  rw [hdecomp]
+  calc
+    ‖RzL (alpha : ℝ) ∘L
+          (rotRM (theta : ℝ) (phi : ℝ) 0 - frameQCLM theta phi) +
+        (RzL (alpha : ℝ) - rzQCLM alpha) ∘L frameQCLM theta phi‖ ≤
+      ‖RzL (alpha : ℝ) ∘L
+          (rotRM (theta : ℝ) (phi : ℝ) 0 - frameQCLM theta phi)‖ +
+        ‖(RzL (alpha : ℝ) - rzQCLM alpha) ∘L frameQCLM theta phi‖ :=
+      norm_add_le _ _
+    _ ≤ 1 * RationalApprox.κ +
+        RationalApprox.κ * (1 + RationalApprox.κ) := by
+      apply add_le_add
+      · exact (ContinuousLinearMap.opNorm_comp_le _ _).trans
+          (mul_le_mul (le_of_eq (Bounding.Rz_norm_one _)) hframe
+            (norm_nonneg _) (by norm_num))
+      · exact (ContinuousLinearMap.opNorm_comp_le _ _).trans
+          (mul_le_mul hrz hframeNorm (norm_nonneg _) (by
+            unfold RationalApprox.κ
+            norm_num))
+    _ ≤ (rotationError : ℝ) := by
+      norm_num [rotationError, RationalApprox.κ, RationalApprox.κℚ]
+
 def symmetryMatrixQ (g : VertexIndex) : Matrix (Fin 3) (Fin 3) ℚ :=
   (symmetryMatrixInt g).map fun z => (z : ℚ)
+
+noncomputable def symmetryQCLM (g : VertexIndex) : ℝ³ →L[ℝ] ℝ³ :=
+  ((symmetryMatrixQ g).map fun x => (x : ℝ)).toEuclideanLin.toContinuousLinearMap
+
+private theorem symmetryQCLM_eq_so3CLM (g : VertexIndex) :
+    symmetryQCLM g = Noperthedron.SnubCube.so3CLM (symmetry g) := by
+  unfold symmetryQCLM symmetryMatrixQ Noperthedron.SnubCube.so3CLM
+    symmetry symmetryMatrix
+  apply congrArg (fun M : Matrix (Fin 3) (Fin 3) ℝ =>
+    M.toEuclideanLin.toContinuousLinearMap)
+  ext i j
+  simp
 
 def Box.mismatchMatrix (box : Box) : Matrix (Fin 3) (Fin 3) ℚ :=
   rotRMQ box.center.θ₁ box.center.φ₁ box.center.α -
@@ -140,8 +309,55 @@ def Box.mismatchMatrix (box : Box) : Matrix (Fin 3) (Fin 3) ℚ :=
 def Box.mismatchFrobeniusSq (box : Box) : ℚ :=
   ∑ i, ∑ j, box.mismatchMatrix i j ^ 2
 
-/-- Conservative full-rotation approximation error. -/
-def rotationError : ℚ := 3 * κℚ + κℚ ^ 2
+noncomputable def Box.mismatchQCLM (box : Box) : ℝ³ →L[ℝ] ℝ³ :=
+  ((box.mismatchMatrix).map fun x => (x : ℝ)).toEuclideanLin.toContinuousLinearMap
+
+noncomputable def Box.centerMismatchCLM (box : Box) : ℝ³ →L[ℝ] ℝ³ :=
+  rotRM box.center.toReal.θ₁ box.center.toReal.φ₁ box.center.toReal.α -
+    rotRM box.center.toReal.θ₂ box.center.toReal.φ₂ 0 ∘L
+      Noperthedron.SnubCube.so3CLM (symmetry box.symmetryIndex)
+
+private theorem Box.mismatchQCLM_eq (box : Box) :
+    box.mismatchQCLM =
+      rotRMQCLM box.center.θ₁ box.center.φ₁ box.center.α -
+        rotRMQCLM box.center.θ₂ box.center.φ₂ 0 ∘L
+          Noperthedron.SnubCube.so3CLM (symmetry box.symmetryIndex) := by
+  rw [← symmetryQCLM_eq_so3CLM]
+  have hmat : (box.mismatchMatrix.map fun x => (x : ℝ)) =
+      (rotRMQ box.center.θ₁ box.center.φ₁ box.center.α).map (fun x => (x : ℝ)) -
+        (rotRMQ box.center.θ₂ box.center.φ₂ 0).map (fun x => (x : ℝ)) *
+          (symmetryMatrixQ box.symmetryIndex).map (fun x => (x : ℝ)) := by
+    ext i j
+    simp only [Box.mismatchMatrix, Matrix.map_apply, Matrix.sub_apply,
+      Matrix.mul_apply]
+    push_cast
+    rfl
+  ext v
+  simp only [Box.mismatchQCLM, rotRMQCLM, symmetryQCLM,
+    ContinuousLinearMap.sub_apply, ContinuousLinearMap.comp_apply,
+    LinearMap.coe_toContinuousLinearMap', Matrix.ofLp_toLpLin,
+    Matrix.toLin'_apply, Matrix.toLpLin_apply]
+  rw [hmat, Matrix.sub_mulVec, Matrix.mulVec_mulVec]
+  rfl
+
+private theorem mismatchFrobeniusSq_nonneg (box : Box) :
+    0 ≤ box.mismatchFrobeniusSq := by
+  unfold Box.mismatchFrobeniusSq
+  positivity
+
+theorem Box.mismatchQCLM_norm_le_sqrt (box : Box) :
+    ‖box.mismatchQCLM‖ ≤ (sqrtℚUp16 box.mismatchFrobeniusSq : ℝ) := by
+  apply Noperthedron.BalancedSupport.matrix_opNorm_le_of_sum_sq_le
+  · exact_mod_cast sqrtℚUp16_nonneg box.mismatchFrobeniusSq
+  · have hsq := le_mul_self_sqrtℚUp16 (mismatchFrobeniusSq_nonneg box)
+    have hcast :
+        ∑ i, ∑ j, (box.mismatchMatrix.map (fun x => (x : ℝ))) i j ^ 2 =
+          (box.mismatchFrobeniusSq : ℝ) := by
+      unfold Box.mismatchFrobeniusSq
+      push_cast
+      rfl
+    rw [hcast]
+    exact_mod_cast (by simpa [pow_two] using hsq)
 
 def Box.eulerRadius (box : Box) : ℚ :=
   box.εα + box.εφ₁ + box.εθ₁ + box.εφ₂ + box.εθ₂
@@ -272,6 +488,18 @@ structure Box.Valid (box : Box) : Prop where
 instance (box : Box) : Decidable box.Valid :=
   decidable_of_iff _ (Box.valid_iff box).symm
 
+def AxisCertificate.realWeight (cert : AxisCertificate) (i : Fin 3) : ℝ :=
+  (cert.weight i : ℝ)
+
+noncomputable def AxisCertificate.realDirection
+    (cert : AxisCertificate) (i : Fin 3) : ℝ² :=
+  toR2 (cert.contact i).direction
+
+noncomputable def AxisCertificate.realVertex
+    (box : Box) (cert : AxisCertificate) (i : Fin 3) : ℝ³ :=
+  normalizedExactVertex
+    (symmetryAction box.symmetryIndex (cert.contact i).index)
+
 lemma AxisCertificate.B_pos (box : Box) (h : box.Valid) (j : Fin 4) :
     0 < (box.certificate j).B := by
   unfold AxisCertificate.B
@@ -279,6 +507,52 @@ lemma AxisCertificate.B_pos (box : Box) (h : box.Valid) (j : Fin 4) :
   · intro i _
     exact h.weight_pos j i
   · exact Finset.univ_nonempty
+
+lemma AxisCertificate.realWeight_nonneg (box : Box) (h : box.Valid)
+    (j : Fin 4) (i : Fin 3) :
+    0 ≤ (box.certificate j).realWeight i := by
+  change (0 : ℝ) ≤ ((box.certificate j).weight i : ℝ)
+  exact_mod_cast (h.weight_pos j i).le
+
+lemma AxisCertificate.realDirection_norm (box : Box) (h : box.Valid)
+    (j : Fin 4) (i : Fin 3) :
+    ‖(box.certificate j).realDirection i‖ = 1 :=
+  direction_norm_eq_one (h.direction_unit j i)
+
+lemma AxisCertificate.real_remainder_le_B (box : Box) (h : box.Valid)
+    (j : Fin 4) :
+    ∑ i, (box.certificate j).realWeight i *
+        (‖(box.certificate j).realDirection i‖ *
+          ‖(box.certificate j).realVertex box i‖) ≤
+      ((box.certificate j).B : ℝ) := by
+  calc
+    ∑ i, (box.certificate j).realWeight i *
+        (‖(box.certificate j).realDirection i‖ *
+          ‖(box.certificate j).realVertex box i‖) ≤
+        ∑ i, (box.certificate j).realWeight i := by
+      apply Finset.sum_le_sum
+      intro i _
+      rw [AxisCertificate.realDirection_norm box h j i, one_mul]
+      exact mul_le_of_le_one_right
+        (AxisCertificate.realWeight_nonneg box h j i)
+        (normalizedExactVertex_norm_le_one _)
+    _ = ((box.certificate j).B : ℝ) := by
+      unfold AxisCertificate.B AxisCertificate.realWeight
+      push_cast
+      rfl
+
+lemma AxisCertificate.real_balance (box : Box) (h : box.Valid)
+    (j : Fin 4) :
+    ∑ i, (box.certificate j).realWeight i •
+        (box.certificate j).realDirection i = 0 := by
+  ext c
+  have hb := congrFun (h.balanced j) c
+  simp only [AxisCertificate.balanced, Finset.sum_apply, Pi.smul_apply,
+    smul_eq_mul, Pi.zero_apply] at hb
+  simp only [AxisCertificate.realWeight, AxisCertificate.realDirection,
+    WithLp.ofLp_sum, WithLp.ofLp_smul, WithLp.ofLp_zero, Finset.sum_apply,
+    Pi.smul_apply, Pi.zero_apply, toR2, smul_eq_mul]
+  exact_mod_cast hb
 
 lemma AxisCertificate.toR3_approxA_eq_smul (box : Box) (h : box.Valid)
     (j : Fin 4) :
@@ -292,18 +566,6 @@ lemma AxisCertificate.toR3_approxA_eq_smul (box : Box) (h : box.Valid)
         (box.certificate j).B : ℚ) : ℝ))
   push_cast
   field_simp [ne_of_gt (AxisCertificate.B_pos box h j)]
-
-def AxisCertificate.realWeight (cert : AxisCertificate) (i : Fin 3) : ℝ :=
-  (cert.weight i : ℝ)
-
-noncomputable def AxisCertificate.realDirection
-    (cert : AxisCertificate) (i : Fin 3) : ℝ² :=
-  toR2 (cert.contact i).direction
-
-noncomputable def AxisCertificate.realVertex
-    (box : Box) (cert : AxisCertificate) (i : Fin 3) : ℝ³ :=
-  normalizedExactVertex
-    (symmetryAction box.symmetryIndex (cert.contact i).index)
 
 /-- The exact normalized first-variation vector associated with a rational
 certificate at an arbitrary outer pose. -/
@@ -346,6 +608,9 @@ lemma Box.εα_nonneg (box : Box) : 0 ≤ box.εα :=
 lemma centerVectorError_nonneg : 0 ≤ centerVectorError := by
   norm_num [centerVectorError, κℚ]
 
+lemma rotationError_nonneg : 0 ≤ rotationError := by
+  norm_num [rotationError, κℚ]
+
 lemma Box.axisPerturbation_nonneg (box : Box) : 0 ≤ box.axisPerturbation := by
   unfold Box.axisPerturbation Box.outerRadius
   exact add_nonneg (add_nonneg box.εφ₂_nonneg box.εθ₂_nonneg)
@@ -374,6 +639,189 @@ private theorem outerAsInnerReal_near {pbar q : Pose ℝ}
 
 private theorem outerAsInnerReal_inner_eq_outer (p : Pose ℝ) :
     Pose.inner (outerAsInnerReal p) = Pose.outer p := rfl
+
+theorem valid_center_mismatch_bound (box : Box) (h : box.Valid) :
+    ‖box.centerMismatchCLM‖ ≤
+      (sqrtℚUp16 box.mismatchFrobeniusSq : ℝ) +
+        2 * (rotationError : ℝ) := by
+  obtain ⟨hθ₁q, hθ₂q, hφ₁q, hφ₂q, hαq⟩ :=
+    PoseInterval.contains_iff_components.mp h.center_in_four
+  have hθ₁ := RationalApprox.cast_Icc4_mem
+    ⟨box.center.θ₁, hθ₁q⟩
+  have hφ₁ := RationalApprox.cast_Icc4_mem
+    ⟨box.center.φ₁, hφ₁q⟩
+  have hα := RationalApprox.cast_Icc4_mem
+    ⟨box.center.α, hαq⟩
+  have hθ₂ := RationalApprox.cast_Icc4_mem
+    ⟨box.center.θ₂, hθ₂q⟩
+  have hφ₂ := RationalApprox.cast_Icc4_mem
+    ⟨box.center.φ₂, hφ₂q⟩
+  have hin := rotRMQ_difference_norm_bounded
+    box.center.θ₁ box.center.φ₁ box.center.α hθ₁ hφ₁ hα
+  have hout := rotRMQ_difference_norm_bounded
+    box.center.θ₂ box.center.φ₂ 0 hθ₂ hφ₂ (by norm_num)
+  have hdecomp : box.centerMismatchCLM - box.mismatchQCLM =
+      (rotRM box.center.toReal.θ₁ box.center.toReal.φ₁ box.center.toReal.α -
+        rotRMQCLM box.center.θ₁ box.center.φ₁ box.center.α) -
+      (rotRM box.center.toReal.θ₂ box.center.toReal.φ₂ 0 -
+        rotRMQCLM box.center.θ₂ box.center.φ₂ 0) ∘L
+          Noperthedron.SnubCube.so3CLM (symmetry box.symmetryIndex) := by
+    rw [box.mismatchQCLM_eq]
+    ext v
+    simp [Box.centerMismatchCLM]
+    ring
+  have hdiff : ‖box.centerMismatchCLM - box.mismatchQCLM‖ ≤
+      2 * (rotationError : ℝ) := by
+    have hout' :
+        ‖rotRM box.center.toReal.θ₂ box.center.toReal.φ₂ 0 -
+          rotRMQCLM box.center.θ₂ box.center.φ₂ 0‖ ≤
+            (rotationError : ℝ) := by simpa using hout
+    rw [hdecomp]
+    calc
+      ‖(rotRM box.center.toReal.θ₁ box.center.toReal.φ₁ box.center.toReal.α -
+          rotRMQCLM box.center.θ₁ box.center.φ₁ box.center.α) -
+        (rotRM box.center.toReal.θ₂ box.center.toReal.φ₂ 0 -
+          rotRMQCLM box.center.θ₂ box.center.φ₂ 0) ∘L
+            Noperthedron.SnubCube.so3CLM (symmetry box.symmetryIndex)‖ ≤
+        ‖rotRM box.center.toReal.θ₁ box.center.toReal.φ₁ box.center.toReal.α -
+          rotRMQCLM box.center.θ₁ box.center.φ₁ box.center.α‖ +
+        ‖(rotRM box.center.toReal.θ₂ box.center.toReal.φ₂ 0 -
+          rotRMQCLM box.center.θ₂ box.center.φ₂ 0) ∘L
+            Noperthedron.SnubCube.so3CLM (symmetry box.symmetryIndex)‖ :=
+          norm_sub_le _ _
+      _ ≤ (rotationError : ℝ) + (rotationError : ℝ) * 1 := by
+        apply add_le_add hin
+        exact (ContinuousLinearMap.opNorm_comp_le _ _).trans
+          (mul_le_mul hout'
+            (le_of_eq (Noperthedron.SnubCube.so3CLM_norm _))
+            (norm_nonneg _) (by exact_mod_cast rotationError_nonneg))
+      _ = 2 * (rotationError : ℝ) := by ring
+  calc
+    ‖box.centerMismatchCLM‖ =
+        ‖box.mismatchQCLM +
+          (box.centerMismatchCLM - box.mismatchQCLM)‖ := by congr 1 <;> abel
+    _ ≤ ‖box.mismatchQCLM‖ +
+        ‖box.centerMismatchCLM - box.mismatchQCLM‖ := norm_add_le _ _
+    _ ≤ (sqrtℚUp16 box.mismatchFrobeniusSq : ℝ) +
+        2 * (rotationError : ℝ) :=
+      add_le_add box.mismatchQCLM_norm_le_sqrt hdiff
+
+private theorem poseMismatch_eq (q : Pose ℝ) (offset : ℝ²)
+    (g : VertexIndex) :
+    Noperthedron.SnubCube.so3CLM (q.matrixPoseWithOffset offset).innerRot -
+        Noperthedron.SnubCube.so3CLM
+          ((q.matrixPoseWithOffset offset).outerRot * symmetry g) =
+      rotRM q.θ₁ q.φ₁ q.α -
+        rotRM q.θ₂ q.φ₂ 0 ∘L
+          Noperthedron.SnubCube.so3CLM (symmetry g) := by
+  rw [Noperthedron.SnubCube.so3CLM_mul]
+  simp only [Pose.matrixPoseWithOffset, Pose.matrixPoseOfPose,
+    Noperthedron.SnubCube.so3CLM]
+  rw [← rotRM_eq_rotRM_mat, ← rotRM_eq_rotRM_mat]
+
+theorem valid_mismatch_bound (box : Box) (h : box.Valid)
+    {q : Pose ℝ}
+    (hq : Pose.near box.center.toReal (box.εα : ℝ) (box.εθ₁ : ℝ)
+      (box.εφ₁ : ℝ) (box.εθ₂ : ℝ) (box.εφ₂ : ℝ) q)
+    (offset : ℝ²) :
+    ‖Noperthedron.SnubCube.so3CLM
+          (q.matrixPoseWithOffset offset).innerRot -
+        Noperthedron.SnubCube.so3CLM
+          ((q.matrixPoseWithOffset offset).outerRot *
+            symmetry box.symmetryIndex)‖ ≤ (box.r : ℝ) := by
+  rw [poseMismatch_eq]
+  let current : ℝ³ →L[ℝ] ℝ³ :=
+    rotRM q.θ₁ q.φ₁ q.α - rotRM q.θ₂ q.φ₂ 0 ∘L
+      Noperthedron.SnubCube.so3CLM (symmetry box.symmetryIndex)
+  have hin := Noperthedron.BalancedSupport.norm_rotRM_sub_le
+    q.θ₁ q.φ₁ q.α box.center.toReal.θ₁ box.center.toReal.φ₁
+      box.center.toReal.α
+  have hout := Noperthedron.BalancedSupport.norm_rotRM_sub_le
+    q.θ₂ q.φ₂ 0 box.center.toReal.θ₂ box.center.toReal.φ₂ 0
+  norm_num at hout
+  have hdecomp : current - box.centerMismatchCLM =
+      (rotRM q.θ₁ q.φ₁ q.α -
+        rotRM box.center.toReal.θ₁ box.center.toReal.φ₁ box.center.toReal.α) -
+      (rotRM q.θ₂ q.φ₂ 0 -
+        rotRM box.center.toReal.θ₂ box.center.toReal.φ₂ 0) ∘L
+          Noperthedron.SnubCube.so3CLM (symmetry box.symmetryIndex) := by
+    ext v
+    simp [current, Box.centerMismatchCLM]
+    ring
+  have hdiff : ‖current - box.centerMismatchCLM‖ ≤
+      (box.eulerRadius : ℝ) := by
+    rw [hdecomp]
+    calc
+      ‖(rotRM q.θ₁ q.φ₁ q.α -
+          rotRM box.center.toReal.θ₁ box.center.toReal.φ₁ box.center.toReal.α) -
+        (rotRM q.θ₂ q.φ₂ 0 -
+          rotRM box.center.toReal.θ₂ box.center.toReal.φ₂ 0) ∘L
+            Noperthedron.SnubCube.so3CLM (symmetry box.symmetryIndex)‖ ≤
+        ‖rotRM q.θ₁ q.φ₁ q.α -
+          rotRM box.center.toReal.θ₁ box.center.toReal.φ₁ box.center.toReal.α‖ +
+        ‖(rotRM q.θ₂ q.φ₂ 0 -
+          rotRM box.center.toReal.θ₂ box.center.toReal.φ₂ 0) ∘L
+            Noperthedron.SnubCube.so3CLM (symmetry box.symmetryIndex)‖ :=
+        norm_sub_le _ _
+      _ ≤ (|q.α - box.center.toReal.α| +
+          |q.φ₁ - box.center.toReal.φ₁| +
+          |q.θ₁ - box.center.toReal.θ₁|) +
+        (|q.φ₂ - box.center.toReal.φ₂| +
+          |q.θ₂ - box.center.toReal.θ₂|) := by
+        apply add_le_add hin
+        calc
+          ‖(rotRM q.θ₂ q.φ₂ 0 -
+              rotRM box.center.toReal.θ₂ box.center.toReal.φ₂ 0) ∘L
+                Noperthedron.SnubCube.so3CLM (symmetry box.symmetryIndex)‖ ≤
+            ‖rotRM q.θ₂ q.φ₂ 0 -
+              rotRM box.center.toReal.θ₂ box.center.toReal.φ₂ 0‖ *
+                ‖Noperthedron.SnubCube.so3CLM
+                  (symmetry box.symmetryIndex)‖ :=
+            ContinuousLinearMap.opNorm_comp_le _ _
+          _ = ‖rotRM q.θ₂ q.φ₂ 0 -
+              rotRM box.center.toReal.θ₂ box.center.toReal.φ₂ 0‖ := by
+            rw [Noperthedron.SnubCube.so3CLM_norm, mul_one]
+          _ ≤ |q.φ₂ - box.center.toReal.φ₂| +
+              |q.θ₂ - box.center.toReal.θ₂| := by
+            simpa using hout
+      _ ≤ (box.eulerRadius : ℝ) := by
+        rw [show (box.eulerRadius : ℝ) =
+          (box.εα : ℝ) + (box.εφ₁ : ℝ) + (box.εθ₁ : ℝ) +
+            (box.εφ₂ : ℝ) + (box.εθ₂ : ℝ) by
+          simp [Box.eulerRadius]]
+        linarith [hq.1, hq.2.1, hq.2.2.1, hq.2.2.2.1,
+          hq.2.2.2.2]
+  have hcenter := valid_center_mismatch_bound box h
+  have hcurrent : ‖current‖ ≤
+      (sqrtℚUp16 box.mismatchFrobeniusSq : ℝ) +
+        2 * (rotationError : ℝ) + (box.eulerRadius : ℝ) := by
+    calc
+      ‖current‖ = ‖box.centerMismatchCLM +
+          (current - box.centerMismatchCLM)‖ := by congr 1 <;> abel
+      _ ≤ ‖box.centerMismatchCLM‖ +
+          ‖current - box.centerMismatchCLM‖ := norm_add_le _ _
+      _ ≤ _ := add_le_add hcenter hdiff
+  change ‖current‖ ≤ (box.r : ℝ)
+  exact hcurrent.trans (by
+    exact_mod_cast h.mismatch_bound)
+
+theorem valid_axisAngle_ratio (box : Box) (h : box.Valid)
+    {q : Pose ℝ}
+    (hq : Pose.near box.center.toReal (box.εα : ℝ) (box.εθ₁ : ℝ)
+      (box.εφ₁ : ℝ) (box.εθ₂ : ℝ) (box.εφ₂ : ℝ) q)
+    (offset : ℝ²)
+    (a : Noperthedron.BalancedSupport.AxisAngle
+      (Noperthedron.SnubCube.so3CLM
+        (Noperthedron.SnubCube.relativeRotationAtSymmetry
+          (q.matrixPoseWithOffset offset) box.symmetryIndex))) :
+    1 - Real.cos a.angle ≤ |Real.sin a.angle| * (box.c : ℝ) := by
+  apply Noperthedron.SnubCube.AxisAngle.ratio_of_inner_mismatch_bound
+    (q.matrixPoseWithOffset offset) box.symmetryIndex a
+    (box.c : ℝ) (box.r : ℝ)
+  · exact_mod_cast h.c_nonneg
+  · exact_mod_cast h.r_nonneg
+  · exact valid_mismatch_bound box h hq offset
+  · exact_mod_cast h.angle_bound
 
 /-- The rational first-variation vector in a valid row approximates the
 exact normalized vector at the box center with the universal `2κ + κ²`
@@ -694,6 +1142,96 @@ theorem valid_center_axis_cover (box : Box) (h : box.Valid)
     rw [← heq]
     exact barycentric_mem_convexHull box h 5
   · exact haxis
+
+/-- A valid rational local row rules out every translated pose in its
+five-dimensional Euler box. -/
+theorem valid_imp_not_translated_rupert (box : Box) (h : box.Valid) :
+    ∀ q, Pose.near box.center.toReal (box.εα : ℝ) (box.εθ₁ : ℝ)
+        (box.εφ₁ : ℝ) (box.εθ₂ : ℝ) (box.εφ₂ : ℝ) q →
+      ∀ offset : ℝ²,
+        ¬ RupertPose (q.matrixPoseWithOffset offset)
+          normalizedExactPolyhedron.hull := by
+  intro q hq offset
+  let relative := Noperthedron.SnubCube.relativeRotationAtSymmetry
+    (q.matrixPoseWithOffset offset) box.symmetryIndex
+  obtain ⟨a⟩ := Noperthedron.BalancedSupport.exists_axisAngle
+    relative.val relative.property
+  apply
+    Noperthedron.SnubCube.not_rupertPose_of_axisFree_geometric_certificates_of_cover_perturbation
+      (p := q.matrixPoseWithOffset offset)
+      (g := box.symmetryIndex) (a := a)
+      (index := fun j i => (box.certificate j).contact i |>.index)
+      (weight := fun j => (box.certificate j).realWeight)
+      (direction := fun j => (box.certificate j).realDirection)
+      (A := fun j => Noperthedron.SnubCube.firstVariationVector
+        (q.matrixPoseWithOffset offset) (box.certificate j).realWeight
+        (box.certificate j).realDirection
+        (AxisCertificate.realVertex box (box.certificate j)))
+      (normalizedA := fun j =>
+        (box.certificate j).normalizedAAt box q offset)
+      (centerNormalizedA := fun j => toR3 (box.approxNormalizedA j))
+      (B := fun j => ((box.certificate j).B : ℝ))
+      (c := (box.c : ℝ)) (δ := (box.axisPerturbation : ℝ))
+  · intro j
+    exact_mod_cast AxisCertificate.B_pos box h j
+  · intro j
+    exact AxisCertificate.firstVariation_eq_B_smul_normalizedAAt box h j q offset
+  · intro axis haxis
+    simpa only [Rat.cast_add] using valid_center_axis_cover box h axis haxis
+  · exact valid_normalizedA_move box h hq offset
+  · intro j
+    rfl
+  · exact AxisCertificate.real_remainder_le_B box h
+  · exact valid_axisAngle_ratio box h hq offset a
+  · intro j i hdirection
+    have hnorm := AxisCertificate.realDirection_norm box h j i
+    rw [hdirection, norm_zero] at hnorm
+    norm_num at hnorm
+  · exact AxisCertificate.realWeight_nonneg box h
+  · intro j
+    refine ⟨0, ?_⟩
+    change (0 : ℝ) < ((box.certificate j).weight 0 : ℝ)
+    exact_mod_cast h.weight_pos j 0
+  · exact AxisCertificate.real_balance box h
+  · exact valid_contact_support_matrixPose box h hq offset
+
+def Box.realInterval (box : Box) : PoseInterval ℝ :=
+  PoseInterval.mk box.interval.min.toReal box.interval.max.toReal (by
+    obtain ⟨h1, h2, h3, h4, h5⟩ := (Pose.le_iff _ _).mp box.interval.min_le_max
+    rw [Pose.le_iff]
+    simp only [Pose.toReal_θ₁, Pose.toReal_θ₂, Pose.toReal_φ₁,
+      Pose.toReal_φ₂, Pose.toReal_α]
+    exact ⟨by exact_mod_cast h1, by exact_mod_cast h2, by exact_mod_cast h3,
+      by exact_mod_cast h4, by exact_mod_cast h5⟩)
+
+theorem Box.near_center_of_mem_realInterval (box : Box) {q : Pose ℝ}
+    (hq : q ∈ box.realInterval) :
+    Pose.near box.center.toReal (box.εα : ℝ) (box.εθ₁ : ℝ)
+      (box.εφ₁ : ℝ) (box.εθ₂ : ℝ) (box.εφ₂ : ℝ) q := by
+  rw [NonemptyInterval.mem_def] at hq
+  obtain ⟨hlo, hhi⟩ := hq
+  rw [Pose.le_iff] at hlo hhi
+  obtain ⟨l1, l2, l3, l4, l5⟩ := hlo
+  obtain ⟨u1, u2, u3, u4, u5⟩ := hhi
+  simp only [Box.realInterval, PoseInterval.mk, PoseInterval.min, PoseInterval.max,
+    Pose.toReal_θ₁, Pose.toReal_θ₂, Pose.toReal_φ₁, Pose.toReal_φ₂,
+    Pose.toReal_α] at l1 l2 l3 l4 l5 u1 u2 u3 u4 u5
+  refine ⟨?_, ?_, ?_, ?_, ?_⟩ <;>
+  · simp only [Box.center, Pose.toReal_θ₁, Pose.toReal_θ₂,
+      Pose.toReal_φ₁, Pose.toReal_φ₂, Pose.toReal_α,
+      Box.εθ₁, Box.εφ₁, Box.εθ₂, Box.εφ₂, Box.εα]
+    rw [abs_sub_le_iff]
+    push_cast
+    constructor <;> linarith
+
+/-- Interval form consumed by the local/global solution-tree induction. -/
+theorem valid_imp_no_translated_rupert_in_interval (box : Box) (h : box.Valid) :
+    ¬ ∃ q ∈ box.realInterval, ∃ offset : ℝ²,
+      RupertPose (q.matrixPoseWithOffset offset)
+        normalizedExactPolyhedron.hull := by
+  rintro ⟨q, hq, offset, hrupert⟩
+  exact valid_imp_not_translated_rupert box h q
+    (box.near_center_of_mem_realInterval hq) offset hrupert
 
 end Noperthedron.SnubCube.LocalCertificate
 

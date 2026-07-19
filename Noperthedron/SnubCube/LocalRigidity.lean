@@ -51,7 +51,7 @@ private theorem so3CLM_eq_frame (r : SO3) :
     so3CLM r = (so3Frame r).toLinearIsometry.toContinuousLinearMap := by
   rfl
 
-private theorem so3CLM_mul (r s : SO3) :
+theorem so3CLM_mul (r s : SO3) :
     so3CLM (r * s) = so3CLM r ∘L so3CLM s := by
   ext v
   simp [so3CLM, Matrix.mulVec_mulVec]
@@ -60,7 +60,7 @@ private theorem so3CLM_mul (r s : SO3) :
   ext v
   simp [so3CLM]
 
-private theorem so3CLM_norm (r : SO3) : ‖so3CLM r‖ = 1 := by
+theorem so3CLM_norm (r : SO3) : ‖so3CLM r‖ = 1 := by
   rw [so3CLM_eq_frame]
   exact (so3Frame r).toLinearIsometry.norm_toContinuousLinearMap
 
