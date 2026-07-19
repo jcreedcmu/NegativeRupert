@@ -5,6 +5,7 @@ public import Noperthedron.BalancedSupport.AxisFree
 public import Noperthedron.BalancedSupport.Determinant
 public import Noperthedron.BalancedSupport.FiniteRotation
 public import Noperthedron.BalancedSupport.Rupert
+public import Noperthedron.BalancedSupport.TranslatedPose
 
 public section
 
