@@ -27,6 +27,7 @@ from scipy.spatial import ConvexHull
 
 
 KAPPA = Q(1, 10**10)
+SUPPORT_ERROR = 10 * KAPPA
 TRIBONACCI_Q = Q(1839286755214161, 10**15)
 ROTATION_ERROR = 3 * KAPPA + KAPPA * KAPPA
 CENTER_VECTOR_ERROR = 2 * KAPPA + KAPPA * KAPPA
@@ -543,10 +544,11 @@ def ball_cross_const_left(a, b):
 
 def cayley_view_balls(theta, phi, etheta, ephi):
     """Enclose the viewing unit vector over one outer-angle rectangle."""
-    st = (sin_q(theta), etheta + KAPPA)
-    ct = (cos_q(theta), etheta + KAPPA)
-    sp = (sin_q(phi), ephi + KAPPA)
-    cp = (cos_q(phi), ephi + KAPPA)
+    trig_error = KAPPA / 7
+    st = (sin_q(theta), etheta + trig_error)
+    ct = (cos_q(theta), etheta + trig_error)
+    sp = (sin_q(phi), ephi + trig_error)
+    cp = (cos_q(phi), ephi + trig_error)
     return [ball_mul(ct, sp), ball_mul(st, sp), cp]
 
 
@@ -556,6 +558,26 @@ def edge_orientation_ball(view, q0, q1, q):
     delta = [a-b for a, b in zip(VERTICES_Q[q], VERTICES_Q[q0])]
     cross = cross3(edge, delta)
     return ball_sum3([ball_scale(cross[i], view[i]) for i in range(3)])
+
+
+def edge_orientation_q(view, q0, q1, q):
+    """Rational orientation for a projectively normalized view vector."""
+    edge = [a-b for a, b in zip(VERTICES_Q[q1], VERTICES_Q[q0])]
+    delta = [a-b for a, b in zip(VERTICES_Q[q], VERTICES_Q[q0])]
+    return qdot(view, cross3(edge, delta))
+
+
+def silhouette_cycle_for_view(view):
+    """Floating selection of the projected hull cycle perpendicular to view."""
+    view = np.asarray([float(q) for q in view])
+    view /= np.linalg.norm(view)
+    axis = np.zeros(3)
+    axis[int(np.argmin(np.abs(view)))] = 1
+    first = np.cross(view, axis)
+    first /= np.linalg.norm(first)
+    second = np.cross(view, first)
+    projected = VERTICES_EXACT @ np.vstack((first, second)).T
+    return list(map(int, ConvexHull(projected).vertices))
 
 
 def cayley_edge_contact_ball(view, variables, q0, q1, inner_index):
@@ -654,7 +676,62 @@ def cayley_edge_contact_qpolys(q0, q1, inner_index):
     return [qpoly_scale(-1, value) for value in cross]
 
 
-def cayley_edge_smoke(center, half_widths):
+def best_edge_cycles_for_view(relative_center, view, max_length=4,
+                              count=1):
+    """Rank short vertex cycles by exact-center support surplus."""
+    x, y, z = map(float, relative_center)
+    view = np.asarray([float(q) for q in view])
+    view /= np.linalg.norm(view)
+    d = 1+x*x+y*y+z*z
+    numerator = np.asarray([
+        [1+x*x-y*y-z*z, 2*(x*y-z), 2*(x*z+y)],
+        [2*(x*y+z), 1-x*x+y*y-z*z, 2*(y*z-x)],
+        [2*(x*z-y), 2*(y*z+x), 1-x*x-y*y+z*z]])
+    rewards = np.full((24, 24), -math.inf)
+    for q0 in range(24):
+        for q1 in range(24):
+            if q0 == q1:
+                continue
+            edge = VERTICES_EXACT[q0] - VERTICES_EXACT[q1]
+            support = max(view @ np.cross(edge, vertex-VERTICES_EXACT[q0])
+                          for vertex in VERTICES_EXACT)
+            contact = max(view @ np.cross(
+                edge, numerator @ vertex-d*VERTICES_EXACT[q0])
+                for vertex in VERTICES_EXACT)
+            rewards[q0, q1] = contact-d*support
+    best = []
+    for length in range(2, max_length+1):
+        for vertices in itertools.combinations(range(24), length):
+            start = vertices[0]
+            for tail in itertools.permutations(vertices[1:]):
+                cycle = (start,) + tail
+                score = sum(rewards[cycle[i], cycle[(i+1) % length]]
+                            for i in range(length))
+                # Mean surplus compares cycles without favoring repetition.
+                mean = score/length
+                if len(best) < count or mean > best[0][0]:
+                    best.append((mean, cycle))
+                    best.sort()
+                    if len(best) > count:
+                        best.pop(0)
+    if not best:
+        raise RuntimeError("no nondegenerate edge cycle")
+    return [(list(cycle), {"point_mean_surplus": mean,
+                           "point_total_surplus": mean*len(cycle)})
+            for mean, cycle in reversed(best)]
+
+
+def best_cayley_edge_cycle(center, max_length=4):
+    """Search one short vertex cycle by exact-center support surplus."""
+    theta, phi, x, y, z = center
+    view = [math.cos(float(theta))*math.sin(float(phi)),
+            math.sin(float(theta))*math.sin(float(phi)), math.cos(float(phi))]
+    return best_edge_cycles_for_view(
+        (x, y, z), view, max_length=max_length, count=1)[0]
+
+
+def cayley_edge_smoke(center, half_widths, cycle=None,
+                      cycle_search_length=0):
     """Search a pose-dependent projected-edge balanced-support certificate.
 
     This prototype freezes only the outer silhouette cycle and one inner
@@ -667,7 +744,12 @@ def cayley_edge_smoke(center, half_widths):
     frame = np.asarray([[float(q) for q in row]
                         for row in frame_q(theta, phi)[:2]])
     projected = VERTICES_EXACT @ frame.T
-    cycle = list(map(int, ConvexHull(projected).vertices))
+    cycle_diagnostics = {}
+    if cycle_search_length:
+        cycle, cycle_diagnostics = best_cayley_edge_cycle(
+            center, cycle_search_length)
+    elif cycle is None:
+        cycle = list(map(int, ConvexHull(projected).vertices))
     variables = [(x, ex), (y, ey), (z, ez)]
     contacts = []
     total_polys = [qpoly_zero(), qpoly_zero(), qpoly_zero()]
@@ -686,13 +768,14 @@ def cayley_edge_smoke(center, half_widths):
                            min(minimum_support, support_lower))
         minimum_strict = (strict_lower if minimum_strict is None else
                           min(minimum_strict, strict_lower))
-        if strict_lower <= 0:
+        if strict_lower <= SUPPORT_ERROR:
             raise RuntimeError(
-                f"projected edge may vanish strict={float(strict_lower):.6g}")
+                "projected edge may vanish "
+                f"strict={float(strict_lower-SUPPORT_ERROR):.6g}")
         # `u·(K-Q) = -orientation`; its certified maximum is the support
         # defect consumed by the balanced-support-with-defect theorem.
-        total_defect += max(Q(0), max(-(ball[0]-ball[1])
-                                      for ball in supports))
+        total_defect += max(-(ball[0]-ball[1])
+                            for ball in supports) + SUPPORT_ERROR
         balls = [cayley_edge_contact_ball(view, variables, q0, q1, p)
                  for p in range(24)]
         inner = max(range(24), key=lambda p: balls[p][0]-balls[p][1])
@@ -706,14 +789,12 @@ def cayley_edge_smoke(center, half_widths):
     component_balls = [qpoly_eval_centered(poly, (x, y, z), (ex, ey, ez))
                        for poly in total_polys]
     total = ball_dot(view, component_balls)
-    # The eventual Lean bridge will use a much smaller exact-vertex error;
-    # retain a visible conservative prototype allowance for now.
-    error = Q(len(cycle), 10**8)
     # The polynomial is denominator-cleared.  Charge every support defect
     # at the maximum Cayley denominator over the whole box.
     endpoints = [(x-ex, x+ex), (y-ey, y+ey), (z-ez, z+ez)]
     d_bound = Q(1) + sum(max(abs(lo), abs(hi))**2
                          for lo, hi in endpoints)
+    error = len(cycle) * 10 * d_bound * KAPPA
     lower = total[0]-total[1]-d_bound*total_defect-error
     if lower < 0:
         raise RuntimeError(
@@ -732,8 +813,318 @@ def cayley_edge_smoke(center, half_widths):
             "displacement_ball": total,
             "error": error,
             "lower_bound": lower,
+            **cycle_diagnostics,
         },
     }
+
+
+def simplex_edge_smoke(relative_center, relative_half_widths, triangle,
+                       cycle=None):
+    """Certify one relative Cayley box uniformly over a view triangle.
+
+    The triangle vertices are rational nonnegative vectors whose coordinates
+    sum to one.  All support and displacement expressions are linear in the
+    projective view vector, so their extrema occur at triangle vertices.
+    Floating geometry selects witnesses only; every accepted inequality below
+    is exact rational arithmetic matching the intended Lean checker.
+    """
+    if any(any(q < 0 for q in view) or sum(view, Q(0)) != 1
+           for view in triangle):
+        raise ValueError("view triangle is not in the projective simplex")
+    centroid = [sum((view[i] for view in triangle), Q(0))/len(triangle)
+                for i in range(3)]
+    if cycle is None:
+        cycle = silhouette_cycle_for_view(centroid)
+    x, y, z = relative_center
+    ex, ey, ez = relative_half_widths
+    contacts = []
+    total_polys = [qpoly_zero(), qpoly_zero(), qpoly_zero()]
+    total_defect = Q(0)
+    minimum_strict = None
+    variables = (x, y, z)
+    radii = (ex, ey, ez)
+    for index, q0 in enumerate(cycle):
+        q1 = cycle[(index+1) % len(cycle)]
+        support_values = [
+            [edge_orientation_q(view, q0, q1, q) for q in range(24)]
+            for view in triangle]
+        # One witness must keep the moving projected edge nonzero throughout
+        # the triangle.  Linearity makes the minimum occur at a vertex.
+        witness_scores = [min(row[q] for row in support_values)
+                          for q in range(24)]
+        witness = max(range(24), key=lambda q: witness_scores[q])
+        strict_lower = witness_scores[witness] - SUPPORT_ERROR
+        if strict_lower <= 0:
+            raise RuntimeError(
+                f"simplex projected edge may vanish strict={float(strict_lower):.6g}")
+        minimum_strict = (strict_lower if minimum_strict is None else
+                          min(minimum_strict, strict_lower))
+        # `u·(K-Q) = -orientation`; include the exact-vertex allowance.
+        total_defect += max(-value for row in support_values for value in row) \
+            + SUPPORT_ERROR
+
+        best_inner = None
+        for inner in range(24):
+            polynomials = cayley_edge_contact_qpolys(q0, q1, inner)
+            component_balls = [qpoly_eval_centered(poly, variables, radii)
+                               for poly in polynomials]
+            lower = min(qdot(view, [ball[0] for ball in component_balls]) -
+                        qdot(view, [ball[1] for ball in component_balls])
+                        for view in triangle)
+            if best_inner is None or lower > best_inner[0]:
+                best_inner = (lower, inner, polynomials)
+        _, inner, polynomials = best_inner
+        total_polys = [qpoly_add(a, b)
+                       for a, b in zip(total_polys, polynomials)]
+        contacts.append({"outer_index": q0,
+                         "next_outer_index": q1,
+                         "inner_index": inner,
+                         "nonzero_witness": witness})
+
+    component_balls = [qpoly_eval_centered(poly, variables, radii)
+                       for poly in total_polys]
+    displacement_lowers = [
+        qdot(view, [ball[0] for ball in component_balls]) -
+        qdot(view, [ball[1] for ball in component_balls])
+        for view in triangle]
+    endpoints = [(c-e, c+e) for c, e in zip(variables, radii)]
+    d_bound = Q(1) + sum(max(abs(lo), abs(hi))**2
+                         for lo, hi in endpoints)
+    error = len(cycle) * 10 * d_bound * KAPPA
+    lower = min(displacement_lowers) - d_bound*total_defect - error
+    if lower < 0:
+        raise RuntimeError(
+            f"simplex edge displacement fails by {-float(lower):.6g}")
+    return {
+        "relative_center": relative_center,
+        "relative_half_widths": relative_half_widths,
+        "triangle": triangle,
+        "cycle": cycle,
+        "contacts": contacts,
+        "diagnostics": {
+            "edge_count": len(cycle),
+            "minimum_strict_support_lower": minimum_strict,
+            "total_support_defect": total_defect,
+            "cayley_d_bound": d_bound,
+            "displacement_lowers": displacement_lowers,
+            "error": error,
+            "lower_bound": lower,
+        },
+    }
+
+
+def split_simplex_triangle(triangle):
+    a, b, c = triangle
+    ab = [(x+y)/2 for x, y in zip(a, b)]
+    bc = [(x+y)/2 for x, y in zip(b, c)]
+    ca = [(x+y)/2 for x, y in zip(c, a)]
+    return [(a, ab, ca), (ab, b, bc), (ca, bc, c), (ab, bc, ca)]
+
+
+def simplex_edge_cover(relative_center, relative_half_widths, max_depth,
+                       optimized_count=0, outer_chamber=False):
+    """Adaptively cover the projective view simplex or symmetry chamber."""
+    e0 = (Q(1), Q(0), Q(0))
+    e1 = (Q(0), Q(1), Q(0))
+    e2 = (Q(0), Q(0), Q(1))
+    if outer_chamber:
+        m01 = (Q(1, 2), Q(1, 2), Q(0))
+        m02 = (Q(1, 2), Q(0), Q(1, 2))
+        center = (Q(1, 3), Q(1, 3), Q(1, 3))
+        roots = [(e0, m01, center), (e0, center, m02)]
+    else:
+        roots = [(e0, e1, e2)]
+    stack = [(root, 0) for root in roots]
+    leaves = []
+    failures = []
+    optimized_leaves = 0
+    nodes = 0
+    while stack:
+        triangle, depth = stack.pop()
+        nodes += 1
+        try:
+            leaves.append(simplex_edge_smoke(
+                relative_center, relative_half_widths, triangle))
+            continue
+        except RuntimeError as exc:
+            if depth == max_depth:
+                if optimized_count:
+                    centroid = [sum((view[i] for view in triangle), Q(0))/3
+                                for i in range(3)]
+                    for cycle, _ in best_edge_cycles_for_view(
+                            relative_center, centroid, 4, optimized_count):
+                        try:
+                            leaves.append(simplex_edge_smoke(
+                                relative_center, relative_half_widths,
+                                triangle, cycle))
+                            optimized_leaves += 1
+                            break
+                        except RuntimeError:
+                            pass
+                    else:
+                        failures.append({"triangle": triangle,
+                                         "reason": str(exc)})
+                    continue
+                failures.append({"triangle": triangle, "reason": str(exc)})
+                continue
+        for child in split_simplex_triangle(triangle):
+            stack.append((child, depth+1))
+    return {"relative_center": relative_center,
+            "relative_half_widths": relative_half_widths,
+            "max_depth": max_depth, "nodes": nodes,
+            "outer_chamber": outer_chamber,
+            "optimized_leaves": optimized_leaves,
+            "leaves": leaves, "failures": failures}
+
+
+def cayley_edge_profile(half_width: Q, samples: int,
+                        denominator: int, seed: int):
+    """Profile exact prune/edge coverage on uniformly sampled root boxes."""
+    root = [(Q(0), Q(2)), (Q(0), Q(2)),
+            (Q(-2), Q(2)), (Q(-2), Q(2)), (Q(-2), Q(2))]
+    rng = random.Random(seed)
+    counts = {"prune": 0, "edge": 0, "uncovered": 0}
+    failures = {}
+    uncovered = []
+    edge_slacks = []
+    for _ in range(samples):
+        center = []
+        for lo, hi in root:
+            ilo = math.ceil(float((lo + half_width) * denominator))
+            ihi = math.floor(float((hi - half_width) * denominator))
+            center.append(Q(rng.randint(ilo, ihi), denominator))
+        widths = [half_width] * 5
+        prune = cayley_prune_box(center[2:], widths[2:])
+        if prune["lower_bound"] > 0:
+            counts["prune"] += 1
+            continue
+        try:
+            edge = cayley_edge_smoke(center, widths)
+        except RuntimeError as exc:
+            counts["uncovered"] += 1
+            reason = str(exc).split("=")[0].strip()
+            failures[reason] = failures.get(reason, 0) + 1
+            if len(uncovered) < 20:
+                uncovered.append({"center": center, "reason": str(exc)})
+            continue
+        counts["edge"] += 1
+        edge_slacks.append(float(edge["diagnostics"]["lower_bound"]))
+    quantiles = ([float(x) for x in np.quantile(
+        edge_slacks, [.01, .1, .5, .9])]
+        if edge_slacks else [])
+    return {
+        "half_width": half_width,
+        "samples": samples,
+        "counts": counts,
+        "fractions": {key: value/samples for key, value in counts.items()},
+        "edge_slack_quantiles_01_10_50_90": quantiles,
+        "failure_counts": failures,
+        "uncovered_examples": uncovered,
+    }
+
+
+def cayley_edge_domain_profile(angle_half_width: Q,
+                               relative_half_width: Q, samples: int,
+                               denominator: int, seed: int,
+                               try_local: bool = False):
+    """Profile edge certificates conditioned on boxes not already pruned."""
+    root = [(Q(0), Q(2)), (Q(0), Q(2)),
+            (Q(-2), Q(2)), (Q(-2), Q(2)), (Q(-2), Q(2))]
+    rng = random.Random(seed)
+    attempts = 0
+    covered_count = 0
+    silhouette_count = 0
+    optimized_count = 0
+    local_count = 0
+    failures = {}
+    uncovered = []
+    slacks = []
+    while covered_count + len(uncovered) < samples:
+        attempts += 1
+        center = []
+        for lo, hi in root:
+            width = (angle_half_width if len(center) < 2
+                     else relative_half_width)
+            ilo = math.ceil(float((lo + width) * denominator))
+            ihi = math.floor(float((hi - width) * denominator))
+            center.append(Q(rng.randint(ilo, ihi), denominator))
+        widths = [angle_half_width] * 2 + [relative_half_width] * 3
+        if cayley_prune_box(center[2:], widths[2:])["lower_bound"] > 0:
+            continue
+        try:
+            edge = cayley_edge_smoke(center, widths)
+            silhouette_count += 1
+        except RuntimeError:
+            try:
+                edge = cayley_edge_smoke(
+                    center, widths, cycle_search_length=4)
+                optimized_count += 1
+            except RuntimeError as exc:
+                if try_local:
+                    try:
+                        cayley_local_smoke(center, widths, 48, 10**6)
+                        local_count += 1
+                        covered_count += 1
+                        continue
+                    except RuntimeError:
+                        pass
+                reason = str(exc).split("=")[0].strip()
+                failures[reason] = failures.get(reason, 0) + 1
+                if len(uncovered) < samples:
+                    uncovered.append({"center": center,
+                                      "reason": str(exc)})
+                continue
+        covered_count += 1
+        slacks.append(float(edge["diagnostics"]["lower_bound"]))
+    return {
+        "angle_half_width": angle_half_width,
+        "relative_half_width": relative_half_width,
+        "domain_samples": samples,
+        "raw_attempts": attempts,
+        "covered": covered_count,
+        "silhouette_edge": silhouette_count,
+        "optimized_edge": optimized_count,
+        "local": local_count,
+        "covered_fraction": covered_count/samples,
+        "edge_slack_quantiles_01_10_50_90":
+            ([float(x) for x in np.quantile(slacks, [.01, .1, .5, .9])]
+             if slacks else []),
+        "failure_counts": failures,
+        "uncovered_examples": uncovered[:20],
+    }
+
+
+def cayley_relative_prune_tree(target_half_width: Q):
+    """Count a dyadic 3D tree after exact fundamental-domain pruning."""
+    stack = [([Q(0), Q(0), Q(0)], [Q(2), Q(2), Q(2)], 0)]
+    nodes = 0
+    pruned = 0
+    retained = 0
+    max_depth = 0
+    retained_centers = []
+    while stack:
+        center, widths, depth = stack.pop()
+        nodes += 1
+        max_depth = max(max_depth, depth)
+        if cayley_prune_box(center, widths)["lower_bound"] > 0:
+            pruned += 1
+            continue
+        coordinate = max(range(3), key=lambda i: widths[i])
+        if widths[coordinate] <= target_half_width:
+            retained += 1
+            if len(retained_centers) < 20:
+                retained_centers.append(center)
+            continue
+        child_widths = list(widths)
+        child_widths[coordinate] /= 2
+        for sign in (-1, 1):
+            child_center = list(center)
+            child_center[coordinate] += sign*child_widths[coordinate]
+            stack.append((child_center, child_widths, depth+1))
+    return {"target_half_width": target_half_width,
+            "nodes": nodes, "pruned_leaves": pruned,
+            "retained_leaves": retained, "max_depth": max_depth,
+            "retained_examples": retained_centers}
 
 
 def validate_cayley_global_certificate(payload, samples: int, seed: int):
@@ -1253,6 +1644,32 @@ def main():
     cayley_edge_parser.add_argument(
         "--half-widths", default="1/100,1/100,1/100,1/100,1/100",
         help="five comma-separated rational half-widths")
+    cayley_edge_parser.add_argument("--cycle-search-length", type=int,
+                                    default=0)
+    edge_profile_parser = sub.add_parser("cayley-edge-profile")
+    edge_profile_parser.add_argument("--half-width", default="1/100")
+    edge_profile_parser.add_argument("--samples", type=int, default=100)
+    edge_profile_parser.add_argument("--denominator", type=int, default=10000)
+    edge_profile_parser.add_argument("--seed", type=int, default=1)
+    edge_domain_parser = sub.add_parser("cayley-edge-domain-profile")
+    edge_domain_parser.add_argument("--angle-half-width", default="1/100")
+    edge_domain_parser.add_argument("--relative-half-width", default="1/100")
+    edge_domain_parser.add_argument("--samples", type=int, default=100)
+    edge_domain_parser.add_argument("--denominator", type=int, default=10000)
+    edge_domain_parser.add_argument("--seed", type=int, default=1)
+    edge_domain_parser.add_argument("--try-local", action="store_true")
+    relative_tree_parser = sub.add_parser("cayley-relative-prune-tree")
+    relative_tree_parser.add_argument("--target-half-width", default="1/32")
+    simplex_edge_parser = sub.add_parser("simplex-edge-smoke")
+    simplex_edge_parser.add_argument(
+        "--center", default="1/5,1/10,0",
+        help="x,y,z as comma-separated rationals")
+    simplex_edge_parser.add_argument(
+        "--half-widths", default="1/100,1/100,1/100",
+        help="three comma-separated rational half-widths")
+    simplex_edge_parser.add_argument("--max-depth", type=int, default=4)
+    simplex_edge_parser.add_argument("--optimized-count", type=int, default=0)
+    simplex_edge_parser.add_argument("--outer-chamber", action="store_true")
     args = parser.parse_args()
     if args.command == "local-smoke":
         result = local_smoke(Q(args.theta), Q(args.phi),
@@ -1306,8 +1723,35 @@ def main():
         half_widths = [Q(x) for x in args.half_widths.split(",")]
         if len(center) != 5 or len(half_widths) != 5:
             parser.error("center and half-widths must each have five entries")
-        print(json.dumps(qjson(cayley_edge_smoke(center, half_widths)),
+        print(json.dumps(qjson(cayley_edge_smoke(
+            center, half_widths,
+            cycle_search_length=args.cycle_search_length)),
                          indent=2))
+    elif args.command == "cayley-edge-profile":
+        result = cayley_edge_profile(
+            Q(args.half_width), args.samples, args.denominator, args.seed)
+        print(json.dumps(qjson(result), indent=2))
+    elif args.command == "cayley-edge-domain-profile":
+        result = cayley_edge_domain_profile(
+            Q(args.angle_half_width), Q(args.relative_half_width),
+            args.samples, args.denominator, args.seed, args.try_local)
+        print(json.dumps(qjson(result), indent=2))
+    elif args.command == "cayley-relative-prune-tree":
+        result = cayley_relative_prune_tree(Q(args.target_half_width))
+        print(json.dumps(qjson(result), indent=2))
+    elif args.command == "simplex-edge-smoke":
+        center = [Q(x) for x in args.center.split(",")]
+        half_widths = [Q(x) for x in args.half_widths.split(",")]
+        if len(center) != 3 or len(half_widths) != 3:
+            parser.error("center and half-widths must each have three entries")
+        result = simplex_edge_cover(center, half_widths, args.max_depth,
+                                    args.optimized_count, args.outer_chamber)
+        summary = {key: value for key, value in result.items()
+                   if key not in ("leaves", "failures")}
+        summary["certified_leaves"] = len(result["leaves"])
+        summary["uncovered_leaves"] = len(result["failures"])
+        summary["failure_examples"] = result["failures"][:10]
+        print(json.dumps(qjson(summary), indent=2))
 
 
 if __name__ == "__main__":
