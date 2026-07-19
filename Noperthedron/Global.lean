@@ -574,29 +574,18 @@ lemma global_theorem_inequality_ii {ι : Type} [Fintype ι] [Nonempty ι]
       (div_nonneg (pow_nonneg (by linarith) 3) (by norm_num))
   linarith
 
-/--
-Use the analytic bounds on rotations, Lemmas 19 and 20.
--/
-lemma global_theorem_inequality_iv {ι : Type} [Fintype ι] [Nonempty ι]
+/-- Pointwise outer half of `global_theorem_inequality_iv`.  Exposing this
+form lets support certificates compare a chosen vertex only with the other
+vertices; the chosen vertex's self-comparison is then exact instead of losing
+both sides' rational approximation budgets. -/
+lemma global_theorem_outer_le_H {ι : Type} [Fintype ι] [Nonempty ι]
     (pbar p : Pose ℝ) (εα εθ₁ εφ₁ εθ₂ εφ₂ : ℝ)
     (hεθ₂ : 0 ≤ εθ₂) (hεφ₂ : 0 ≤ εφ₂)
     (p_near_pbar : Pose.near pbar εα εθ₁ εφ₁ εθ₂ εφ₂ p)
     (poly : GoodPoly ι)
-    (pc : GlobalContact poly pbar εα εθ₁ εφ₁ εθ₂ εφ₂) :
-    maxOuter p poly pc.w ≤ maxH pbar poly εθ₂ εφ₂ pc.w := by
-  -- First of all, we can relate these two maximums by relating
-  -- their components.
-  suffices h : ∀ i : ι,
-      ⟪pc.w, p.outer (poly.vertices.v i)⟫ ≤ H pbar εθ₂ εφ₂ pc.w (poly.vertices.v i) by
-    simp only [maxOuter, maxH, imgOuter]
-    apply Finset.max'_le
-    simp only [Finset.mem_image, Finset.mem_univ, true_and]
-    rintro _ ⟨_, ⟨i, rfl⟩, rfl⟩
-    refine le_trans (h i) ?_
-    show (H pbar εθ₂ εφ₂ pc.w ∘ poly.vertices.v) i ≤ _
-    exact Finset.le_max' _ _ (Finset.mem_image_of_mem _ (Finset.mem_univ i))
-  -- Now we're just considering a single polyhedron vertex
-  intro i
+    (pc : GlobalContact poly pbar εα εθ₁ εφ₁ εθ₂ εφ₂) (i : ι) :
+    ⟪pc.w, p.outer (poly.vertices.v i)⟫ ≤
+      H pbar εθ₂ εφ₂ pc.w (poly.vertices.v i) := by
   set P := poly.vertices.v i
   have P_norm_pos : 0 < ‖P‖ := poly.nontriv i
   have P_norm_nonzero : ‖P‖ ≠ 0 := Ne.symm (ne_of_lt P_norm_pos)
@@ -644,6 +633,23 @@ lemma global_theorem_inequality_iv {ι : Type} [Fintype ι] [Nonempty ι]
     exact mul_le_mul_of_nonneg_left P_norm_le_one
       (div_nonneg (pow_nonneg (by linarith) 3) (by norm_num))
   linarith
+
+lemma global_theorem_inequality_iv {ι : Type} [Fintype ι] [Nonempty ι]
+    (pbar p : Pose ℝ) (εα εθ₁ εφ₁ εθ₂ εφ₂ : ℝ)
+    (hεθ₂ : 0 ≤ εθ₂) (hεφ₂ : 0 ≤ εφ₂)
+    (p_near_pbar : Pose.near pbar εα εθ₁ εφ₁ εθ₂ εφ₂ p)
+    (poly : GoodPoly ι)
+    (pc : GlobalContact poly pbar εα εθ₁ εφ₁ εθ₂ εφ₂) :
+    maxOuter p poly pc.w ≤ maxH pbar poly εθ₂ εφ₂ pc.w := by
+  simp only [maxOuter, maxH, imgOuter]
+  apply Finset.max'_le
+  simp only [Finset.mem_image, Finset.mem_univ, true_and]
+  rintro _ ⟨_, ⟨i, rfl⟩, rfl⟩
+  refine le_trans
+    (global_theorem_outer_le_H pbar p εα εθ₁ εφ₁ εθ₂ εφ₂
+      hεθ₂ hεφ₂ p_near_pbar poly pc i) ?_
+  show (H pbar εθ₂ εφ₂ pc.w ∘ poly.vertices.v) i ≤ _
+  exact Finset.le_max' _ _ (Finset.mem_image_of_mem _ (Finset.mem_univ i))
 
 /--
 Here we run through the "sequence of inequalities [which yield] the desired contradiction"

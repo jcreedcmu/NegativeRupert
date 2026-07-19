@@ -34,7 +34,6 @@ structure Box where
   interval : PoseInterval ℚ
   symmetryIndex : VertexIndex
   certificate : Fin 4 → AxisCertificate
-  barycentric : Fin 6 → Fin 4 → ℚ
   c : ℚ
   r : ℚ
 deriving DecidableEq
@@ -389,6 +388,48 @@ def AxisCertificate.approxNormalizedA (box : Box) (cert : AxisCertificate) :
 def Box.approxNormalizedA (box : Box) (j : Fin 4) : Fin 3 → ℚ :=
   (box.certificate j).approxNormalizedA box
 
+def sub3Q (u v : Fin 3 → ℚ) : Fin 3 → ℚ := fun i => u i - v i
+
+def det3Q (u v w : Fin 3 → ℚ) : ℚ :=
+  u 0 * (v 1 * w 2 - v 2 * w 1) -
+    u 1 * (v 0 * w 2 - v 2 * w 0) +
+      u 2 * (v 0 * w 1 - v 1 * w 0)
+
+def tetraDetQ (p : Fin 4 → Fin 3 → ℚ) : ℚ :=
+  det3Q (sub3Q (p 0) (p 3)) (sub3Q (p 1) (p 3))
+    (sub3Q (p 2) (p 3))
+
+/-- Canonical exact barycentric coordinates in a nondegenerate rational
+tetrahedron.  Computing these in the checker avoids storing the generally
+large Cramer-rule fractions in every local row. -/
+def tetraBarycentricQ (p : Fin 4 → Fin 3 → ℚ) (target : Fin 3 → ℚ) :
+    Fin 4 → ℚ :=
+  let a := sub3Q (p 0) (p 3)
+  let b := sub3Q (p 1) (p 3)
+  let c := sub3Q (p 2) (p 3)
+  let y := sub3Q target (p 3)
+  let D := det3Q a b c
+  let l0 := det3Q y b c / D
+  let l1 := det3Q a y c / D
+  let l2 := det3Q a b y / D
+  ![l0, l1, l2, 1 - l0 - l1 - l2]
+
+private theorem tetraBarycentricQ_sum (p : Fin 4 → Fin 3 → ℚ)
+    (target : Fin 3 → ℚ) :
+    ∑ j, tetraBarycentricQ p target j = 1 := by
+  simp [tetraBarycentricQ, Fin.sum_univ_four]
+
+private theorem tetraBarycentricQ_combination (p : Fin 4 → Fin 3 → ℚ)
+    (target : Fin 3 → ℚ) (hdet : tetraDetQ p ≠ 0) :
+    ∑ j, tetraBarycentricQ p target j • p j = target := by
+  simp only [tetraDetQ] at hdet
+  funext coordinate
+  fin_cases coordinate <;>
+    simp [tetraBarycentricQ, Fin.sum_univ_four, Finset.sum_apply,
+      Pi.smul_apply, smul_eq_mul] <;>
+    field_simp [hdet] <;>
+    simp [det3Q, sub3Q] <;> ring
+
 lemma AxisCertificate.toR3_approxLift (box : Box)
     (cert : AxisCertificate) (i : Fin 3) :
     toR3 (cert.approxLift box i) =
@@ -445,11 +486,13 @@ private noncomputable def outerAsInnerReal (p : Pose ℝ) : Pose ℝ where
   simp [outerAsInner, outerAsInnerReal, Pose.toReal]
 
 def Contact.supported (box : Box) (contact : Contact) : Prop :=
-  maxHℚ box.center normalizedRationalPolyhedron box.εθ₂ box.εφ₂
-      contact.direction ≤
-    Gℚ (outerAsInner box.center) 0 box.εθ₂ box.εφ₂
-      (normalizedRationalVertex
-        (symmetryAction box.symmetryIndex contact.index)) contact.direction
+  let selected := symmetryAction box.symmetryIndex contact.index
+  ∀ k : VertexIndex,
+    k = selected ∨
+      Hℚ box.center box.εθ₂ box.εφ₂ contact.direction
+          (normalizedRationalVertex k) ≤
+        Gℚ (outerAsInner box.center) 0 box.εθ₂ box.εφ₂
+          (normalizedRationalVertex selected) contact.direction
 
 instance (box : Box) (contact : Contact) : Decidable (contact.supported box) := by
   unfold Contact.supported
@@ -462,11 +505,12 @@ instance (cert : AxisCertificate) : Decidable cert.balanced := by
   unfold AxisCertificate.balanced
   infer_instance
 
+def Box.barycentric (box : Box) (k : Fin 6) : Fin 4 → ℚ :=
+  tetraBarycentricQ box.approxNormalizedA (box.octahedronTarget k)
+
 def Box.barycentricValid (box : Box) : Prop :=
-  ∀ k,
-    (∀ j, 0 ≤ box.barycentric k j) ∧
-    ∑ j, box.barycentric k j = 1 ∧
-    ∑ j, box.barycentric k j • box.approxNormalizedA j = box.octahedronTarget k
+  tetraDetQ box.approxNormalizedA ≠ 0 ∧
+    ∀ k j, 0 ≤ box.barycentric k j
 
 instance (box : Box) : Decidable box.barycentricValid := by
   unfold Box.barycentricValid
@@ -994,35 +1038,33 @@ theorem valid_contact_support_pose (box : Box) (h : box.Valid)
     dsimp [pbar, qouter]
     rw [outerAsInner_toReal]
     exact outerAsInnerReal_near hq
-  have hpoint :
-      ⟪pc.w, qouter.outer (normalizedExactVertex k)⟫ ≤
-        _root_.GlobalTheorem.maxOuter qouter normalizedGoodPoly pc.w := by
-    unfold _root_.GlobalTheorem.maxOuter _root_.GlobalTheorem.imgOuter
-    apply Finset.le_max'
-    simp only [Finset.mem_image]
-    exact ⟨normalizedExactVertex k,
-      ⟨k, Finset.mem_univ k, rfl⟩, rfl⟩
-  have houter := _root_.GlobalTheorem.global_theorem_inequality_iv
+  by_cases hk : k = selected
+  · subst k
+    exact le_rfl
+  have houter := _root_.GlobalTheorem.global_theorem_outer_le_H
     pbar qouter (0 : ℝ) (box.εθ₂ : ℝ) (box.εφ₂ : ℝ)
       (box.εθ₂ : ℝ) (box.εφ₂ : ℝ)
       (by exact_mod_cast box.εθ₂_nonneg)
-      (by exact_mod_cast box.εφ₂_nonneg) hnear normalizedGoodPoly pc
-  have hmax :
-      _root_.GlobalTheorem.maxH pbar normalizedGoodPoly
-          (box.εθ₂ : ℝ) (box.εφ₂ : ℝ) pc.w ≤
-        ((maxHℚ box.center normalizedRationalPolyhedron
-          box.εθ₂ box.εφ₂ contact.direction : ℚ) : ℝ) := by
-    change _root_.GlobalTheorem.maxH box.center.toReal normalizedGoodPoly
-        (box.εθ₂ : ℝ) (box.εφ₂ : ℝ) (toR2 contact.direction) ≤ _
-    exact maxH_le_maxHℚ box.εθ₂_nonneg box.εφ₂_nonneg
-      normalizedGoodPoly normalizedRationalPolyhedron normalizedApproximation
+      (by exact_mod_cast box.εφ₂_nonneg) hnear normalizedGoodPoly pc k
+  have hH :
+      _root_.GlobalTheorem.H pbar (box.εθ₂ : ℝ) (box.εφ₂ : ℝ)
+          pc.w (normalizedExactVertex k) ≤
+        ((Hℚ box.center box.εθ₂ box.εφ₂ contact.direction
+          (normalizedRationalVertex k) : ℚ) : ℝ) := by
+    change _root_.GlobalTheorem.H box.center.toReal
+        (box.εθ₂ : ℝ) (box.εφ₂ : ℝ) (toR2 contact.direction)
+          (normalizedExactVertex k) ≤ _
+    exact H_le_Hℚ box.εθ₂_nonneg box.εφ₂_nonneg
+      (normalizedExactVertex_norm_le_one k)
+      (normalizedApproximation.approx k)
       (direction_norm_eq_one (h.direction_unit j i)) h.center_in_four
   have hchecked :
-      ((maxHℚ box.center normalizedRationalPolyhedron
-          box.εθ₂ box.εφ₂ contact.direction : ℚ) : ℝ) ≤
+      ((Hℚ box.center box.εθ₂ box.εφ₂ contact.direction
+          (normalizedRationalVertex k) : ℚ) : ℝ) ≤
         ((Gℚ (outerAsInner box.center) 0 box.εθ₂ box.εφ₂
           (normalizedRationalVertex selected) contact.direction : ℚ) : ℝ) := by
-    exact_mod_cast h.supported j i
+    exact_mod_cast (h.supported j i k).resolve_left (by
+      simpa [selected] using hk)
   have hG :
       ((Gℚ (outerAsInner box.center) 0 box.εθ₂ box.εφ₂
           (normalizedRationalVertex selected) contact.direction : ℚ) : ℝ) ≤
@@ -1044,11 +1086,11 @@ theorem valid_contact_support_pose (box : Box) (h : box.Valid)
       (by exact_mod_cast box.εφ₂_nonneg) hnear normalizedGoodPoly pc
   simp only [_root_.GlobalTheorem.GlobalContact.S,
     _root_.GlobalTheorem.GlobalContact.Sval] at hinner
-  dsimp [pc] at hpoint houter hmax hinner
-  dsimp [qouter] at hpoint hinner
+  dsimp [pc] at houter hinner
+  dsimp [qouter] at houter hinner
   rw [outerAsInnerReal_inner_eq_outer] at hinner
-  dsimp [qouter, selected, contact, pbar] at hpoint houter hmax hchecked hG hinner ⊢
-  exact hpoint.trans (houter.trans (hmax.trans (hchecked.trans (hG.trans hinner))))
+  dsimp [qouter, selected, contact, pbar] at houter hH hchecked hG hinner ⊢
+  exact houter.trans (hH.trans (hchecked.trans (hG.trans hinner)))
 
 theorem valid_contact_support_matrixPose (box : Box) (h : box.Valid)
     {q : Pose ℝ}
@@ -1075,10 +1117,13 @@ private theorem barycentric_mem_convexHull (box : Box) (h : box.Valid) (k : Fin 
     (fun j => toR3 (box.approxNormalizedA j))
     (fun j => (box.barycentric k j : ℝ))
   · intro j
-    exact_mod_cast (h.barycentric k).1 j
-  · exact_mod_cast (h.barycentric k).2.1
+    exact_mod_cast h.barycentric.2 k j
+  · exact_mod_cast tetraBarycentricQ_sum
+      box.approxNormalizedA (box.octahedronTarget k)
   · ext coordinate
-    have hcoordinate := congrFun (h.barycentric k).2.2 coordinate
+    have hcoordinate := congrFun
+      (tetraBarycentricQ_combination box.approxNormalizedA
+        (box.octahedronTarget k) h.barycentric.1) coordinate
     simp only [Finset.sum_apply, Pi.smul_apply, smul_eq_mul, toR3,
       WithLp.ofLp_sum, WithLp.ofLp_smul, WithLp.ofLp_toLp]
     exact_mod_cast hcoordinate
