@@ -81,6 +81,40 @@ def crossQ (u v : Fin 3 → ℚ) : Fin 3 → ℚ :=
     u 2 * v 0 - u 0 * v 2,
     u 0 * v 1 - u 1 * v 0]
 
+private theorem toR3_crossQ (u v : Fin 3 → ℚ) :
+    toR3 (crossQ u v) =
+      Noperthedron.BalancedSupport.cross3 (toR3 u) (toR3 v) := by
+  ext i
+  fin_cases i <;>
+    simp [crossQ, Noperthedron.BalancedSupport.cross3, cross_apply, toR3]
+
+private theorem toR3_sum {ι : Type} [Fintype ι]
+    (f : ι → Fin 3 → ℚ) :
+    toR3 (∑ i, f i) = ∑ i, toR3 (f i) := by
+  ext c
+  simp [toR3]
+
+private theorem toR3_smul (a : ℚ) (v : Fin 3 → ℚ) :
+    toR3 (a • v) = (a : ℝ) • toR3 v := by
+  ext c
+  simp [toR3]
+
+private theorem toR3_rotMℚ_transpose_mulVec
+    (theta phi : ℚ) (u : Fin 2 → ℚ) :
+    toR3 ((RationalApprox.rotMℚ_mat theta phi)ᵀ *ᵥ u) =
+      (RationalApprox.rotMℚℝ (theta : ℝ) (phi : ℝ)).adjoint (toR2 u) := by
+  have hcast : (RationalApprox.rotMℚ_mat (theta : ℝ) (phi : ℝ))ᵀ =
+      ((RationalApprox.rotMℚ_mat theta phi)ᵀ).map (fun x => (x : ℝ)) := by
+    rw [RationalApprox.rotMℚ_mat_castℝ]
+    rfl
+  unfold toR3 toR2
+  rw [RationalApprox.toLp_cast_mulVec hcast]
+  rw [← Matrix.conjTranspose_eq_transpose_of_trivial
+      (A := RationalApprox.rotMℚ_mat (theta : ℝ) (phi : ℝ)),
+    Matrix.toEuclideanLin_conjTranspose_eq_adjoint
+      (A := RationalApprox.rotMℚ_mat (theta : ℝ) (phi : ℝ))]
+  rfl
+
 /-- Rational frame whose first two rows approximate the outer projection and
 whose last row approximates the viewing normal. -/
 def frameQ (theta phi : ℚ) : Matrix (Fin 3) (Fin 3) ℚ :=
@@ -138,6 +172,29 @@ def AxisCertificate.approxNormalizedA (box : Box) (cert : AxisCertificate) :
 
 def Box.approxNormalizedA (box : Box) (j : Fin 4) : Fin 3 → ℚ :=
   (box.certificate j).approxNormalizedA box
+
+lemma AxisCertificate.toR3_approxLift (box : Box)
+    (cert : AxisCertificate) (i : Fin 3) :
+    toR3 (cert.approxLift box i) =
+      (RationalApprox.rotMℚℝ (box.center.θ₂ : ℝ)
+        (box.center.φ₂ : ℝ)).adjoint
+          (toR2 (cert.contact i).direction) := by
+  exact toR3_rotMℚ_transpose_mulVec _ _ _
+
+lemma AxisCertificate.toR3_approxA (box : Box)
+    (cert : AxisCertificate) :
+    toR3 (cert.approxA box) =
+      ∑ i, (cert.weight i : ℝ) •
+        Noperthedron.BalancedSupport.cross3
+          (toR3 (normalizedRationalVertex
+            (symmetryAction box.symmetryIndex (cert.contact i).index)))
+          ((RationalApprox.rotMℚℝ (box.center.θ₂ : ℝ)
+            (box.center.φ₂ : ℝ)).adjoint
+              (toR2 (cert.contact i).direction)) := by
+  rw [AxisCertificate.approxA, toR3_sum]
+  apply Finset.sum_congr rfl
+  intro i _
+  rw [toR3_smul, toR3_crossQ, cert.toR3_approxLift]
 
 def octahedronAxis : Fin 6 → Fin 3 → ℚ := ![
   ![1, 0, 0], ![-1, 0, 0], ![0, 1, 0],
@@ -215,6 +272,59 @@ structure Box.Valid (box : Box) : Prop where
 instance (box : Box) : Decidable box.Valid :=
   decidable_of_iff _ (Box.valid_iff box).symm
 
+lemma AxisCertificate.B_pos (box : Box) (h : box.Valid) (j : Fin 4) :
+    0 < (box.certificate j).B := by
+  unfold AxisCertificate.B
+  apply Finset.sum_pos
+  · intro i _
+    exact h.weight_pos j i
+  · exact Finset.univ_nonempty
+
+lemma AxisCertificate.toR3_approxA_eq_smul (box : Box) (h : box.Valid)
+    (j : Fin 4) :
+    toR3 ((box.certificate j).approxA box) =
+      ((box.certificate j).B : ℝ) •
+        toR3 (box.approxNormalizedA j) := by
+  ext c
+  change (((box.certificate j).approxA box c : ℚ) : ℝ) =
+    ((box.certificate j).B : ℝ) *
+      ((((box.certificate j).approxA box c /
+        (box.certificate j).B : ℚ) : ℝ))
+  push_cast
+  field_simp [ne_of_gt (AxisCertificate.B_pos box h j)]
+
+def AxisCertificate.realWeight (cert : AxisCertificate) (i : Fin 3) : ℝ :=
+  (cert.weight i : ℝ)
+
+noncomputable def AxisCertificate.realDirection
+    (cert : AxisCertificate) (i : Fin 3) : ℝ² :=
+  toR2 (cert.contact i).direction
+
+noncomputable def AxisCertificate.realVertex
+    (box : Box) (cert : AxisCertificate) (i : Fin 3) : ℝ³ :=
+  normalizedExactVertex
+    (symmetryAction box.symmetryIndex (cert.contact i).index)
+
+/-- The exact normalized first-variation vector associated with a rational
+certificate at an arbitrary outer pose. -/
+noncomputable def AxisCertificate.normalizedAAt
+    (box : Box) (cert : AxisCertificate) (q : Pose ℝ) (offset : ℝ²) : ℝ³ :=
+  ((cert.B : ℝ)⁻¹) •
+    Noperthedron.SnubCube.firstVariationVector
+      (q.matrixPoseWithOffset offset) cert.realWeight cert.realDirection
+      (cert.realVertex box)
+
+lemma AxisCertificate.firstVariation_eq_B_smul_normalizedAAt
+    (box : Box) (h : box.Valid) (j : Fin 4) (q : Pose ℝ) (offset : ℝ²) :
+    Noperthedron.SnubCube.firstVariationVector
+        (q.matrixPoseWithOffset offset) (box.certificate j).realWeight
+        (box.certificate j).realDirection
+        ((box.certificate j).realVertex box) =
+      ((box.certificate j).B : ℝ) •
+        (box.certificate j).normalizedAAt box q offset := by
+  rw [AxisCertificate.normalizedAAt, smul_smul]
+  simp [ne_of_gt (AxisCertificate.B_pos box h j)]
+
 private lemma halfWidth_nonneg {lo hi : ℚ} (h : lo ≤ hi) :
     0 ≤ (hi - lo) / 2 := div_nonneg (sub_nonneg.mpr h) (by norm_num)
 
@@ -264,6 +374,147 @@ private theorem outerAsInnerReal_near {pbar q : Pose ℝ}
 
 private theorem outerAsInnerReal_inner_eq_outer (p : Pose ℝ) :
     Pose.inner (outerAsInnerReal p) = Pose.outer p := rfl
+
+/-- The rational first-variation vector in a valid row approximates the
+exact normalized vector at the box center with the universal `2κ + κ²`
+error budget. -/
+theorem valid_center_normalizedA_approx (box : Box) (h : box.Valid)
+    (j : Fin 4) :
+    ‖(box.certificate j).normalizedAAt box box.center.toReal 0 -
+        toR3 (box.approxNormalizedA j)‖ ≤
+      ((centerVectorError : ℚ) : ℝ) := by
+  let cert := box.certificate j
+  let approxVertex : Fin 3 → ℝ³ := fun i =>
+    toR3 (normalizedRationalVertex
+      (symmetryAction box.symmetryIndex (cert.contact i).index))
+  let exactLift : Fin 3 → ℝ³ := fun i =>
+    Noperthedron.SnubCube.outerLift
+      (box.center.toReal.matrixPoseWithOffset 0) (cert.realDirection i)
+  let approxLift : Fin 3 → ℝ³ := fun i => toR3 (cert.approxLift box i)
+  have hbound := Noperthedron.SnubCube.norm_normalizedWeightedCross_approx_sub_le
+    cert.realWeight (cert.realVertex box) approxVertex exactLift approxLift
+    (cert.normalizedAAt box box.center.toReal 0)
+    (toR3 (box.approxNormalizedA j)) (cert.B : ℝ) RationalApprox.κ
+    (by unfold RationalApprox.κ; norm_num)
+    (fun i => by
+      change (0 : ℝ) ≤ (cert.weight i : ℝ)
+      exact_mod_cast (h.weight_pos j i).le)
+    (by exact_mod_cast AxisCertificate.B_pos box h j)
+    (by
+      unfold AxisCertificate.B AxisCertificate.realWeight
+      push_cast
+      rfl)
+    (fun i => normalizedExactVertex_norm_le_one _)
+    (fun i => by
+      have happ := normalizedApproximation.approx
+        (symmetryAction box.symmetryIndex (cert.contact i).index)
+      change ‖normalizedExactVertex
+          (symmetryAction box.symmetryIndex (cert.contact i).index) -
+        toR3 (normalizedRationalVertex
+          (symmetryAction box.symmetryIndex (cert.contact i).index))‖ ≤
+            RationalApprox.κ at happ
+      simpa [AxisCertificate.realVertex, approxVertex] using happ)
+    (fun i => by
+      have hlift := norm_outerLift_rationalApprox_sub_le box.center
+        h.center_in_four (0 : ℝ²) (cert.realDirection i)
+        (direction_norm_eq_one (h.direction_unit j i))
+      simpa [exactLift, approxLift, AxisCertificate.realDirection,
+        cert.toR3_approxLift] using hlift)
+    (fun i => by
+      have hlift := norm_rationalApprox_outerLift_le box.center
+        h.center_in_four (cert.realDirection i)
+        (direction_norm_eq_one (h.direction_unit j i))
+      simpa [approxLift, AxisCertificate.realDirection,
+        cert.toR3_approxLift] using hlift)
+    (by
+      simpa [Noperthedron.SnubCube.firstVariationVector, exactLift,
+        AxisCertificate.realWeight, AxisCertificate.realDirection,
+        AxisCertificate.realVertex, cert] using
+          (AxisCertificate.firstVariation_eq_B_smul_normalizedAAt
+            box h j box.center.toReal (0 : ℝ²)))
+    (by
+      dsimp [AxisCertificate.realWeight, approxVertex, approxLift]
+      simp_rw [cert.toR3_approxLift]
+      rw [← cert.toR3_approxA box]
+      exact AxisCertificate.toR3_approxA_eq_smul box h j)
+  calc
+    ‖(box.certificate j).normalizedAAt box box.center.toReal 0 -
+        toR3 (box.approxNormalizedA j)‖ ≤
+        2 * RationalApprox.κ + RationalApprox.κ ^ 2 := by
+      simpa [cert] using hbound
+    _ = ((centerVectorError : ℚ) : ℝ) := by
+      norm_num [centerVectorError, RationalApprox.κ, RationalApprox.κℚ]
+
+/-- Throughout the box, each exact normalized first-variation vector stays
+within the rational row's declared perturbation budget. -/
+theorem valid_normalizedA_move (box : Box) (h : box.Valid)
+    {q : Pose ℝ}
+    (hq : Pose.near box.center.toReal (box.εα : ℝ) (box.εθ₁ : ℝ)
+      (box.εφ₁ : ℝ) (box.εθ₂ : ℝ) (box.εφ₂ : ℝ) q)
+    (offset : ℝ²) (j : Fin 4) :
+    ‖(box.certificate j).normalizedAAt box q offset -
+        toR3 (box.approxNormalizedA j)‖ ≤
+      ((box.axisPerturbation : ℚ) : ℝ) := by
+  let cert := box.certificate j
+  have hweight : ∀ i, 0 ≤ cert.realWeight i := by
+    intro i
+    change (0 : ℝ) ≤ (cert.weight i : ℝ)
+    exact_mod_cast (h.weight_pos j i).le
+  have hbudget :
+      ∑ i, cert.realWeight i *
+          (‖cert.realDirection i‖ * ‖cert.realVertex box i‖) ≤
+        (cert.B : ℝ) := by
+    calc
+      ∑ i, cert.realWeight i *
+          (‖cert.realDirection i‖ * ‖cert.realVertex box i‖) ≤
+          ∑ i, cert.realWeight i := by
+        apply Finset.sum_le_sum
+        intro i _
+        rw [show ‖cert.realDirection i‖ = 1 by
+          exact direction_norm_eq_one (h.direction_unit j i), one_mul]
+        exact mul_le_of_le_one_right (hweight i)
+          (normalizedExactVertex_norm_le_one _)
+      _ = (cert.B : ℝ) := by
+        unfold AxisCertificate.B AxisCertificate.realWeight
+        push_cast
+        rfl
+  have hcenterMove :=
+    Noperthedron.SnubCube.norm_normalizedFirstVariation_matrixPoseWithOffset_sub_le_of_budget_bound
+      q box.center.toReal offset 0 cert.realWeight cert.realDirection
+      (cert.realVertex box) (cert.normalizedAAt box q offset)
+      (cert.normalizedAAt box box.center.toReal 0) (cert.B : ℝ)
+      hweight (by exact_mod_cast AxisCertificate.B_pos box h j) hbudget
+      (AxisCertificate.firstVariation_eq_B_smul_normalizedAAt box h j q offset)
+      (AxisCertificate.firstVariation_eq_B_smul_normalizedAAt
+        box h j box.center.toReal 0)
+  have hcenterMove' :
+      ‖cert.normalizedAAt box q offset -
+          cert.normalizedAAt box box.center.toReal 0‖ ≤
+        (box.outerRadius : ℝ) := by
+    apply hcenterMove.trans
+    rw [show (box.outerRadius : ℝ) =
+      (box.εφ₂ : ℝ) + (box.εθ₂ : ℝ) by simp [Box.outerRadius]]
+    exact add_le_add hq.2.2.2.1 hq.2.2.1
+  have happrox := valid_center_normalizedA_approx box h j
+  calc
+    ‖(box.certificate j).normalizedAAt box q offset -
+        toR3 (box.approxNormalizedA j)‖ ≤
+      ‖cert.normalizedAAt box q offset -
+          cert.normalizedAAt box box.center.toReal 0‖ +
+        ‖cert.normalizedAAt box box.center.toReal 0 -
+          toR3 (box.approxNormalizedA j)‖ := by
+      dsimp [cert]
+      rw [show (box.certificate j).normalizedAAt box q offset -
+          toR3 (box.approxNormalizedA j) =
+        ((box.certificate j).normalizedAAt box q offset -
+            (box.certificate j).normalizedAAt box box.center.toReal 0) +
+          ((box.certificate j).normalizedAAt box box.center.toReal 0 -
+            toR3 (box.approxNormalizedA j)) by abel]
+      exact norm_add_le _ _
+    _ ≤ (box.outerRadius : ℝ) + (centerVectorError : ℝ) :=
+      add_le_add hcenterMove' happrox
+    _ = ((box.axisPerturbation : ℚ) : ℝ) := by
+      simp [Box.axisPerturbation]
 
 /-- A checked contact remains an exact supporting outer vertex throughout
 its outer-view box.  This is the semantic bridge from the rational Taylor

@@ -441,6 +441,33 @@ theorem norm_normalizedFirstVariation_sub_le
   rw [hsub, norm_smul, Real.norm_eq_abs, abs_of_pos hB] at h
   nlinarith
 
+/-- Upper-budget variant of normalized first-variation stability.  This is
+the form used by rational rows: unit directions and radius-one vertices make
+the sum of the weights a convenient rational upper bound, without requiring
+exact algebraic vertex norms in the certificate. -/
+theorem norm_normalizedFirstVariation_sub_le_of_budget_bound
+    {κ : Type} [Fintype κ] (p q : MatrixPose)
+    (weight : κ → ℝ) (direction : κ → ℝ²) (vertex : κ → ℝ³)
+    (normalized currentCenter : ℝ³) (B : ℝ)
+    (hweight : ∀ i, 0 ≤ weight i) (hB : 0 < B)
+    (hbudget : ∑ i, weight i * (‖direction i‖ * ‖vertex i‖) ≤ B)
+    (hcurrent : firstVariationVector p weight direction vertex = B • normalized)
+    (hcenter : firstVariationVector q weight direction vertex = B • currentCenter) :
+    ‖normalized - currentCenter‖ ≤
+      ‖so3CLM p.outerRot - so3CLM q.outerRot‖ := by
+  have h := norm_firstVariationVector_sub_le p q weight direction vertex hweight
+  have hscale :
+      (∑ i, weight i * (‖direction i‖ * ‖vertex i‖)) *
+          ‖so3CLM p.outerRot - so3CLM q.outerRot‖ ≤
+        B * ‖so3CLM p.outerRot - so3CLM q.outerRot‖ :=
+    mul_le_mul_of_nonneg_right hbudget (norm_nonneg _)
+  have hsub : firstVariationVector p weight direction vertex -
+      firstVariationVector q weight direction vertex =
+      B • (normalized - currentCenter) := by
+    rw [hcurrent, hcenter, smul_sub]
+  rw [hsub, norm_smul, Real.norm_eq_abs, abs_of_pos hB] at h
+  nlinarith
+
 /-- Pose-coordinate form used by local rows: normalized axis-coverage vectors
 lose at most the two-coordinate outer Euler distance. -/
 theorem norm_normalizedFirstVariation_matrixPoseWithOffset_sub_le
@@ -457,6 +484,26 @@ theorem norm_normalizedFirstVariation_matrixPoseWithOffset_sub_le
     ‖normalized - centerNormalized‖ ≤
       |p.φ₂ - center.φ₂| + |p.θ₂ - center.θ₂| := by
   exact (norm_normalizedFirstVariation_sub_le
+    (p.matrixPoseWithOffset offset) (center.matrixPoseWithOffset centerOffset)
+    weight direction vertex normalized centerNormalized B
+    hweight hB hbudget hcurrent hcenter).trans
+      (norm_outerRot_matrixPoseWithOffset_sub_le p center offset centerOffset)
+
+/-- Pose-coordinate upper-budget form of normalized axis-vector stability. -/
+theorem norm_normalizedFirstVariation_matrixPoseWithOffset_sub_le_of_budget_bound
+    {κ : Type} [Fintype κ]
+    (p center : Pose ℝ) (offset centerOffset : ℝ²)
+    (weight : κ → ℝ) (direction : κ → ℝ²) (vertex : κ → ℝ³)
+    (normalized centerNormalized : ℝ³) (B : ℝ)
+    (hweight : ∀ i, 0 ≤ weight i) (hB : 0 < B)
+    (hbudget : ∑ i, weight i * (‖direction i‖ * ‖vertex i‖) ≤ B)
+    (hcurrent : firstVariationVector (p.matrixPoseWithOffset offset)
+      weight direction vertex = B • normalized)
+    (hcenter : firstVariationVector (center.matrixPoseWithOffset centerOffset)
+      weight direction vertex = B • centerNormalized) :
+    ‖normalized - centerNormalized‖ ≤
+      |p.φ₂ - center.φ₂| + |p.θ₂ - center.θ₂| := by
+  exact (norm_normalizedFirstVariation_sub_le_of_budget_bound
     (p.matrixPoseWithOffset offset) (center.matrixPoseWithOffset centerOffset)
     weight direction vertex normalized centerNormalized B
     hweight hB hbudget hcurrent hcenter).trans
