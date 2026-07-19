@@ -69,7 +69,7 @@ def Box.radiusSq (box : Box) : ℚ :=
 
 @[mk_iff]
 structure Box.Valid (box : Box) : Prop where
-  euler : box.eulerBox.Valid
+  geometry : box.eulerBox.GeometricValid
   radius : box.radiusSq ≤ box.c ^ 2
 
 instance (box : Box) : Decidable box.Valid :=
@@ -130,7 +130,7 @@ theorem Box.radius_le (box : Box) (h : box.Valid) {p : CayleyPose ℝ}
     Real.sqrt (p.x ^ 2 + p.y ^ 2 + p.z ^ 2) ≤ (box.c : ℝ) := by
   apply Real.sqrt_le_iff.mpr
   constructor
-  · exact_mod_cast h.euler.c_nonneg
+  · exact_mod_cast h.geometry.c_nonneg
   · exact (box.sq_sum_le_radiusSq hp).trans (by exact_mod_cast h.radius)
 
 theorem Box.outerPose_mem_eulerRealInterval (box : Box) {p : CayleyPose ℝ}
@@ -180,33 +180,33 @@ theorem Box.valid_imp_not_translated_rupert (box : Box) (h : box.Valid) :
       (B := fun j => ((ebox.certificate j).B : ℝ))
       (c := (ebox.c : ℝ)) (δ := (ebox.axisPerturbation : ℝ))
   · intro j
-    exact_mod_cast LocalCertificate.AxisCertificate.B_pos ebox h.euler j
+    exact_mod_cast LocalCertificate.AxisCertificate.B_pos ebox h.geometry j
   · intro j
     simpa [ebox, q, Noperthedron.SnubCube.firstVariationVector,
       Noperthedron.SnubCube.outerLift, Noperthedron.SnubCube.outerFrame,
       outerPose, CayleyPose.matrixPoseWithOffset, Pose.matrixPoseWithOffset,
       Pose.matrixPoseOfPose] using
       (LocalCertificate.AxisCertificate.firstVariation_eq_B_smul_normalizedAAt
-        ebox h.euler j q offset)
+        ebox h.geometry j q offset)
   · intro axis haxis
     simpa only [Rat.cast_add] using
-      LocalCertificate.valid_center_axis_cover ebox h.euler axis haxis
-  · exact LocalCertificate.valid_normalizedA_move ebox h.euler hqnear offset
+      LocalCertificate.valid_center_axis_cover ebox h.geometry axis haxis
+  · exact LocalCertificate.valid_normalizedA_move ebox h.geometry hqnear offset
   · intro j
     rfl
-  · exact LocalCertificate.AxisCertificate.real_remainder_le_B ebox h.euler
+  · exact LocalCertificate.AxisCertificate.real_remainder_le_B ebox h.geometry
   · exact p.axisAngle_ratio_le offset a (ebox.c : ℝ) (box.radius_le h hp)
   · intro j i hdirection
     have hnorm :=
-      LocalCertificate.AxisCertificate.realDirection_norm ebox h.euler j i
+      LocalCertificate.AxisCertificate.realDirection_norm ebox h.geometry j i
     rw [hdirection, norm_zero] at hnorm
     norm_num at hnorm
-  · exact LocalCertificate.AxisCertificate.realWeight_nonneg ebox h.euler
+  · exact LocalCertificate.AxisCertificate.realWeight_nonneg ebox h.geometry
   · intro j
     refine ⟨0, ?_⟩
     change (0 : ℝ) < ((ebox.certificate j).weight 0 : ℝ)
-    exact_mod_cast h.euler.weight_pos j 0
-  · exact LocalCertificate.AxisCertificate.real_balance ebox h.euler
+    exact_mod_cast h.geometry.weight_pos j 0
+  · exact LocalCertificate.AxisCertificate.real_balance ebox h.geometry
   · intro j i k
     simpa [ebox, q, Box.eulerBox,
       LocalCertificate.AxisCertificate.realDirection,
@@ -214,7 +214,7 @@ theorem Box.valid_imp_not_translated_rupert (box : Box) (h : box.Valid) :
       CayleyPose.matrixPoseWithOffset, Pose.matrixPoseWithOffset,
       Pose.matrixPoseOfPose] using
       (LocalCertificate.valid_contact_support_matrixPose
-        ebox h.euler hqnear offset j i k)
+        ebox h.geometry hqnear offset j i k)
 
 /-- Existential form consumed by the mixed Cayley solution-tree checker. -/
 theorem Box.valid_imp_no_translated_rupert_in_interval

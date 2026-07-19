@@ -516,6 +516,23 @@ instance (box : Box) : Decidable box.barycentricValid := by
   unfold Box.barycentricValid
   infer_instance
 
+/-- The support and axis-cover portion of a local certificate.  These are
+exactly the hypotheses used on an equality stratum, where the relative
+rotation is controlled separately and the generic Euler mismatch bound is
+irrelevant. -/
+@[mk_iff]
+structure Box.GeometricValid (box : Box) : Prop where
+  center_in_four : box.center ∈ fourInterval ℚ
+  c_nonneg : 0 ≤ box.c
+  direction_unit : ∀ j i, directionUnit ((box.certificate j).contact i).direction
+  weight_pos : ∀ j i, 0 < (box.certificate j).weight i
+  balanced : ∀ j, (box.certificate j).balanced
+  supported : ∀ j i, ((box.certificate j).contact i).supported box
+  barycentric : box.barycentricValid
+
+instance (box : Box) : Decidable box.GeometricValid :=
+  decidable_of_iff _ (Box.geometricValid_iff box).symm
+
 @[mk_iff]
 structure Box.Valid (box : Box) : Prop where
   center_in_four : box.center ∈ fourInterval ℚ
@@ -532,6 +549,15 @@ structure Box.Valid (box : Box) : Prop where
 instance (box : Box) : Decidable box.Valid :=
   decidable_of_iff _ (Box.valid_iff box).symm
 
+theorem Box.Valid.geometric {box : Box} (h : box.Valid) : box.GeometricValid where
+  center_in_four := h.center_in_four
+  c_nonneg := h.c_nonneg
+  direction_unit := h.direction_unit
+  weight_pos := h.weight_pos
+  balanced := h.balanced
+  supported := h.supported
+  barycentric := h.barycentric
+
 def AxisCertificate.realWeight (cert : AxisCertificate) (i : Fin 3) : ℝ :=
   (cert.weight i : ℝ)
 
@@ -544,7 +570,7 @@ noncomputable def AxisCertificate.realVertex
   normalizedExactVertex
     (symmetryAction box.symmetryIndex (cert.contact i).index)
 
-lemma AxisCertificate.B_pos (box : Box) (h : box.Valid) (j : Fin 4) :
+lemma AxisCertificate.B_pos (box : Box) (h : box.GeometricValid) (j : Fin 4) :
     0 < (box.certificate j).B := by
   unfold AxisCertificate.B
   apply Finset.sum_pos
@@ -552,18 +578,18 @@ lemma AxisCertificate.B_pos (box : Box) (h : box.Valid) (j : Fin 4) :
     exact h.weight_pos j i
   · exact Finset.univ_nonempty
 
-lemma AxisCertificate.realWeight_nonneg (box : Box) (h : box.Valid)
+lemma AxisCertificate.realWeight_nonneg (box : Box) (h : box.GeometricValid)
     (j : Fin 4) (i : Fin 3) :
     0 ≤ (box.certificate j).realWeight i := by
   change (0 : ℝ) ≤ ((box.certificate j).weight i : ℝ)
   exact_mod_cast (h.weight_pos j i).le
 
-lemma AxisCertificate.realDirection_norm (box : Box) (h : box.Valid)
+lemma AxisCertificate.realDirection_norm (box : Box) (h : box.GeometricValid)
     (j : Fin 4) (i : Fin 3) :
     ‖(box.certificate j).realDirection i‖ = 1 :=
   direction_norm_eq_one (h.direction_unit j i)
 
-lemma AxisCertificate.real_remainder_le_B (box : Box) (h : box.Valid)
+lemma AxisCertificate.real_remainder_le_B (box : Box) (h : box.GeometricValid)
     (j : Fin 4) :
     ∑ i, (box.certificate j).realWeight i *
         (‖(box.certificate j).realDirection i‖ *
@@ -585,7 +611,7 @@ lemma AxisCertificate.real_remainder_le_B (box : Box) (h : box.Valid)
       push_cast
       rfl
 
-lemma AxisCertificate.real_balance (box : Box) (h : box.Valid)
+lemma AxisCertificate.real_balance (box : Box) (h : box.GeometricValid)
     (j : Fin 4) :
     ∑ i, (box.certificate j).realWeight i •
         (box.certificate j).realDirection i = 0 := by
@@ -598,7 +624,7 @@ lemma AxisCertificate.real_balance (box : Box) (h : box.Valid)
     Pi.smul_apply, Pi.zero_apply, toR2, smul_eq_mul]
   exact_mod_cast hb
 
-lemma AxisCertificate.toR3_approxA_eq_smul (box : Box) (h : box.Valid)
+lemma AxisCertificate.toR3_approxA_eq_smul (box : Box) (h : box.GeometricValid)
     (j : Fin 4) :
     toR3 ((box.certificate j).approxA box) =
       ((box.certificate j).B : ℝ) •
@@ -621,7 +647,8 @@ noncomputable def AxisCertificate.normalizedAAt
       (cert.realVertex box)
 
 lemma AxisCertificate.firstVariation_eq_B_smul_normalizedAAt
-    (box : Box) (h : box.Valid) (j : Fin 4) (q : Pose ℝ) (offset : ℝ²) :
+    (box : Box) (h : box.GeometricValid) (j : Fin 4) (q : Pose ℝ)
+    (offset : ℝ²) :
     Noperthedron.SnubCube.firstVariationVector
         (q.matrixPoseWithOffset offset) (box.certificate j).realWeight
         (box.certificate j).realDirection
@@ -870,7 +897,7 @@ theorem valid_axisAngle_ratio (box : Box) (h : box.Valid)
 /-- The rational first-variation vector in a valid row approximates the
 exact normalized vector at the box center with the universal `2κ + κ²`
 error budget. -/
-theorem valid_center_normalizedA_approx (box : Box) (h : box.Valid)
+theorem valid_center_normalizedA_approx (box : Box) (h : box.GeometricValid)
     (j : Fin 4) :
     ‖(box.certificate j).normalizedAAt box box.center.toReal 0 -
         toR3 (box.approxNormalizedA j)‖ ≤
@@ -939,7 +966,7 @@ theorem valid_center_normalizedA_approx (box : Box) (h : box.Valid)
 
 /-- Throughout the box, each exact normalized first-variation vector stays
 within the rational row's declared perturbation budget. -/
-theorem valid_normalizedA_move (box : Box) (h : box.Valid)
+theorem valid_normalizedA_move (box : Box) (h : box.GeometricValid)
     {q : Pose ℝ}
     (hq : Pose.near box.center.toReal (box.εα : ℝ) (box.εθ₁ : ℝ)
       (box.εφ₁ : ℝ) (box.εθ₂ : ℝ) (box.εφ₂ : ℝ) q)
@@ -1115,7 +1142,7 @@ theorem contact_support_matrixPose (box : Box) (contact : Contact)
     Noperthedron.BalancedSupport.matrixPoseWithOffset_outer_rotation_project] using
     contact_support_pose box contact hcenter hdirection hsupported hq k
 
-theorem valid_contact_support_pose (box : Box) (h : box.Valid)
+theorem valid_contact_support_pose (box : Box) (h : box.GeometricValid)
     {q : Pose ℝ}
     (hq : Pose.near box.center.toReal (box.εα : ℝ) (box.εθ₁ : ℝ)
       (box.εφ₁ : ℝ) (box.εθ₂ : ℝ) (box.εφ₂ : ℝ) q)
@@ -1129,7 +1156,7 @@ theorem valid_contact_support_pose (box : Box) (h : box.Valid)
   contact_support_pose box ((box.certificate j).contact i)
     h.center_in_four (h.direction_unit j i) (h.supported j i) hq k
 
-theorem valid_contact_support_matrixPose (box : Box) (h : box.Valid)
+theorem valid_contact_support_matrixPose (box : Box) (h : box.GeometricValid)
     {q : Pose ℝ}
     (hq : Pose.near box.center.toReal (box.εα : ℝ) (box.εθ₁ : ℝ)
       (box.εφ₁ : ℝ) (box.εθ₂ : ℝ) (box.εφ₂ : ℝ) q)
@@ -1146,7 +1173,8 @@ theorem valid_contact_support_matrixPose (box : Box) (h : box.Valid)
   contact_support_matrixPose box ((box.certificate j).contact i)
     h.center_in_four (h.direction_unit j i) (h.supported j i) hq offset k
 
-private theorem barycentric_mem_convexHull (box : Box) (h : box.Valid) (k : Fin 6) :
+private theorem barycentric_mem_convexHull (box : Box)
+    (h : box.GeometricValid) (k : Fin 6) :
     toR3 (box.octahedronTarget k) ∈
       convexHull ℝ {toR3 (box.approxNormalizedA j) | j} := by
   apply Noperthedron.BalancedSupport.mem_convexHull_of_barycentric
@@ -1166,7 +1194,7 @@ private theorem barycentric_mem_convexHull (box : Box) (h : box.Valid) (k : Fin 
 
 /-- The six checked rational barycentric identities imply the real center
 axis-cover property required by the perturbation theorem. -/
-theorem valid_center_axis_cover (box : Box) (h : box.Valid)
+theorem valid_center_axis_cover (box : Box) (h : box.GeometricValid)
     (axis : ℝ³) (haxis : ‖axis‖ = 1) :
     ∃ j, ((box.c + box.axisPerturbation : ℚ) : ℝ) ≤
       ⟪axis, toR3 (box.approxNormalizedA j)⟫ := by
@@ -1233,6 +1261,7 @@ theorem valid_imp_not_translated_rupert (box : Box) (h : box.Valid) :
         ¬ RupertPose (q.matrixPoseWithOffset offset)
           normalizedExactPolyhedron.hull := by
   intro q hq offset
+  let hg := h.geometric
   let relative := Noperthedron.SnubCube.relativeRotationAtSymmetry
     (q.matrixPoseWithOffset offset) box.symmetryIndex
   obtain ⟨a⟩ := Noperthedron.BalancedSupport.exists_axisAngle
@@ -1254,27 +1283,27 @@ theorem valid_imp_not_translated_rupert (box : Box) (h : box.Valid) :
       (B := fun j => ((box.certificate j).B : ℝ))
       (c := (box.c : ℝ)) (δ := (box.axisPerturbation : ℝ))
   · intro j
-    exact_mod_cast AxisCertificate.B_pos box h j
+    exact_mod_cast AxisCertificate.B_pos box hg j
   · intro j
-    exact AxisCertificate.firstVariation_eq_B_smul_normalizedAAt box h j q offset
+    exact AxisCertificate.firstVariation_eq_B_smul_normalizedAAt box hg j q offset
   · intro axis haxis
-    simpa only [Rat.cast_add] using valid_center_axis_cover box h axis haxis
-  · exact valid_normalizedA_move box h hq offset
+    simpa only [Rat.cast_add] using valid_center_axis_cover box hg axis haxis
+  · exact valid_normalizedA_move box hg hq offset
   · intro j
     rfl
-  · exact AxisCertificate.real_remainder_le_B box h
+  · exact AxisCertificate.real_remainder_le_B box hg
   · exact valid_axisAngle_ratio box h hq offset a
   · intro j i hdirection
-    have hnorm := AxisCertificate.realDirection_norm box h j i
+    have hnorm := AxisCertificate.realDirection_norm box hg j i
     rw [hdirection, norm_zero] at hnorm
     norm_num at hnorm
-  · exact AxisCertificate.realWeight_nonneg box h
+  · exact AxisCertificate.realWeight_nonneg box hg
   · intro j
     refine ⟨0, ?_⟩
     change (0 : ℝ) < ((box.certificate j).weight 0 : ℝ)
     exact_mod_cast h.weight_pos j 0
-  · exact AxisCertificate.real_balance box h
-  · exact valid_contact_support_matrixPose box h hq offset
+  · exact AxisCertificate.real_balance box hg
+  · exact valid_contact_support_matrixPose box hg hq offset
 
 def Box.realInterval (box : Box) : PoseInterval ℝ :=
   PoseInterval.mk box.interval.min.toReal box.interval.max.toReal (by

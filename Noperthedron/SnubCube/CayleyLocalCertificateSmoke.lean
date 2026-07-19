@@ -44,6 +44,37 @@ theorem smoke_excludes_translated_pose :
         normalizedExactPolyhedron.hull :=
   smokeBox.valid_imp_no_translated_rupert_in_interval smoke_valid_kernel
 
+/-- The equality-stratum checker does not pay the generic Euler mismatch
+budget.  Consequently the same geometric witnesses cover a box whose two
+outer-angle radii are 500 times larger. -/
+def wideInterval : CayleyInterval ℚ :=
+  CayleyInterval.mk
+    { θ := 59 / 200, φ := 219 / 200,
+      x := -1 / 200, y := -1 / 200, z := -1 / 200 }
+    { θ := 61 / 200, φ := 221 / 200,
+      x := 1 / 200, y := 1 / 200, z := 1 / 200 }
+    (by rw [CayleyPose.le_iff]; norm_num)
+
+def wideBox : CayleyLocalCertificate.Box where
+  interval := wideInterval
+  certificate := LocalCertificate.smokeBox.certificate
+  -- Reducing `c` by the increase in outer angular radius leaves the checked
+  -- axis-cover target exactly unchanged.
+  c := 9907 / 1000000
+  r := 0
+
+theorem wide_valid_kernel : wideBox.Valid := by
+  decide +kernel
+
+theorem wide_valid_native : wideBox.Valid := by
+  native_decide
+
+theorem wide_excludes_translated_pose :
+    ¬ ∃ p ∈ wideInterval.toReal, ∃ offset : ℝ²,
+      RupertPose (p.matrixPoseWithOffset offset)
+        normalizedExactPolyhedron.hull :=
+  wideBox.valid_imp_no_translated_rupert_in_interval wide_valid_kernel
+
 end Noperthedron.SnubCube.CayleyLocalCertificateSmoke
 
 end
