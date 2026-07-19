@@ -1011,18 +1011,20 @@ theorem valid_normalizedA_move (box : Box) (h : box.Valid)
 /-- A checked contact remains an exact supporting outer vertex throughout
 its outer-view box.  This is the semantic bridge from the rational Taylor
 inequality stored in a row to the support hypothesis of local rigidity. -/
-theorem valid_contact_support_pose (box : Box) (h : box.Valid)
+theorem contact_support_pose (box : Box) (contact : Contact)
+    (hcenter : box.center ∈ fourInterval ℚ)
+    (hdirection : directionUnit contact.direction)
+    (hsupported : contact.supported box)
     {q : Pose ℝ}
     (hq : Pose.near box.center.toReal (box.εα : ℝ) (box.εθ₁ : ℝ)
       (box.εφ₁ : ℝ) (box.εθ₂ : ℝ) (box.εφ₂ : ℝ) q)
-    (j : Fin 4) (i : Fin 3) (k : VertexIndex) :
-    ⟪toR2 ((box.certificate j).contact i).direction,
+    (k : VertexIndex) :
+    ⟪toR2 contact.direction,
         q.outer (normalizedExactVertex k)⟫ ≤
-      ⟪toR2 ((box.certificate j).contact i).direction,
+      ⟪toR2 contact.direction,
         q.outer (normalizedExactVertex
           (symmetryAction box.symmetryIndex
-            ((box.certificate j).contact i).index))⟫ := by
-  let contact := (box.certificate j).contact i
+            contact.index))⟫ := by
   let selected := symmetryAction box.symmetryIndex contact.index
   let qouter := outerAsInnerReal q
   let pbar := (outerAsInner box.center).toReal
@@ -1031,7 +1033,7 @@ theorem valid_contact_support_pose (box : Box) (h : box.Valid)
       (box.εθ₂ : ℝ) (box.εφ₂ : ℝ) := {
     Si := selected
     w := toR2 contact.direction
-    w_unit := direction_norm_eq_one (h.direction_unit j i)
+    w_unit := direction_norm_eq_one hdirection
   }
   have hnear : Pose.near pbar 0 (box.εθ₂ : ℝ) (box.εφ₂ : ℝ)
       (box.εθ₂ : ℝ) (box.εφ₂ : ℝ) qouter := by
@@ -1057,28 +1059,28 @@ theorem valid_contact_support_pose (box : Box) (h : box.Valid)
     exact H_le_Hℚ box.εθ₂_nonneg box.εφ₂_nonneg
       (normalizedExactVertex_norm_le_one k)
       (normalizedApproximation.approx k)
-      (direction_norm_eq_one (h.direction_unit j i)) h.center_in_four
+      (direction_norm_eq_one hdirection) hcenter
   have hchecked :
       ((Hℚ box.center box.εθ₂ box.εφ₂ contact.direction
           (normalizedRationalVertex k) : ℚ) : ℝ) ≤
         ((Gℚ (outerAsInner box.center) 0 box.εθ₂ box.εφ₂
           (normalizedRationalVertex selected) contact.direction : ℚ) : ℝ) := by
-    exact_mod_cast (h.supported j i k).resolve_left (by
+    exact_mod_cast hsupported k |>.resolve_left (by
       simpa [selected] using hk)
   have hG :
       ((Gℚ (outerAsInner box.center) 0 box.εθ₂ box.εφ₂
           (normalizedRationalVertex selected) contact.direction : ℚ) : ℝ) ≤
         _root_.GlobalTheorem.G pbar 0 (box.εθ₂ : ℝ) (box.εφ₂ : ℝ)
           (normalizedExactVertex selected) (toR2 contact.direction) := by
-    simpa [pbar, contact, normalizedApproximation,
+    simpa [pbar, normalizedApproximation,
       normalizedRationalPolyhedron] using
       (Gℚ_le_G (p_ := outerAsInner box.center) (εα := (0 : ℚ))
         (εθ := box.εθ₂) (εφ := box.εφ₂)
         (by norm_num) box.εθ₂_nonneg box.εφ₂_nonneg
         (normalizedExactVertex_norm_le_one selected)
         (normalizedApproximation.approx selected)
-        (direction_norm_eq_one (h.direction_unit j i))
-        (outerAsInner_mem_four h.center_in_four))
+        (direction_norm_eq_one hdirection)
+        (outerAsInner_mem_four hcenter))
   have hinner := _root_.GlobalTheorem.global_theorem_inequality_ii
     pbar qouter (0 : ℝ) (box.εθ₂ : ℝ) (box.εφ₂ : ℝ)
       (box.εθ₂ : ℝ) (box.εφ₂ : ℝ)
@@ -1089,8 +1091,43 @@ theorem valid_contact_support_pose (box : Box) (h : box.Valid)
   dsimp [pc] at houter hinner
   dsimp [qouter] at houter hinner
   rw [outerAsInnerReal_inner_eq_outer] at hinner
-  dsimp [qouter, selected, contact, pbar] at houter hH hchecked hG hinner ⊢
+  dsimp [qouter, selected, pbar] at houter hH hchecked hG hinner ⊢
   exact houter.trans (hH.trans (hchecked.trans (hG.trans hinner)))
+
+theorem contact_support_matrixPose (box : Box) (contact : Contact)
+    (hcenter : box.center ∈ fourInterval ℚ)
+    (hdirection : directionUnit contact.direction)
+    (hsupported : contact.supported box)
+    {q : Pose ℝ}
+    (hq : Pose.near box.center.toReal (box.εα : ℝ) (box.εθ₁ : ℝ)
+      (box.εφ₁ : ℝ) (box.εθ₂ : ℝ) (box.εφ₂ : ℝ) q)
+    (offset : ℝ²) (k : VertexIndex) :
+    ⟪toR2 contact.direction,
+        Noperthedron.BalancedSupport.outerProjectionLinear
+          (q.matrixPoseWithOffset offset) (normalizedExactVertex k)⟫ ≤
+      ⟪toR2 contact.direction,
+        Noperthedron.BalancedSupport.outerProjectionLinear
+          (q.matrixPoseWithOffset offset)
+          (normalizedExactVertex
+            (symmetryAction box.symmetryIndex
+              contact.index))⟫ := by
+  simpa [Noperthedron.BalancedSupport.outerProjectionLinear,
+    Noperthedron.BalancedSupport.matrixPoseWithOffset_outer_rotation_project] using
+    contact_support_pose box contact hcenter hdirection hsupported hq k
+
+theorem valid_contact_support_pose (box : Box) (h : box.Valid)
+    {q : Pose ℝ}
+    (hq : Pose.near box.center.toReal (box.εα : ℝ) (box.εθ₁ : ℝ)
+      (box.εφ₁ : ℝ) (box.εθ₂ : ℝ) (box.εφ₂ : ℝ) q)
+    (j : Fin 4) (i : Fin 3) (k : VertexIndex) :
+    ⟪toR2 ((box.certificate j).contact i).direction,
+        q.outer (normalizedExactVertex k)⟫ ≤
+      ⟪toR2 ((box.certificate j).contact i).direction,
+        q.outer (normalizedExactVertex
+          (symmetryAction box.symmetryIndex
+            ((box.certificate j).contact i).index))⟫ :=
+  contact_support_pose box ((box.certificate j).contact i)
+    h.center_in_four (h.direction_unit j i) (h.supported j i) hq k
 
 theorem valid_contact_support_matrixPose (box : Box) (h : box.Valid)
     {q : Pose ℝ}
@@ -1105,10 +1142,9 @@ theorem valid_contact_support_matrixPose (box : Box) (h : box.Valid)
           (q.matrixPoseWithOffset offset)
           (normalizedExactVertex
             (symmetryAction box.symmetryIndex
-              ((box.certificate j).contact i).index))⟫ := by
-  simpa [Noperthedron.BalancedSupport.outerProjectionLinear,
-    Noperthedron.BalancedSupport.matrixPoseWithOffset_outer_rotation_project] using
-    valid_contact_support_pose box h hq j i k
+              ((box.certificate j).contact i).index))⟫ :=
+  contact_support_matrixPose box ((box.certificate j).contact i)
+    h.center_in_four (h.direction_unit j i) (h.supported j i) hq offset k
 
 private theorem barycentric_mem_convexHull (box : Box) (h : box.Valid) (k : Fin 6) :
     toR3 (box.octahedronTarget k) ∈

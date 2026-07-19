@@ -63,9 +63,18 @@ noncomputable def cayleyMatrix (x y z : ℝ) : Matrix (Fin 3) (Fin 3) ℝ :=
 theorem cayleyMatrix_eq_div_numerator (x y z : ℝ) :
     cayleyMatrix x y z = fun i j =>
       cayleyNumeratorMatrix x y z i j / cayleyDenom x y z := by
-  ext i j
+  apply Matrix.ext
+  intro i j
   fin_cases i <;> fin_cases j <;>
     simp [cayleyMatrix, cayleyNumeratorMatrix, pow_two]
+
+theorem cayleyNumeratorMatrix_eq_denom_smul (x y z : ℝ) :
+    cayleyNumeratorMatrix x y z =
+      cayleyDenom x y z • cayleyMatrix x y z := by
+  rw [cayleyMatrix_eq_div_numerator]
+  ext i j
+  simp only [smul_eq_mul, Matrix.smul_apply]
+  field_simp [cayleyDenom_ne]
 
 @[simp]
 theorem cayleyMatrix_zero : cayleyMatrix 0 0 0 = 1 := by
@@ -92,6 +101,25 @@ theorem cayleyMatrix_mem_SO3 (x y z : ℝ) :
 /-- The Cayley matrix bundled as an element of `SO(3)`. -/
 noncomputable def cayleySO3 (x y z : ℝ) : SO3 :=
   ⟨cayleyMatrix x y z, cayleyMatrix_mem_SO3 x y z⟩
+
+theorem norm_cayleyNumeratorMatrix_apply_le (x y z : ℝ) (v : ℝ³) :
+    ‖(cayleyNumeratorMatrix x y z).toEuclideanLin v‖ ≤
+      cayleyDenom x y z * ‖v‖ := by
+  rw [cayleyNumeratorMatrix_eq_denom_smul]
+  have happ :
+      (cayleyDenom x y z • cayleyMatrix x y z).toEuclideanLin v =
+        cayleyDenom x y z • (cayleyMatrix x y z).toEuclideanLin v := by
+    ext i
+    simp [Matrix.toLpLin_apply, Matrix.mulVec, dotProduct,
+      Fin.sum_univ_three, mul_add]
+  rw [happ, norm_smul, Real.norm_eq_abs,
+    abs_of_pos (cayleyDenom_pos x y z)]
+  apply mul_le_mul_of_nonneg_left _ (cayleyDenom_pos x y z).le
+  let u : ℝ³ ≃ₗᵢ[ℝ] ℝ³ :=
+    Bounding.OrthogonalGroup.toLinearIsometryEquiv
+      ⟨cayleyMatrix x y z, (cayleyMatrix_mem_SO3 x y z).1⟩
+  have hu : u v = (cayleyMatrix x y z).toEuclideanLin v := rfl
+  rw [← hu, u.norm_map]
 
 /-- The Euclidean vector represented by the three scalar coordinates. -/
 noncomputable def cayleyVector (x y z : ℝ) : ℝ³ := !₂[x, y, z]

@@ -90,9 +90,9 @@ private theorem abs_le_endpointAbsBound {lo hi : ℚ} {x : ℝ}
     have hmax : |hi| ≤ endpointAbsBound lo hi := le_max_right _ _
     exact hx.2.trans (by exact_mod_cast hhi.trans hmax)
 
-theorem Box.radius_le (box : Box) (h : box.Valid) {p : CayleyPose ℝ}
+theorem Box.sq_sum_le_radiusSq (box : Box) {p : CayleyPose ℝ}
     (hp : p ∈ box.interval.toReal) :
-    Real.sqrt (p.x ^ 2 + p.y ^ 2 + p.z ^ 2) ≤ (box.c : ℝ) := by
+    p.x ^ 2 + p.y ^ 2 + p.z ^ 2 ≤ (box.radiusSq : ℝ) := by
   have hmem := CayleyInterval.mem_toReal_iff.mp hp
   have hx : |p.x| ≤
       (endpointAbsBound box.interval.min.x box.interval.max.x : ℝ) := by
@@ -121,15 +121,17 @@ theorem Box.radius_le (box : Box) (h : box.Valid) {p : CayleyPose ℝ}
         (endpointAbsBound box.interval.min.z box.interval.max.z : ℝ) := by
       exact_mod_cast (abs_nonneg box.interval.min.z |>.trans (le_max_left _ _))
     simpa only [sq_abs] using (sq_le_sq₀ (abs_nonneg p.z) hb).2 hz
+  simp only [Box.radiusSq]
+  push_cast
+  linarith
+
+theorem Box.radius_le (box : Box) (h : box.Valid) {p : CayleyPose ℝ}
+    (hp : p ∈ box.interval.toReal) :
+    Real.sqrt (p.x ^ 2 + p.y ^ 2 + p.z ^ 2) ≤ (box.c : ℝ) := by
   apply Real.sqrt_le_iff.mpr
   constructor
   · exact_mod_cast h.euler.c_nonneg
-  · have hradius : p.x ^ 2 + p.y ^ 2 + p.z ^ 2 ≤
-        (box.radiusSq : ℝ) := by
-      simp only [Box.radiusSq]
-      push_cast
-      linarith
-    exact hradius.trans (by exact_mod_cast h.radius)
+  · exact (box.sq_sum_le_radiusSq hp).trans (by exact_mod_cast h.radius)
 
 theorem Box.outerPose_mem_eulerRealInterval (box : Box) {p : CayleyPose ℝ}
     (hp : p ∈ box.interval.toReal) :

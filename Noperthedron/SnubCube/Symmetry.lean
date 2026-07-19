@@ -150,6 +150,10 @@ def symmetry (g : VertexIndex) : SO3 :=
   rw [h]
   simp
 
+@[simp] theorem symmetryAction_zero (i : VertexIndex) :
+    symmetryAction (VertexIndex.ofFin24 0) i = i := by
+  decide +kernel +revert
+
 theorem symmetry_apply_exactVertex (g i : VertexIndex) :
     (symmetry g).val.toEuclideanLin (exactVertex i) =
       exactVertex (symmetryAction g i) := by

@@ -108,6 +108,21 @@ VERTICES_Q = normalized_vertices_q()
 VERTICES = np.asarray([[float(x) for x in v] for v in VERTICES_Q])
 
 
+def normalized_vertices_exact_float():
+    tribonacci = max(x.real for x in np.roots([1, -1, -1, -1])
+                     if abs(x.imag) < 1e-12)
+    base = (tribonacci, 1.0, tribonacci**2)
+    out = []
+    for p, perm in enumerate(PERMUTATIONS):
+        signs_table = ODD_SIGNS if PERMUTATION_ODD[p] else EVEN_SIGNS
+        for signs in signs_table:
+            out.append([signs[c] * base[perm[c]] / 5 for c in range(3)])
+    return np.asarray(out)
+
+
+VERTICES_EXACT = normalized_vertices_exact_float()
+
+
 def vertex_matrix_int(index: int):
     p, s = divmod(index, 4)
     signs = (ODD_SIGNS if PERMUTATION_ODD[p] else EVEN_SIGNS)[s]
@@ -427,6 +442,130 @@ def cayley_prune_box(center, half_widths):
         "advantage_ball": balls[g],
         "lower_bound": balls[g][0] - balls[g][1],
     }
+
+
+def cayley_denom_ball(x, y, z):
+    return ball_add(ball_const(1), ball_sum3(
+        [ball_mul(x, x), ball_mul(y, y), ball_mul(z, z)]))
+
+
+def cayley_global_contact_ball(theta, phi, variables, direction,
+                               inner_index, outer_index):
+    """Polynomial numerator for one balanced Cayley displacement contact."""
+    numerator = cayley_numerator_balls(*variables)
+    denom = cayley_denom_ball(*variables)
+    inner = VERTICES_Q[inner_index]
+    outer = VERTICES_Q[outer_index]
+    vector = []
+    for i in range(3):
+        ni = ball_sum3([ball_scale(inner[j], numerator[i][j])
+                        for j in range(3)])
+        vector.append(ball_sub(ni, ball_scale(outer[i], denom)))
+    lift = matvec(transpose(frame_q(theta, phi)[:2]), direction)
+    return ball_sum3([ball_scale(lift[i], vector[i]) for i in range(3)])
+
+
+def cayley_global_smoke(center, half_widths, direction_count: int,
+                        direction_denominator: int):
+    """Search the proposed quadratic Cayley global-certificate checker."""
+    theta, phi, x, y, z = center
+    etheta, ephi, ex, ey, ez = half_widths
+    variables = [(x, ex), (y, ey), (z, ez)]
+    pose = [theta, phi, theta, phi, Q(0)]
+    eps = [etheta, ephi, etheta, ephi, Q(0)]
+    rows = []
+    for k in range(direction_count):
+        angle = -math.pi + (2*math.pi*(k + 0.37))/direction_count
+        direction = direction_q(angle, direction_denominator)
+        frame = np.asarray([[float(a) for a in row]
+                            for row in frame_q(theta, phi)[:2]])
+        scores = VERTICES @ frame.T @ np.asarray(
+            [float(a) for a in direction])
+        outer_candidates = np.argsort(scores)[::-1][:3]
+        outer_index = next((int(q) for q in outer_candidates
+                            if local_supports(pose, eps, direction, int(q))),
+                           None)
+        if outer_index is None:
+            continue
+        balls = [cayley_global_contact_ball(
+            theta, phi, variables, direction, p, outer_index)
+            for p in range(24)]
+        inner_index = max(range(24), key=lambda p: balls[p][0]-balls[p][1])
+        rows.append({"angle": angle, "direction": direction,
+                     "inner_index": inner_index, "outer_index": outer_index,
+                     "ball": balls[inner_index]})
+    d_bound = 1 + sum(max(abs(c-e), abs(c+e))**2
+                      for c, e in zip((x, y, z), (ex, ey, ez)))
+    view_error = etheta + ephi + KAPPA
+    contact_error = 2*d_bound*(KAPPA + (1+KAPPA)*view_error)
+    best = None
+    for indices in itertools.combinations(range(len(rows)), 3):
+        chosen = [rows[i] for i in indices]
+        weights = determinant_weights([row["direction"] for row in chosen])
+        if min(weights) <= 0:
+            continue
+        total = ball_const(0)
+        for weight, row in zip(weights, chosen):
+            total = ball_add(total, ball_scale(weight, row["ball"]))
+        error = sum(weights, Q(0))*contact_error
+        lower = total[0]-total[1]-error
+        normalized = lower/sum(weights, Q(0))
+        if best is None or normalized > best[0]:
+            best = (normalized, lower, total, error, weights, chosen)
+    if best is None or best[1] <= 0:
+        raise RuntimeError("no positive Cayley global certificate")
+    normalized, lower, total, error, weights, chosen = best
+    return {
+        "center": center,
+        "half_widths": half_widths,
+        "contacts": [{"inner_index": row["inner_index"],
+                      "outer_index": row["outer_index"],
+                      "direction": row["direction"]}
+                     for row in chosen],
+        "diagnostics": {"supported_directions": len(rows),
+                        "displacement_ball": total,
+                        "error": error, "lower_bound": lower,
+                        "normalized_lower_bound": normalized,
+                        "d_bound": d_bound,
+                        "contact_error": contact_error},
+    }
+
+
+def validate_cayley_global_certificate(payload, samples: int, seed: int):
+    """Monte Carlo audit of the analytic error budget used by the prototype."""
+    rng = random.Random(seed)
+    center = payload["center"]
+    widths = payload["half_widths"]
+    contacts = payload["contacts"]
+    weights = determinant_weights([row["direction"] for row in contacts])
+    ball = payload["diagnostics"]["displacement_ball"]
+    error = payload["diagnostics"]["error"]
+    worst_excess = -math.inf
+    minimum_numerator = math.inf
+    for _ in range(samples):
+        theta, phi, x, y, z = [
+            float(c) + rng.uniform(-float(e), float(e))
+            for c, e in zip(center, widths)]
+        d = 1 + x*x + y*y + z*z
+        numerator = np.array([
+            [1+x*x-y*y-z*z, 2*(x*y-z), 2*(x*z+y)],
+            [2*(x*y+z), 1-x*x+y*y-z*z, 2*(y*z-x)],
+            [2*(x*z-y), 2*(y*z+x), 1-x*x-y*y+z*z]])
+        m = np.array([[-math.sin(theta), math.cos(theta), 0.0],
+                      [-math.cos(theta)*math.cos(phi),
+                       -math.sin(theta)*math.cos(phi), math.sin(phi)]])
+        total = 0.0
+        for weight, row in zip(weights, contacts):
+            direction = np.asarray([float(q) for q in row["direction"]])
+            inner = VERTICES_EXACT[row["inner_index"]]
+            outer = VERTICES_EXACT[row["outer_index"]]
+            total += float(weight) * direction @ m @ (
+                numerator @ inner - d*outer)
+        excess = abs(total-float(ball[0]))-float(ball[1])-float(error)
+        worst_excess = max(worst_excess, excess)
+        minimum_numerator = min(minimum_numerator, total)
+    return {"samples": samples, "worst_enclosure_excess": worst_excess,
+            "minimum_exact_numerator": minimum_numerator}
 
 
 def prune_sample(half_width: Q, samples: int, denominator: int, seed: int):
@@ -752,6 +891,18 @@ def main():
     cayley_prune_parser.add_argument("--center", type=str, default="0,0,1")
     cayley_prune_parser.add_argument(
         "--half-widths", type=str, default="1/100,1/100,1/100")
+    cayley_global_parser = sub.add_parser("cayley-global-smoke")
+    cayley_global_parser.add_argument(
+        "--center", default="3/10,11/10,1/5,1/10,0",
+        help="theta,phi,x,y,z as comma-separated rationals")
+    cayley_global_parser.add_argument(
+        "--half-widths", default="1/200,1/200,1/200,1/200,1/200",
+        help="five comma-separated rational half-widths")
+    cayley_global_parser.add_argument("--directions", type=int, default=72)
+    cayley_global_parser.add_argument("--direction-denominator", type=int,
+                                      default=1000)
+    cayley_global_parser.add_argument("--audit-samples", type=int, default=10000)
+    cayley_global_parser.add_argument("--seed", type=int, default=1)
     args = parser.parse_args()
     if args.command == "local-smoke":
         result = local_smoke(Q(args.theta), Q(args.phi),
@@ -779,6 +930,17 @@ def main():
         center = [Q(x) for x in args.center.split(",")]
         half_widths = [Q(x) for x in args.half_widths.split(",")]
         result = cayley_prune_box(center, half_widths)
+        print(json.dumps(qjson(result), indent=2))
+    elif args.command == "cayley-global-smoke":
+        center = [Q(x) for x in args.center.split(",")]
+        half_widths = [Q(x) for x in args.half_widths.split(",")]
+        if len(center) != 5 or len(half_widths) != 5:
+            parser.error("center and half-widths must each have five entries")
+        result = cayley_global_smoke(
+            center, half_widths, args.directions,
+            args.direction_denominator)
+        result["audit"] = validate_cayley_global_certificate(
+            result, args.audit_samples, args.seed)
         print(json.dumps(qjson(result), indent=2))
 
 

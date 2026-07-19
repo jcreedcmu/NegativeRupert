@@ -50,7 +50,7 @@ def advantagePolynomial (g : VertexIndex) : Polynomial :=
     RatPolynomial.scale (symmetryDifferenceQ g j i)
       (numeratorPolynomial i j)
 
-private theorem eval_numeratorPolynomial (x y z : ℝ) (i j : Fin 3) :
+theorem eval_numeratorPolynomial (x y z : ℝ) (i j : Fin 3) :
     RatPolynomial.evalReal ![x, y, z] (numeratorPolynomial i j) =
       cayleyNumeratorMatrix x y z i j := by
   fin_cases i <;> fin_cases j <;> try rfl

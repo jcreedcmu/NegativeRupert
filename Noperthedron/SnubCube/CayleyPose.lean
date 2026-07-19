@@ -110,6 +110,28 @@ theorem matrixPoseWithOffset_relativeRotation
     matrixPoseWithOffset_outerRot_val, matrixPoseWithOffset_innerRot_val]
   rw [← Matrix.mul_assoc, horth, Matrix.one_mul]
 
+theorem matrixPoseWithOffset_inner_rotation_project
+    (p : CayleyPose ℝ) (offset : ℝ²) (v : ℝ³) :
+    proj_xyL ((p.matrixPoseWithOffset offset).innerRot.val.toEuclideanLin v) =
+      rotM p.θ p.φ ((cayleyMatrix p.x p.y p.z).toEuclideanLin v) := by
+  have hrot := congrArg (fun f : ℝ³ →L[ℝ] ℝ³ =>
+      f ((cayleyMatrix p.x p.y p.z).toEuclideanLin v))
+    (rotRM_eq_rotRM_mat p.θ p.φ 0)
+  rw [← Pose.proj_rm_eq_m]
+  apply congrArg proj_xyL
+  simpa [matrixPoseWithOffset_innerRot_val, Matrix.toLpLin_apply,
+    Matrix.mulVec_mulVec] using hrot.symm
+
+theorem matrixPoseWithOffset_outer_rotation_project
+    (p : CayleyPose ℝ) (offset : ℝ²) (v : ℝ³) :
+    proj_xyL ((p.matrixPoseWithOffset offset).outerRot.val.toEuclideanLin v) =
+      rotM p.θ p.φ v := by
+  have hrot := congrArg (fun f : ℝ³ →L[ℝ] ℝ³ => f v)
+    (rotRM_eq_rotRM_mat p.θ p.φ 0)
+  rw [← Pose.proj_rm_eq_m]
+  apply congrArg proj_xyL
+  simpa [matrixPoseWithOffset_outerRot_val] using hrot.symm
+
 end CayleyPose
 
 /-- The inner rotation of any matrix pose is its outer rotation followed by
