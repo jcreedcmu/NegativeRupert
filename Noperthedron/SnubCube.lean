@@ -9,6 +9,7 @@ public import Noperthedron.SnubCube.LocalCertificateSmoke
 public import Noperthedron.SnubCube.LocalRigidity
 public import Noperthedron.SnubCube.Normalized
 public import Noperthedron.SnubCube.Symmetry
+public import Noperthedron.SnubCube.Tightening
 public import Noperthedron.SnubCube.Tribonacci
 public import Noperthedron.SnubCube.Vertices
 
