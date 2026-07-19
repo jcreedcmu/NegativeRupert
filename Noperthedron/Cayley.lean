@@ -181,6 +181,22 @@ theorem AxisAngle.remainder_eq_cross3_cross3 {Q : ℝ³ →L[ℝ] ℝ³}
     a.remainder v = cross3 a.axis (cross3 a.axis v) := by
   rw [← a.first_first, a.first_eq_cross3, a.first_eq_cross3]
 
+/-- Linear trace recovers the cosine of any axis-angle presentation. -/
+theorem AxisAngle.linear_trace_eq {Q : ℝ³ →L[ℝ] ℝ³}
+    (a : AxisAngle Q) :
+    LinearMap.trace ℝ ℝ³ Q = 1 + 2 * Real.cos a.angle := by
+  calc
+    LinearMap.trace ℝ ℝ³ Q = LinearMap.trace ℝ ℝ³
+        (a.frame.toLinearIsometry.toContinuousLinearMap ∘L RzL a.angle ∘L
+          a.frame.symm.toLinearIsometry.toContinuousLinearMap) := by
+      exact congrArg
+        (fun f : ℝ³ →L[ℝ] ℝ³ => LinearMap.trace ℝ ℝ³ f)
+        a.rotation_eq
+    _ = LinearMap.trace ℝ ℝ³ (RzL a.angle) := by
+      exact LinearMap.trace_conj'
+        (RzL a.angle : ℝ³ →ₗ[ℝ] ℝ³) a.frame.toLinearEquiv
+    _ = 1 + 2 * Real.cos a.angle := Bounding.tr_RzL
+
 /-- Matrix trace recovers the cosine of an axis-angle presentation. -/
 theorem AxisAngle.matrix_trace_eq
     {A : Matrix (Fin 3) (Fin 3) ℝ}
@@ -190,14 +206,9 @@ theorem AxisAngle.matrix_trace_eq
     Matrix.trace A = LinearMap.trace ℝ ℝ³ A.toEuclideanLin := by
       simp only [Matrix.toLpLin_eq_toLin, Matrix.trace_toLin_eq]
     _ = LinearMap.trace ℝ ℝ³
-        (a.frame.toLinearIsometry.toContinuousLinearMap ∘L RzL a.angle ∘L
-          a.frame.symm.toLinearIsometry.toContinuousLinearMap) := by
-      rw [← a.rotation_eq]
+        A.toEuclideanLin.toContinuousLinearMap := by
       congr 1
-    _ = LinearMap.trace ℝ ℝ³ (RzL a.angle) := by
-      exact LinearMap.trace_conj'
-        (RzL a.angle : ℝ³ →ₗ[ℝ] ℝ³) a.frame.toLinearEquiv
-    _ = 1 + 2 * Real.cos a.angle := Bounding.tr_RzL
+    _ = 1 + 2 * Real.cos a.angle := a.linear_trace_eq
 
 end BalancedSupport
 
@@ -262,6 +273,73 @@ theorem exists_cayleyMatrix_of_trace_nonneg
         (c * a.axis 2)).toEuclideanLin v - v = A.toEuclideanLin v - v :=
     hcay.trans hrot.symm
   exact (sub_left_inj.mp hsub).symm
+
+/-- For a Cayley rotation, the finite bend/first coefficient ratio is exactly
+the Euclidean norm of the Cayley vector.  This removes all relative-rotation
+Taylor error from local certificates. -/
+public theorem BalancedSupport.AxisAngle.cayley_ratio_eq_of_rotation_eq
+    {Q : ℝ³ →L[ℝ] ℝ³} (a : BalancedSupport.AxisAngle Q)
+    (x y z : ℝ)
+    (hQ : Q = (cayleyMatrix x y z).toEuclideanLin.toContinuousLinearMap) :
+    1 - Real.cos a.angle =
+      |Real.sin a.angle| * Real.sqrt (x ^ 2 + y ^ 2 + z ^ 2) := by
+  let s := x ^ 2 + y ^ 2 + z ^ 2
+  have hs : 0 ≤ s := by
+    dsimp only [s]
+    positivity
+  have hdenom : cayleyDenom x y z = 1 + s := by
+    dsimp only [s]
+    unfold cayleyDenom
+    ring
+  have hdenomPos : 0 < cayleyDenom x y z := cayleyDenom_pos x y z
+  have hcos : Real.cos a.angle = (1 - s) / cayleyDenom x y z := by
+    have htrace : Matrix.trace (cayleyMatrix x y z) =
+        1 + 2 * Real.cos a.angle := by
+      calc
+        Matrix.trace (cayleyMatrix x y z) = LinearMap.trace ℝ ℝ³
+            (cayleyMatrix x y z).toEuclideanLin := by
+          simp only [Matrix.toLpLin_eq_toLin, Matrix.trace_toLin_eq]
+        _ = LinearMap.trace ℝ ℝ³
+            (cayleyMatrix x y z).toEuclideanLin.toContinuousLinearMap := by
+          congr 1
+        _ = LinearMap.trace ℝ ℝ³ Q := by rw [hQ]
+        _ = 1 + 2 * Real.cos a.angle := a.linear_trace_eq
+    rw [trace_cayleyMatrix] at htrace
+    rw [show x ^ 2 + y ^ 2 + z ^ 2 = s by rfl] at htrace
+    field_simp [cayleyDenom_ne] at htrace ⊢
+    rw [hdenom] at htrace ⊢
+    nlinarith
+  have hsinSq :
+      Real.sin a.angle ^ 2 * cayleyDenom x y z ^ 2 = 4 * s := by
+    have hcircle := Real.sin_sq_add_cos_sq a.angle
+    rw [hcos] at hcircle
+    field_simp [cayleyDenom_ne] at hcircle
+    rw [hdenom] at hcircle ⊢
+    nlinarith
+  have hsqrtSq : Real.sqrt s ^ 2 = s := Real.sq_sqrt hs
+  have hsinAbs :
+      |Real.sin a.angle| =
+        2 * Real.sqrt s / cayleyDenom x y z := by
+    have hrhs : 0 ≤ 2 * Real.sqrt s / cayleyDenom x y z :=
+      div_nonneg (mul_nonneg (by norm_num) (Real.sqrt_nonneg _))
+        hdenomPos.le
+    rw [← sq_eq_sq₀ (abs_nonneg _) hrhs, sq_abs, div_pow, mul_pow,
+      hsqrtSq]
+    field_simp [cayleyDenom_ne]
+    nlinarith
+  change 1 - Real.cos a.angle = |Real.sin a.angle| * Real.sqrt s
+  rw [hcos, hsinAbs]
+  field_simp [cayleyDenom_ne]
+  rw [hsqrtSq, hdenom]
+  ring
+
+public theorem BalancedSupport.AxisAngle.cayley_ratio_eq
+    (x y z : ℝ)
+    (a : BalancedSupport.AxisAngle
+      (cayleyMatrix x y z).toEuclideanLin.toContinuousLinearMap) :
+    1 - Real.cos a.angle =
+      |Real.sin a.angle| * Real.sqrt (x ^ 2 + y ^ 2 + z ^ 2) :=
+  a.cayley_ratio_eq_of_rotation_eq x y z rfl
 
 end Noperthedron
 

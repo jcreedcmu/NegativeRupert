@@ -139,6 +139,17 @@ theorem symmetryMatrix_mem_SO3 (g : VertexIndex) :
 def symmetry (g : VertexIndex) : SO3 :=
   ⟨symmetryMatrix g, symmetryMatrix_mem_SO3 g⟩
 
+/-- Index zero is the identity rotation. -/
+@[simp] theorem symmetry_zero : symmetry (VertexIndex.ofFin24 0) = 1 := by
+  apply Subtype.ext
+  change (symmetryMatrixInt (VertexIndex.ofFin24 0)).map
+      (Int.castRingHom ℝ) = 1
+  have h : symmetryMatrixInt (VertexIndex.ofFin24 0) =
+      (1 : Matrix (Fin 3) (Fin 3) ℤ) := by
+    decide +kernel
+  rw [h]
+  simp
+
 theorem symmetry_apply_exactVertex (g i : VertexIndex) :
     (symmetry g).val.toEuclideanLin (exactVertex i) =
       exactVertex (symmetryAction g i) := by
