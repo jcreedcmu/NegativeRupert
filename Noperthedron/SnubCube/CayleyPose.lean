@@ -165,9 +165,10 @@ theorem exists_cayley_translated_pose (p : MatrixPose) :
     ∃ gi go : VertexIndex, ∃ δ : ℝ, ∃ q : CayleyPose ℝ, ∃ offset : ℝ²,
       q ∈ CayleyPose.rootInterval ℝ ∧
       (q.matrixPoseWithOffset offset).InSnubFundamentalDomain ∧
+      (q.matrixPoseWithOffset offset).InOuterViewChamber ∧
       q.matrixPoseWithOffset offset =
         (p.rightSnubSymmetries gi go).rotateBy δ := by
-  obtain ⟨gi, go, δ, euler, offset, heuler, heq, hfund⟩ :=
+  obtain ⟨gi, go, δ, euler, offset, heuler, heq, hfund, hchamber⟩ :=
     exists_fundamental_translated_pose p
   obtain ⟨x, hx, y, hy, z, hz, _hradius, hrelative⟩ :=
     exists_bounded_cayley_of_inFundamentalDomain
@@ -202,9 +203,11 @@ theorem exists_cayley_translated_pose (p : MatrixPose) :
     · exact hinner
     · rfl
     · rfl
-  refine ⟨gi, go, δ, q, offset, hq, ?_, hmatrix.trans heq⟩
-  rw [hmatrix]
-  exact hfund
+  refine ⟨gi, go, δ, q, offset, hq, ?_, ?_, hmatrix.trans heq⟩
+  · rw [hmatrix]
+    exact hfund
+  · rw [hmatrix]
+    exact hchamber
 
 /-- It suffices to exclude translated Cayley poses in the bounded root. -/
 theorem no_matrixPose_of_no_cayley_translated_pose
@@ -215,7 +218,7 @@ theorem no_matrixPose_of_no_cayley_translated_pose
     ¬ ∃ p : MatrixPose,
       RupertPose p normalizedExactPolyhedron.hull := by
   rintro ⟨p, hp⟩
-  obtain ⟨gi, go, δ, q, offset, hq, hfund, heq⟩ :=
+  obtain ⟨gi, go, δ, q, offset, hq, hfund, -, heq⟩ :=
     exists_cayley_translated_pose p
   have hsym : RupertPose (p.rightSnubSymmetries gi go)
       normalizedExactPolyhedron.hull :=
@@ -225,6 +228,28 @@ theorem no_matrixPose_of_no_cayley_translated_pose
     (MatrixPose.RupertPose_rotateBy_iff
       (p.rightSnubSymmetries gi go) δ normalizedExactPolyhedron.hull).mpr hsym
   exact h ⟨q, hq, offset, hfund, heq.symm ▸ hrot⟩
+
+/-- The strengthened normalization bridge exposes the outer projective
+chamber used by view-simplex certificates. -/
+theorem no_matrixPose_of_no_chamber_cayley_translated_pose
+    (h : ¬ ∃ q ∈ CayleyPose.rootInterval ℝ, ∃ offset : ℝ²,
+      (q.matrixPoseWithOffset offset).InSnubFundamentalDomain ∧
+      (q.matrixPoseWithOffset offset).InOuterViewChamber ∧
+      RupertPose (q.matrixPoseWithOffset offset)
+        normalizedExactPolyhedron.hull) :
+    ¬ ∃ p : MatrixPose,
+      RupertPose p normalizedExactPolyhedron.hull := by
+  rintro ⟨p, hp⟩
+  obtain ⟨gi, go, δ, q, offset, hq, hfund, hchamber, heq⟩ :=
+    exists_cayley_translated_pose p
+  have hsym : RupertPose (p.rightSnubSymmetries gi go)
+      normalizedExactPolyhedron.hull :=
+    (RupertPose_rightSnubSymmetries_iff p gi go).mpr hp
+  have hrot : RupertPose ((p.rightSnubSymmetries gi go).rotateBy δ)
+      normalizedExactPolyhedron.hull :=
+    (MatrixPose.RupertPose_rotateBy_iff
+      (p.rightSnubSymmetries gi go) δ normalizedExactPolyhedron.hull).mpr hsym
+  exact h ⟨q, hq, offset, hfund, hchamber, heq.symm ▸ hrot⟩
 
 end Noperthedron.SnubCube
 

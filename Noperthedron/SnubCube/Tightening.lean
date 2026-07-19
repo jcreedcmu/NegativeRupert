@@ -154,6 +154,82 @@ theorem exists_symmetry_vecMul_nonneg (v : Fin 3 → ℝ) :
               (And.intro (neg_nonneg.mpr (le_of_not_ge hz))
                 (neg_nonneg.mpr (le_of_not_ge hy)))⟩
 
+/-- A projective fundamental chamber for viewing directions.  The first
+coordinate is chosen maximal after moving the vector into the positive
+octant. -/
+def ViewInChamber (v : Fin 3 → ℝ) : Prop :=
+  0 ≤ v 0 ∧ 0 ≤ v 1 ∧ 0 ≤ v 2 ∧ v 1 ≤ v 0 ∧ v 2 ≤ v 0
+
+private theorem symmetryMatrix_twelve :
+    symmetryMatrix (VertexIndex.ofFin24 12) =
+      !![(0 : ℝ), 1, 0; 0, 0, 1; 1, 0, 0] := by
+  rw [symmetryMatrix]
+  have h : symmetryMatrixInt (VertexIndex.ofFin24 12) =
+      !![(0 : ℤ), 1, 0; 0, 0, 1; 1, 0, 0] := by decide +kernel
+  rw [h]
+  ext i j
+  fin_cases i <;> fin_cases j <;> norm_num
+
+private theorem symmetryMatrix_sixteen :
+    symmetryMatrix (VertexIndex.ofFin24 16) =
+      !![(0 : ℝ), 0, 1; 1, 0, 0; 0, 1, 0] := by
+  rw [symmetryMatrix]
+  have h : symmetryMatrixInt (VertexIndex.ofFin24 16) =
+      !![(0 : ℤ), 0, 1; 1, 0, 0; 0, 1, 0] := by decide +kernel
+  rw [h]
+  ext i j
+  fin_cases i <;> fin_cases j <;> norm_num
+
+private theorem vecMul_symmetry_twelve (v : Fin 3 → ℝ) :
+    v ᵥ* symmetryMatrix (VertexIndex.ofFin24 12) = ![v 2, v 0, v 1] := by
+  rw [symmetryMatrix_twelve]
+  ext i
+  fin_cases i <;> simp [Matrix.vecMul, dotProduct, Fin.sum_univ_three]
+
+private theorem vecMul_symmetry_sixteen (v : Fin 3 → ℝ) :
+    v ᵥ* symmetryMatrix (VertexIndex.ofFin24 16) = ![v 1, v 2, v 0] := by
+  rw [symmetryMatrix_sixteen]
+  ext i
+  fin_cases i <;> simp [Matrix.vecMul, dotProduct, Fin.sum_univ_three]
+
+/-- One of the 24 rotations moves every row vector into the positive
+projective chamber whose first coordinate is maximal. -/
+theorem exists_symmetry_vecMul_chamber (v : Fin 3 → ℝ) :
+    ∃ g : VertexIndex, ViewInChamber (v ᵥ* symmetryMatrix g) := by
+  obtain ⟨g, h0, h1, h2⟩ := exists_symmetry_vecMul_nonneg v
+  let w := v ᵥ* symmetryMatrix g
+  by_cases h10 : w 1 ≤ w 0
+  · by_cases h20 : w 2 ≤ w 0
+    · exact ⟨g, h0, h1, h2, h10, h20⟩
+    · let h := VertexIndex.ofFin24 12
+      refine ⟨symmetryAction g h, ?_⟩
+      have heq : v ᵥ* symmetryMatrix (symmetryAction g h) =
+          ![w 2, w 0, w 1] := by
+        rw [← symmetryMatrix_mul_symmetryMatrix,
+          ← Matrix.vecMul_vecMul, vecMul_symmetry_twelve]
+      rw [heq]
+      exact ⟨h2, h0, h1, le_of_not_ge h20,
+        h10.trans (le_of_not_ge h20)⟩
+  · by_cases h21 : w 2 ≤ w 1
+    · let h := VertexIndex.ofFin24 16
+      refine ⟨symmetryAction g h, ?_⟩
+      have heq : v ᵥ* symmetryMatrix (symmetryAction g h) =
+          ![w 1, w 2, w 0] := by
+        rw [← symmetryMatrix_mul_symmetryMatrix,
+          ← Matrix.vecMul_vecMul, vecMul_symmetry_sixteen]
+      rw [heq]
+      exact ⟨h1, h2, h0, h21, le_of_not_ge h10⟩
+    · let h := VertexIndex.ofFin24 12
+      refine ⟨symmetryAction g h, ?_⟩
+      have heq : v ᵥ* symmetryMatrix (symmetryAction g h) =
+          ![w 2, w 0, w 1] := by
+        rw [← symmetryMatrix_mul_symmetryMatrix,
+          ← Matrix.vecMul_vecMul, vecMul_symmetry_twelve]
+      rw [heq]
+      exact ⟨h2, h0, h1,
+        (le_of_not_ge h10).trans (le_of_not_ge h21),
+        le_of_not_ge h21⟩
+
 /-- The checked vertex action of every symmetry is a permutation. -/
 theorem symmetryAction_surjective (g : VertexIndex) :
     Function.Surjective (symmetryAction g) := by
@@ -462,14 +538,16 @@ theorem SO3_to_bounded_rotRM_params
   rw [hα']
 
 /-- Right composition by one exact snub-cube symmetry puts an arbitrary
-rotation into positive-octant `rotRM` coordinates. -/
-theorem SO3_to_symmetry_reduced_rotRM_params (M : SO3) :
+rotation into `rotRM` coordinates whose viewing row lies in the positive
+projective chamber. -/
+theorem SO3_to_chamber_reduced_rotRM_params (M : SO3) :
     ∃ g : VertexIndex, ∃ θ φ α : ℝ,
       θ ∈ Set.Icc 0 (π / 2) ∧ φ ∈ Set.Icc 0 (π / 2) ∧
       α ∈ Set.Ioc (-π) π ∧
+      ViewInChamber (fun j => (M.val * symmetryMatrix g) 2 j) ∧
       M.val * symmetryMatrix g = rotRM_mat θ φ α := by
-  obtain ⟨g, hg0, hg1, hg2⟩ :=
-    exists_symmetry_vecMul_nonneg (fun j => M.val 2 j)
+  obtain ⟨g, hchamber⟩ :=
+    exists_symmetry_vecMul_chamber (fun j => M.val 2 j)
   have hM : M.val * symmetryMatrix g ∈
       Matrix.specialOrthogonalGroup (Fin 3) ℝ :=
     Submonoid.mul_mem _ M.property (symmetryMatrix_mem_SO3 g)
@@ -479,8 +557,20 @@ theorem SO3_to_symmetry_reduced_rotRM_params (M : SO3) :
     simp [Matrix.mul_apply, Matrix.vecMul, dotProduct]
   obtain ⟨θ, φ, α, hθ, hφ, hα, hform⟩ :=
     SO3_to_positive_rotRM_params (M.val * symmetryMatrix g) hM
-      (by simpa [hrow] using hg0) (by simpa [hrow] using hg1)
-      (by simpa [hrow] using hg2)
+      (by simpa [hrow] using hchamber.1)
+      (by simpa [hrow] using hchamber.2.1)
+      (by simpa [hrow] using hchamber.2.2.1)
+  refine ⟨g, θ, φ, α, hθ, hφ, hα, ?_, hform⟩
+  simpa only [hrow] using hchamber
+
+/-- Compatibility projection retaining only positive-octant bounds. -/
+theorem SO3_to_symmetry_reduced_rotRM_params (M : SO3) :
+    ∃ g : VertexIndex, ∃ θ φ α : ℝ,
+      θ ∈ Set.Icc 0 (π / 2) ∧ φ ∈ Set.Icc 0 (π / 2) ∧
+      α ∈ Set.Ioc (-π) π ∧
+      M.val * symmetryMatrix g = rotRM_mat θ φ α := by
+  obtain ⟨g, θ, φ, α, hθ, hφ, hα, -, hform⟩ :=
+    SO3_to_chamber_reduced_rotRM_params M
   exact ⟨g, θ, φ, α, hθ, hφ, hα, hform⟩
 
 private theorem Rz_mul_rotRM_mat (δ θ φ α : ℝ) :

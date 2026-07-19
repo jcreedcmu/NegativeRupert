@@ -21,21 +21,6 @@ namespace Noperthedron.SnubCube
 
 open scoped Matrix
 
-/-- The checked action table is also the multiplication table of the 24
-rotation matrices. -/
-theorem symmetryMatrix_mul_symmetryMatrix (g h : VertexIndex) :
-    symmetryMatrix g * symmetryMatrix h =
-      symmetryMatrix (symmetryAction g h) := by
-  change (symmetryMatrixInt g).map (Int.castRingHom ℝ) *
-      (symmetryMatrixInt h).map (Int.castRingHom ℝ) =
-    (symmetryMatrixInt (symmetryAction g h)).map (Int.castRingHom ℝ)
-  rw [← Matrix.map_mul]
-  congr 1
-  obtain ⟨gp, gs⟩ := g
-  obtain ⟨hp, hs⟩ := h
-  fin_cases gp <;> fin_cases gs <;> fin_cases hp <;> fin_cases hs <;>
-    decide +kernel
-
 /-- A relative rotation is in the identity Dirichlet cell when no right
 snub-cube symmetry increases its trace. -/
 def InFundamentalDomain (R : Matrix (Fin 3) (Fin 3) ℝ) : Prop :=
@@ -118,6 +103,10 @@ theorem MatrixPose.relativeRotation_mem_SO3 (p : MatrixPose) :
 def _root_.MatrixPose.InSnubFundamentalDomain (p : MatrixPose) : Prop :=
   InFundamentalDomain p.relativeRotation
 
+/-- The outer viewing row lies in the positive projective snub chamber. -/
+def _root_.MatrixPose.InOuterViewChamber (p : MatrixPose) : Prop :=
+  ViewInChamber (fun j => p.outerRot.val 2 j)
+
 /-- Every normalized matrix pose has a bounded rational relative-rotation
 coordinate triple. -/
 theorem MatrixPose.exists_bounded_relative_cayley
@@ -193,9 +182,10 @@ theorem exists_fundamental_translated_pose (p : MatrixPose) :
       q ∈ fundamentalPoseInterval ∧
       q.matrixPoseWithOffset offset =
         (p.rightSnubSymmetries gi go).rotateBy δ ∧
-      (q.matrixPoseWithOffset offset).InSnubFundamentalDomain := by
-  obtain ⟨go, θo, φo, αo, hθo, hφo, _hαo, houter⟩ :=
-    SO3_to_symmetry_reduced_rotRM_params p.outerRot
+      (q.matrixPoseWithOffset offset).InSnubFundamentalDomain ∧
+      (q.matrixPoseWithOffset offset).InOuterViewChamber := by
+  obtain ⟨go, θo, φo, αo, hθo, hφo, _hαo, hchamber, houter⟩ :=
+    SO3_to_chamber_reduced_rotRM_params p.outerRot
   obtain ⟨gi, hfund⟩ := exists_inner_symmetry_inFundamentalDomain p go
   have hinnerSO3 : p.innerRot.val * symmetryMatrix gi ∈
       Matrix.specialOrthogonalGroup (Fin 3) ℝ :=
@@ -241,9 +231,14 @@ theorem exists_fundamental_translated_pose (p : MatrixPose) :
       exact hin.symm
     · apply Subtype.ext
       exact hout.symm
-  refine ⟨heq, ?_⟩
-  rw [heq]
-  exact (MatrixPose.inFundamentalDomain_rotateBy_iff _ _).mpr hfund
+  refine ⟨heq, ?_, ?_⟩
+  · rw [heq]
+    exact (MatrixPose.inFundamentalDomain_rotateBy_iff _ _).mpr hfund
+  · unfold MatrixPose.InOuterViewChamber
+    change ViewInChamber (fun j => rotRM_mat θo φo 0 2 j)
+    rw [houter] at hchamber
+    simpa [rotRM_mat, Matrix.mul_apply, Fin.sum_univ_three,
+      Rz_mat] using hchamber
 
 /-- It suffices to exclude translated Euler poses in the bounded Dirichlet
 root.  This is the normalization bridge used by a prunable solution tree. -/
@@ -255,7 +250,7 @@ theorem no_matrixPose_of_no_fundamental_translated_pose
     ¬ ∃ p : MatrixPose,
       RupertPose p normalizedExactPolyhedron.hull := by
   rintro ⟨p, hp⟩
-  obtain ⟨gi, go, δ, q, offset, hq, heq, hfund⟩ :=
+  obtain ⟨gi, go, δ, q, offset, hq, heq, hfund, -⟩ :=
     exists_fundamental_translated_pose p
   have hsym : RupertPose (p.rightSnubSymmetries gi go)
       normalizedExactPolyhedron.hull :=

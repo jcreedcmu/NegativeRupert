@@ -135,6 +135,21 @@ theorem symmetryMatrix_mem_SO3 (g : VertexIndex) :
         (Int.cast_det (symmetryMatrixInt g)).symm
       _ = 1 := by rw [symmetryMatrixInt_det]; norm_num
 
+/-- The checked action table is also the multiplication table of the 24
+rotation matrices. -/
+theorem symmetryMatrix_mul_symmetryMatrix (g h : VertexIndex) :
+    symmetryMatrix g * symmetryMatrix h =
+      symmetryMatrix (symmetryAction g h) := by
+  change (symmetryMatrixInt g).map (Int.castRingHom ℝ) *
+      (symmetryMatrixInt h).map (Int.castRingHom ℝ) =
+    (symmetryMatrixInt (symmetryAction g h)).map (Int.castRingHom ℝ)
+  rw [← Matrix.map_mul]
+  congr 1
+  obtain ⟨gp, gs⟩ := g
+  obtain ⟨hp, hs⟩ := h
+  fin_cases gp <;> fin_cases gs <;> fin_cases hp <;> fin_cases hs <;>
+    decide +kernel
+
 /-- The exact snub-cube rotation indexed by `g`. -/
 def symmetry (g : VertexIndex) : SO3 :=
   ⟨symmetryMatrix g, symmetryMatrix_mem_SO3 g⟩

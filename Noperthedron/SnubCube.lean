@@ -24,6 +24,9 @@ public import Noperthedron.SnubCube.LocalCertificate
 public import Noperthedron.SnubCube.LocalCertificateSmoke
 public import Noperthedron.SnubCube.LocalRigidity
 public import Noperthedron.SnubCube.Normalized
+public import Noperthedron.SnubCube.ProjectiveEdgeCertificate
+public import Noperthedron.SnubCube.ProjectiveEdgeCertificateSmoke
+public import Noperthedron.SnubCube.ProjectiveView
 public import Noperthedron.SnubCube.SolutionTree
 public import Noperthedron.SnubCube.Symmetry
 public import Noperthedron.SnubCube.Tightening
