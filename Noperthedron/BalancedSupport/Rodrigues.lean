@@ -1,6 +1,7 @@
 module
 
 public import Noperthedron.Bounding.OrthEquivRotz
+public import Mathlib.LinearAlgebra.CrossProduct
 
 @[expose] public section
 
@@ -16,11 +17,85 @@ the z axis.
 
 namespace Noperthedron.BalancedSupport
 
-open scoped Matrix Real
+open scoped Matrix Real RealInnerProductSpace
 
 noncomputable def zFirst (v : ℝ³) : ℝ³ := !₂[-v 1, v 0, 0]
 
 noncomputable def zRemainder (v : ℝ³) : ℝ³ := !₂[-v 0, -v 1, 0]
+
+/-- Euclidean-space wrapper for the ordinary three-dimensional cross
+product. -/
+noncomputable def cross3 (v w : ℝ³) : ℝ³ :=
+  WithLp.toLp 2 (v.ofLp ⨯₃ w.ofLp)
+
+/-- The standard unit z vector. -/
+noncomputable def zAxis : ℝ³ := !₂[0, 0, 1]
+
+theorem zFirst_eq_cross3 (v : ℝ³) : zFirst v = cross3 zAxis v := by
+  ext i
+  fin_cases i <;> simp [zFirst, cross3, zAxis, cross_apply]
+
+def vecRows (x y z : Fin 3 → ℝ) : Matrix (Fin 3) (Fin 3) ℝ :=
+  ![x, y, z]
+
+theorem inner_cross3_eq_det (u v w : ℝ³) :
+    ⟪u, cross3 v w⟫ = Matrix.det (vecRows u.ofLp v.ofLp w.ofLp) := by
+  rw [cross3, EuclideanSpace.inner_eq_star_dotProduct]
+  simp only [star_trivial]
+  rw [dotProduct_comm]
+  simpa [vecRows] using triple_product_eq_det u.ofLp v.ofLp w.ofLp
+
+private theorem vecRows_mul_transpose
+    (M : Matrix (Fin 3) (Fin 3) ℝ) (x y z : Fin 3 → ℝ) :
+    vecRows (M *ᵥ x) (M *ᵥ y) (M *ᵥ z) =
+      vecRows x y z * M.transpose := by
+  ext i j
+  fin_cases i <;>
+    simp [vecRows, Matrix.mul_apply, Matrix.mulVec, dotProduct, Fin.sum_univ_three,
+      mul_comm]
+
+private theorem det_vecRows_map
+    (M : Matrix (Fin 3) (Fin 3) ℝ)
+    (x y z : Fin 3 → ℝ) :
+    Matrix.det (vecRows (M *ᵥ x) (M *ᵥ y) (M *ᵥ z)) =
+      Matrix.det (vecRows x y z) * M.det := by
+  rw [vecRows_mul_transpose, Matrix.det_mul, Matrix.det_transpose]
+
+private theorem det_vecRows_cycle (x y z : Fin 3 → ℝ) :
+    Matrix.det (vecRows x y z) = Matrix.det (vecRows y z x) := by
+  simp only [vecRows]
+  rw [← triple_product_eq_det, ← triple_product_eq_det]
+  exact triple_product_permutation x y z
+
+/-- Orientation-preserving orthonormal frames carry the standard infinitesimal
+z rotation to cross product with their z axis. -/
+theorem oriented_frame_first_inner
+    (frame : ℝ³ ≃ₗᵢ[ℝ] ℝ³) (inverseMatrix : Matrix (Fin 3) (Fin 3) ℝ)
+    (hinverse : ∀ x : ℝ³,
+      (frame.symm x).ofLp = inverseMatrix *ᵥ x.ofLp)
+    (v d : ℝ³) :
+    ⟪d, frame (zFirst (frame.symm v))⟫ =
+      inverseMatrix.det * ⟪frame zAxis, cross3 v d⟫ := by
+  have hz : zAxis.ofLp = inverseMatrix *ᵥ (frame zAxis).ofLp := by
+    simpa using hinverse (frame zAxis)
+  calc
+    ⟪d, frame (zFirst (frame.symm v))⟫ =
+        ⟪frame.symm d, zFirst (frame.symm v)⟫ := by
+      simpa using frame.inner_map_map (frame.symm d) (zFirst (frame.symm v))
+    _ = Matrix.det (vecRows (frame.symm d).ofLp zAxis.ofLp
+          (frame.symm v).ofLp) := by
+      rw [zFirst_eq_cross3, inner_cross3_eq_det]
+    _ = Matrix.det (vecRows (inverseMatrix *ᵥ d.ofLp)
+          (inverseMatrix *ᵥ (frame zAxis).ofLp)
+          (inverseMatrix *ᵥ v.ofLp)) := by rw [hinverse d, hz, hinverse v]
+    _ = Matrix.det (vecRows d.ofLp (frame zAxis).ofLp v.ofLp) *
+        inverseMatrix.det := det_vecRows_map inverseMatrix _ _ _
+    _ = inverseMatrix.det *
+        Matrix.det (vecRows (frame zAxis).ofLp v.ofLp d.ofLp) := by
+      rw [det_vecRows_cycle]
+      ring
+    _ = inverseMatrix.det * ⟪frame zAxis, cross3 v d⟫ := by
+      rw [inner_cross3_eq_det]
 
 theorem Rz_apply_sub_exact (s : ℝ) (v : ℝ³) :
     RzL s v - v = (Real.sin s) • zFirst v + (1 - Real.cos s) • zRemainder v := by
@@ -45,6 +120,10 @@ theorem zFirst_norm_eq_zRemainder (v : ℝ³) :
 encoded by the orthonormal frame taking the standard z axis to that axis. -/
 structure AxisAngle (Q : ℝ³ →L[ℝ] ℝ³) where
   frame : ℝ³ ≃ₗᵢ[ℝ] ℝ³
+  axis : ℝ³
+  axis_norm : ‖axis‖ = 1
+  first_inner : ∀ v d,
+    ⟪d, frame (zFirst (frame.symm v))⟫ = ⟪axis, cross3 v d⟫
   angle : ℝ
   angle_mem : angle ∈ Set.Ioc (-Real.pi) Real.pi
   rotation_eq : Q =
@@ -58,6 +137,35 @@ noncomputable def AxisAngle.first {Q : ℝ³ →L[ℝ] ℝ³}
 noncomputable def AxisAngle.remainder {Q : ℝ³ →L[ℝ] ℝ³}
     (a : AxisAngle Q) (v : ℝ³) : ℝ³ :=
   a.frame (zRemainder (a.frame.symm v))
+
+theorem AxisAngle.first_inner_eq {Q : ℝ³ →L[ℝ] ℝ³}
+    (a : AxisAngle Q) (v d : ℝ³) :
+    ⟪d, a.first v⟫ = ⟪a.axis, cross3 v d⟫ := by
+  exact a.first_inner v d
+
+/-- Orient the axis so that the coefficient of its first variation is
+`|sin angle|`, independently of the sign convention for the angle. -/
+noncomputable def AxisAngle.signedAxis {Q : ℝ³ →L[ℝ] ℝ³}
+    (a : AxisAngle Q) : ℝ³ :=
+  if 0 ≤ Real.sin a.angle then a.axis else -a.axis
+
+theorem AxisAngle.signedAxis_norm {Q : ℝ³ →L[ℝ] ℝ³}
+    (a : AxisAngle Q) : ‖a.signedAxis‖ = 1 := by
+  by_cases h : 0 ≤ Real.sin a.angle
+  · simp [AxisAngle.signedAxis, h, a.axis_norm]
+  · simp [AxisAngle.signedAxis, h, a.axis_norm]
+
+theorem AxisAngle.sin_mul_first_inner {Q : ℝ³ →L[ℝ] ℝ³}
+    (a : AxisAngle Q) (v d : ℝ³) :
+    Real.sin a.angle * ⟪d, a.first v⟫ =
+      |Real.sin a.angle| * ⟪a.signedAxis, cross3 v d⟫ := by
+  rw [a.first_inner_eq]
+  by_cases h : 0 ≤ Real.sin a.angle
+  · simp [AxisAngle.signedAxis, h, abs_of_nonneg h]
+  · have h' : Real.sin a.angle < 0 := lt_of_not_ge h
+    rw [AxisAngle.signedAxis, if_neg h, abs_of_neg h']
+    simp only [inner_neg_left]
+    ring
 
 theorem AxisAngle.apply_sub_exact {Q : ℝ³ →L[ℝ] ℝ³}
     (a : AxisAngle Q) (v : ℝ³) :
@@ -119,7 +227,29 @@ theorem exists_axisAngle (A : Matrix (Fin 3) (Fin 3) ℝ)
       U⁻¹.toEuclideanLin.toContinuousLinearMap := by
     ext x
     simp [hu_symm]
-  refine ⟨⟨u, s, hs, ?_⟩⟩
+  let ug : Matrix.orthogonalGroup (Fin 3) ℝ := ⟨U, hU⟩
+  have hUinv_orth : U⁻¹ ∈ Matrix.orthogonalGroup (Fin 3) ℝ := by
+    have hinv : (↑ug⁻¹ : Matrix (Fin 3) (Fin 3) ℝ) * U = 1 := by
+      simpa only [MulMemClass.coe_mul, OneMemClass.coe_one] using
+        congrArg Subtype.val (inv_mul_cancel ug)
+    rw [Matrix.inv_eq_left_inv hinv]
+    exact ug⁻¹.property
+  have hdet_sq : (U⁻¹).det ^ 2 = 1 := by
+    rw [Matrix.mem_orthogonalGroup_iff] at hUinv_orth
+    have horth := hUinv_orth
+    have hdet := congrArg Matrix.det horth
+    simpa [Matrix.det_mul, Matrix.det_transpose, pow_two] using hdet
+  have hdet_abs : |(U⁻¹).det| = 1 := by
+    rcases (sq_eq_one_iff.mp hdet_sq) with h | h <;> simp [h]
+  have haxis : ‖(U⁻¹).det • u zAxis‖ = 1 := by
+    rw [norm_smul, Real.norm_eq_abs, hdet_abs, one_mul, u.norm_map,
+      EuclideanSpace.norm_eq]
+    simp [zAxis, Fin.sum_univ_three]
+  refine ⟨⟨u, (U⁻¹).det • u zAxis, haxis,
+    (fun v d => by
+      rw [real_inner_smul_left]
+      exact oriented_frame_first_inner u U⁻¹ hu_symm v d),
+    s, hs, ?_⟩⟩
   rw [hconj, toCLM_mul, toCLM_mul, hUclm, hUinvclm, RzL,
     ContinuousLinearMap.comp_assoc]
 
