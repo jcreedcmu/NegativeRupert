@@ -3,7 +3,10 @@ module
 public import Noperthedron.BalancedSupport.AxisFree
 public import Noperthedron.BalancedSupport.LocalRigidity
 public import Noperthedron.BalancedSupport.RotationDistance
+public import Noperthedron.RationalApprox.Cast
+public import Noperthedron.RationalApprox.MatrixBounds
 public import Noperthedron.SnubCube.Symmetry
+public import Mathlib.Analysis.InnerProductSpace.Adjoint
 
 @[expose] public section
 
@@ -25,6 +28,18 @@ open Noperthedron.BalancedSupport
 /-- Relative inner/outer rotation after removing symmetry `g`. -/
 def relativeRotationAtSymmetry (p : MatrixPose) (g : VertexIndex) : SO3 :=
   relativeRotation p * (symmetry g)⁻¹
+
+/-- Exact point on the symmetry-equality stratum above a chosen outer
+rotation. -/
+def equalityPose (outer : SO3) (g : VertexIndex) : MatrixPose where
+  innerRot := outer * symmetry g
+  outerRot := outer
+  innerOffset := 0
+
+@[simp] theorem relativeRotationAtSymmetry_equalityPose
+    (outer : SO3) (g : VertexIndex) :
+    relativeRotationAtSymmetry (equalityPose outer g) g = 1 := by
+  simp [relativeRotationAtSymmetry, relativeRotation, equalityPose, ← mul_assoc]
 
 noncomputable def so3CLM (r : SO3) : ℝ³ →L[ℝ] ℝ³ :=
   r.val.toEuclideanLin.toContinuousLinearMap
@@ -89,6 +104,30 @@ theorem norm_relativeRotationAtSymmetry_sub_le
     (by rw [so3CLM_norm]) (by rw [so3CLM_norm])).trans
   rw [norm_so3CLM_inv_sub_inv]
   linarith [norm_sub_rev (so3CLM p.outerRot) (so3CLM q.outerRot)]
+
+/-- Distance from the symmetry stratum is bounded by the direct inner-matrix
+mismatch.  This avoids choosing Euler coordinates for an equality pose. -/
+theorem norm_relativeRotationAtSymmetry_one_le_inner_mismatch
+    (p : MatrixPose) (g : VertexIndex) :
+    ‖so3CLM (relativeRotationAtSymmetry p g) - 1‖ ≤
+      ‖so3CLM p.innerRot - so3CLM (p.outerRot * symmetry g)‖ := by
+  have h := norm_relativeRotationAtSymmetry_sub_le p (equalityPose p.outerRot g) g
+  rw [relativeRotationAtSymmetry_equalityPose, so3CLM_one] at h
+  simpa [equalityPose] using h
+
+/-- Division-free local-angle test from a certified inner/symmetry matrix
+mismatch. -/
+theorem AxisAngle.ratio_of_inner_mismatch_bound
+    (p : MatrixPose) (g : VertexIndex)
+    (a : AxisAngle
+      ((relativeRotationAtSymmetry p g).val.toEuclideanLin.toContinuousLinearMap))
+    (c r : ℝ) (hc : 0 ≤ c) (hr : 0 ≤ r)
+    (hmismatch : ‖so3CLM p.innerRot - so3CLM (p.outerRot * symmetry g)‖ ≤ r)
+    (hsmall : r ^ 2 * (1 + c ^ 2) ≤ 4 * c ^ 2) :
+    1 - Real.cos a.angle ≤ |Real.sin a.angle| * c := by
+  apply a.ratio_of_norm_bound c r hc hr
+  · exact (norm_relativeRotationAtSymmetry_one_le_inner_mismatch p g).trans hmismatch
+  · exact hsmall
 
 /-- The relative rotation, after removing a fixed snub-cube symmetry, is
 Lipschitz in the five Euler coordinates.  The planar translations do not
@@ -199,6 +238,60 @@ theorem inner_outerProjection_eq_outerLift (p : MatrixPose) (u : ℝ²) (v : ℝ
   rw [← hR]
   simpa [outerLift, R] using R.inner_map_map (R.symm (inject_xy u)) v
 
+theorem outerLift_matrixPoseWithOffset_eq_adjoint
+    (p : Pose ℝ) (offset : ℝ²) (u : ℝ²) :
+    outerLift (p.matrixPoseWithOffset offset) u = (rotM p.θ₂ p.φ₂).adjoint u := by
+  apply ext_inner_right ℝ
+  intro x
+  rw [ContinuousLinearMap.adjoint_inner_left]
+  rw [← inner_outerProjection_eq_outerLift]
+  rw [outerProjectionLinear, ContinuousLinearMap.comp_apply]
+  change ⟪u, proj_xyL
+    ((p.matrixPoseWithOffset offset).outerRot.val.toEuclideanLin x)⟫ = _
+  rw [matrixPoseWithOffset_outer_rotation_project]
+  rw [Pose.outer_eq_M]
+  rfl
+
+private theorem pose_mem_four_outer (p : Pose ℚ) (hp : p ∈ fourInterval ℚ) :
+    p.θ₂ ∈ Set.Icc (-4 : ℚ) 4 ∧ p.φ₂ ∈ Set.Icc (-4 : ℚ) 4 := by
+  rw [NonemptyInterval.mem_def] at hp
+  change (fourInterval ℚ).min ≤ p ∧ p ≤ (fourInterval ℚ).max at hp
+  simp only [fourInterval_min, fourInterval_max] at hp
+  rw [Pose.le_iff, Pose.le_iff] at hp
+  exact ⟨⟨hp.1.2.1, hp.2.2.1⟩, ⟨hp.1.2.2.2.1, hp.2.2.2.2.1⟩⟩
+
+theorem norm_outerLift_rationalApprox_sub_le
+    (p : Pose ℚ) (hp : p ∈ fourInterval ℚ) (offset : ℝ²)
+    (u : ℝ²) (hu : ‖u‖ = 1) :
+    ‖outerLift (p.toReal.matrixPoseWithOffset offset) u -
+        (RationalApprox.rotMℚℝ (p.θ₂ : ℝ) (p.φ₂ : ℝ)).adjoint u‖ ≤
+      RationalApprox.κ := by
+  rw [outerLift_matrixPoseWithOffset_eq_adjoint]
+  rw [← sub_apply, ← map_sub]
+  calc
+    ‖((rotM (p.θ₂ : ℝ) (p.φ₂ : ℝ) -
+        RationalApprox.rotMℚℝ (p.θ₂ : ℝ) (p.φ₂ : ℝ)).adjoint) u‖ ≤
+        ‖(rotM (p.θ₂ : ℝ) (p.φ₂ : ℝ) -
+          RationalApprox.rotMℚℝ (p.θ₂ : ℝ) (p.φ₂ : ℝ)).adjoint‖ * ‖u‖ :=
+      ContinuousLinearMap.le_opNorm _ _
+    _ = ‖rotM (p.θ₂ : ℝ) (p.φ₂ : ℝ) -
+          RationalApprox.rotMℚℝ (p.θ₂ : ℝ) (p.φ₂ : ℝ)‖ := by
+      rw [LinearIsometryEquiv.norm_map, hu, mul_one]
+    _ ≤ RationalApprox.κ := by
+      apply RationalApprox.M_difference_norm_bounded
+      · exact RationalApprox.cast_Icc4_mem ⟨p.θ₂, (pose_mem_four_outer p hp).1⟩
+      · exact RationalApprox.cast_Icc4_mem ⟨p.φ₂, (pose_mem_four_outer p hp).2⟩
+
+theorem norm_rationalApprox_outerLift_le
+    (p : Pose ℚ) (hp : p ∈ fourInterval ℚ) (u : ℝ²) (hu : ‖u‖ = 1) :
+    ‖(RationalApprox.rotMℚℝ (p.θ₂ : ℝ) (p.φ₂ : ℝ)).adjoint u‖ ≤
+      1 + RationalApprox.κ := by
+  apply (ContinuousLinearMap.le_opNorm _ _).trans
+  rw [LinearIsometryEquiv.norm_map, hu, mul_one]
+  apply RationalApprox.Mℚ_norm_bounded
+  · exact RationalApprox.cast_Icc4_mem ⟨p.θ₂, (pose_mem_four_outer p hp).1⟩
+  · exact RationalApprox.cast_Icc4_mem ⟨p.φ₂, (pose_mem_four_outer p hp).2⟩
+
 /-- Coordinate-free first-variation vector for one balanced certificate. -/
 noncomputable def firstVariationVector
     {κ : Type} [Fintype κ] (p : MatrixPose)
@@ -254,6 +347,78 @@ theorem norm_firstVariationVector_sub_le
     _ = (∑ i, weight i * (‖direction i‖ * ‖vertex i‖)) *
           ‖so3CLM p.outerRot - so3CLM q.outerRot‖ := by
       rw [Finset.sum_mul]
+
+/-- Uniform error bound for a weighted family of cross products. -/
+theorem norm_weightedCross_approx_sub_le
+    {κ : Type} [Fintype κ]
+    (weight : κ → ℝ) (vertex approxVertex lift approxLift : κ → ℝ³)
+    (ε : ℝ) (hε : 0 ≤ ε)
+    (hweight : ∀ i, 0 ≤ weight i)
+    (hvertex : ∀ i, ‖vertex i‖ ≤ 1)
+    (hvertexError : ∀ i, ‖vertex i - approxVertex i‖ ≤ ε)
+    (hliftError : ∀ i, ‖lift i - approxLift i‖ ≤ ε)
+    (happroxLift : ∀ i, ‖approxLift i‖ ≤ 1 + ε) :
+    ‖(∑ i, weight i • cross3 (vertex i) (lift i)) -
+        ∑ i, weight i • cross3 (approxVertex i) (approxLift i)‖ ≤
+      (∑ i, weight i) * (2 * ε + ε ^ 2) := by
+  rw [← Finset.sum_sub_distrib]
+  apply (norm_sum_le _ _).trans
+  calc
+    ∑ i, ‖weight i • cross3 (vertex i) (lift i) -
+          weight i • cross3 (approxVertex i) (approxLift i)‖
+        ≤ ∑ i, weight i * (2 * ε + ε ^ 2) := by
+      apply Finset.sum_le_sum
+      intro i _
+      rw [← smul_sub, norm_smul, Real.norm_eq_abs, abs_of_nonneg (hweight i)]
+      have hcross :
+          ‖cross3 (vertex i) (lift i) -
+              cross3 (approxVertex i) (approxLift i)‖ ≤ 2 * ε + ε ^ 2 := by
+        rw [cross3_sub_cross3]
+        calc
+          ‖cross3 (vertex i) (lift i - approxLift i) +
+              cross3 (vertex i - approxVertex i) (approxLift i)‖ ≤
+              ‖cross3 (vertex i) (lift i - approxLift i)‖ +
+                ‖cross3 (vertex i - approxVertex i) (approxLift i)‖ :=
+            norm_add_le _ _
+          _ ≤ ‖vertex i‖ * ‖lift i - approxLift i‖ +
+                ‖vertex i - approxVertex i‖ * ‖approxLift i‖ :=
+            add_le_add (cross3_norm_le _ _) (cross3_norm_le _ _)
+          _ ≤ 1 * ε + ε * (1 + ε) := by
+            apply add_le_add
+            · exact (mul_le_mul_of_nonneg_right (hvertex i) (norm_nonneg _)).trans
+                (mul_le_mul_of_nonneg_left (hliftError i) (by norm_num))
+            · exact (mul_le_mul_of_nonneg_right (hvertexError i) (norm_nonneg _)).trans
+                (mul_le_mul_of_nonneg_left (happroxLift i) hε)
+          _ = 2 * ε + ε ^ 2 := by ring
+      exact mul_le_mul_of_nonneg_left hcross (hweight i)
+    _ = (∑ i, weight i) * (2 * ε + ε ^ 2) := by
+      rw [Finset.sum_mul]
+
+/-- Normalizing by the positive total weight removes the size of the
+certificate from the approximation error. -/
+theorem norm_normalizedWeightedCross_approx_sub_le
+    {κ : Type} [Fintype κ]
+    (weight : κ → ℝ) (vertex approxVertex lift approxLift : κ → ℝ³)
+    (normalized approxNormalized : ℝ³) (B ε : ℝ)
+    (hε : 0 ≤ ε) (hweight : ∀ i, 0 ≤ weight i) (hB : 0 < B)
+    (hBsum : B = ∑ i, weight i)
+    (hvertex : ∀ i, ‖vertex i‖ ≤ 1)
+    (hvertexError : ∀ i, ‖vertex i - approxVertex i‖ ≤ ε)
+    (hliftError : ∀ i, ‖lift i - approxLift i‖ ≤ ε)
+    (happroxLift : ∀ i, ‖approxLift i‖ ≤ 1 + ε)
+    (hactual : ∑ i, weight i • cross3 (vertex i) (lift i) = B • normalized)
+    (happrox : ∑ i, weight i • cross3 (approxVertex i) (approxLift i) =
+      B • approxNormalized) :
+    ‖normalized - approxNormalized‖ ≤ 2 * ε + ε ^ 2 := by
+  have h := norm_weightedCross_approx_sub_le weight vertex approxVertex lift approxLift
+    ε hε hweight hvertex hvertexError hliftError happroxLift
+  rw [← hBsum] at h
+  have hsub : (∑ i, weight i • cross3 (vertex i) (lift i)) -
+      ∑ i, weight i • cross3 (approxVertex i) (approxLift i) =
+      B • (normalized - approxNormalized) := by
+    rw [hactual, happrox, smul_sub]
+  rw [hsub, norm_smul, Real.norm_eq_abs, abs_of_pos hB] at h
+  nlinarith
 
 /-- After division by its positive remainder budget, a first-variation
 vector is 1-Lipschitz in the outer rotation. -/
@@ -540,9 +705,9 @@ theorem not_rupertPose_of_axisFree_geometric_certificates_of_cover_perturbation
     (hmove : ∀ j, ‖normalizedA j - centerNormalizedA j‖ ≤ δ)
     (hA_eq : ∀ j, A j = firstVariationVector p (weight j) (direction j)
       (fun i => normalizedExactVertex (symmetryAction g (index j i))))
-    (hB_eq : ∀ j, B j = ∑ i, weight j i *
+    (hB_bound : ∀ j, ∑ i, weight j i *
       (‖direction j i‖ *
-        ‖normalizedExactVertex (symmetryAction g (index j i))‖))
+        ‖normalizedExactVertex (symmetryAction g (index j i))‖) ≤ B j)
     (hratio : 1 - Real.cos a.angle ≤ |Real.sin a.angle| * c)
     (hdirection : ∀ j i, direction j i ≠ 0)
     (hweight : ∀ j i, 0 ≤ weight j i)
@@ -559,11 +724,18 @@ theorem not_rupertPose_of_axisFree_geometric_certificates_of_cover_perturbation
   apply not_rupertPose_of_symmetry_axisAngle_certificate p g a
     (index j) (weight j) (direction j)
     (hdirection j) (hweight j) (hweight_pos j) (hbalance j) (hsupport j)
-  rw [← hB_eq j]
+  have hremainder :
+      (1 - Real.cos a.angle) *
+          (∑ i, weight j i *
+            (‖direction j i‖ *
+              ‖normalizedExactVertex (symmetryAction g (index j i))‖)) ≤
+        (1 - Real.cos a.angle) * B j :=
+    mul_le_mul_of_nonneg_left (hB_bound j)
+      (sub_nonneg.mpr (Real.cos_le_one a.angle))
   rw [axisAngle_weighted_first_identity a p (weight j) (direction j)
     (fun i => normalizedExactVertex (symmetryAction g (index j i)))]
   rw [← hA_eq j]
-  exact hj
+  exact hremainder.trans hj
 
 end Noperthedron.SnubCube
 

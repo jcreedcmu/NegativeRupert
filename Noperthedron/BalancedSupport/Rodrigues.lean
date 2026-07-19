@@ -38,6 +38,17 @@ theorem cross3_sub_right (u v w : ℝ³) :
   ext i
   fin_cases i <;> simp [cross3, cross_apply] <;> ring
 
+theorem cross3_sub_left (u v w : ℝ³) :
+    cross3 (u - v) w = cross3 u w - cross3 v w := by
+  ext i
+  fin_cases i <;> simp [cross3, cross_apply]
+
+theorem cross3_sub_cross3 (u u' v v' : ℝ³) :
+    cross3 u v - cross3 u' v' =
+      cross3 u (v - v') + cross3 (u - u') v' := by
+  rw [cross3_sub_right, cross3_sub_left]
+  abel
+
 /-- The standard unit z vector. -/
 noncomputable def zAxis : ℝ³ := !₂[0, 0, 1]
 

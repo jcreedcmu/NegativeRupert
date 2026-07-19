@@ -16,6 +16,30 @@ checker.
 
 namespace Noperthedron.BalancedSupport
 
+/-- A Frobenius-square certificate bounds the Euclidean operator norm.  This
+form is convenient for rational matrix mismatch checks. -/
+theorem matrix_opNorm_le_of_sum_sq_le
+    {m n : ℕ} (A : Matrix (Fin m) (Fin n) ℝ) (r : ℝ) (hr : 0 ≤ r)
+    (hsq : ∑ i, ∑ j, A i j ^ 2 ≤ r ^ 2) :
+    ‖A.toEuclideanLin.toContinuousLinearMap‖ ≤ r := by
+  apply ContinuousLinearMap.opNorm_le_bound _ hr
+  intro v
+  rw [← sq_le_sq₀ (norm_nonneg _) (mul_nonneg hr (norm_nonneg v))]
+  calc
+    ‖A.toEuclideanLin.toContinuousLinearMap v‖ ^ 2 =
+        ∑ i, (∑ j, A i j * v j) ^ 2 := by
+      simp [PiLp.norm_sq_eq_of_L2, Matrix.mulVec, dotProduct]
+    _ ≤ ∑ i, (∑ j, A i j ^ 2) * (∑ j, (v j) ^ 2) := by
+      apply Finset.sum_le_sum
+      intro i _
+      exact Finset.sum_mul_sq_le_sq_mul_sq Finset.univ (A i) v.ofLp
+    _ = (∑ i, ∑ j, A i j ^ 2) * ‖v‖ ^ 2 := by
+      rw [← Finset.sum_mul]
+      simp [PiLp.norm_sq_eq_of_L2]
+    _ ≤ r ^ 2 * ‖v‖ ^ 2 := by
+      exact mul_le_mul_of_nonneg_right hsq (sq_nonneg ‖v‖)
+    _ = (r * ‖v‖) ^ 2 := by ring
+
 /-- Perturbing two factors of a product costs at most the sum of the two
 perturbations when the untouched factors have norm at most one. -/
 theorem norm_comp_sub_comp_le
