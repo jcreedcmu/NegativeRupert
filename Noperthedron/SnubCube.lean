@@ -7,6 +7,8 @@ public import Noperthedron.SnubCube.CayleyPose
 public import Noperthedron.SnubCube.CayleyFundamentalPrune
 public import Noperthedron.SnubCube.CayleyFundamentalPruneSmoke
 public import Noperthedron.SnubCube.CayleyInterval
+public import Noperthedron.SnubCube.CayleyLocalCertificate
+public import Noperthedron.SnubCube.CayleyLocalCertificateSmoke
 public import Noperthedron.SnubCube.CayleyLocalRigidity
 public import Noperthedron.SnubCube.FundamentalDomain
 public import Noperthedron.SnubCube.FundamentalPrune
