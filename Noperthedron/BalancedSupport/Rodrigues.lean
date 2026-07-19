@@ -199,6 +199,70 @@ theorem AxisAngle.first_norm_le {Q : ℝ³ →L[ℝ] ℝ³}
   rw [AxisAngle.first, a.frame.norm_map, zFirst_norm_eq_zRemainder]
   exact (zRemainder_norm_le _).trans_eq (a.frame.symm.norm_map v)
 
+/-- Operator-norm distance from the identity determines the half-angle. -/
+theorem AxisAngle.norm_sub_id {Q : ℝ³ →L[ℝ] ℝ³}
+    (a : AxisAngle Q) :
+    ‖Q - 1‖ = 2 * |Real.sin (a.angle / 2)| := by
+  have hconj : Q - 1 =
+      a.frame.toLinearIsometry.toContinuousLinearMap ∘L (RzL a.angle - 1) ∘L
+        a.frame.symm.toLinearIsometry.toContinuousLinearMap := by
+    ext x
+    have hrot := congrArg (fun f : ℝ³ →L[ℝ] ℝ³ => f x) a.rotation_eq
+    simp only [ContinuousLinearMap.comp_apply] at hrot
+    simp only [sub_apply, one_apply_eq_self,
+      ContinuousLinearMap.comp_apply]
+    rw [hrot]
+    simp
+  rw [hconj, LinearIsometry.norm_toContinuousLinearMap_comp]
+  refine (ContinuousLinearMap.opNorm_comp_linearIsometryEquiv _ a.frame.symm).trans ?_
+  rw [← RzC_coe]
+  have hdist := Bounding.dist_rot3 (d := 2) (α := a.angle) (α' := 0)
+  simpa only [rot3, AddChar.map_zero_eq_one, sub_zero] using hdist
+
+/-- A squared operator-norm test implies the bend/first coefficient ratio
+needed by the axis-free finite-rotation theorem.  This form has no division
+and is convenient for rational interval certificates. -/
+theorem AxisAngle.ratio_of_norm_sq {Q : ℝ³ →L[ℝ] ℝ³}
+    (a : AxisAngle Q) (c : ℝ) (hc : 0 ≤ c)
+    (hsmall : ‖Q - 1‖ ^ 2 * (1 + c ^ 2) ≤ 4 * c ^ 2) :
+    1 - Real.cos a.angle ≤ |Real.sin a.angle| * c := by
+  let sh := Real.sin (a.angle / 2)
+  let ch := Real.cos (a.angle / 2)
+  have hnormsq : ‖Q - 1‖ ^ 2 = 4 * sh ^ 2 := by
+    rw [a.norm_sub_id, mul_pow, sq_abs]
+    ring
+  have hcircle : sh ^ 2 + ch ^ 2 = 1 := by
+    exact Real.sin_sq_add_cos_sq (a.angle / 2)
+  have hsquare : sh ^ 2 ≤ c ^ 2 * ch ^ 2 := by
+    nlinarith
+  have habs : |sh| ≤ c * |ch| := by
+    rw [← sq_le_sq₀ (abs_nonneg sh) (mul_nonneg hc (abs_nonneg ch))]
+    rw [sq_abs, mul_pow, sq_abs]
+    exact hsquare
+  have hmul := mul_le_mul_of_nonneg_left habs
+    (mul_nonneg (by norm_num : (0 : ℝ) ≤ 2) (abs_nonneg sh))
+  have hbend : 1 - Real.cos a.angle = 2 * sh ^ 2 := by
+    dsimp [sh]
+    rw [Real.sin_sq, Real.cos_sq]
+    ring_nf
+  have hsin : Real.sin a.angle = 2 * sh * ch := by
+    dsimp [sh, ch]
+    conv_lhs => rw [show a.angle = 2 * (a.angle / 2) by ring]
+    rw [Real.sin_two_mul]
+  rw [hbend, hsin, abs_mul, abs_mul]
+  norm_num at hmul ⊢
+  nlinarith [sq_abs sh]
+
+theorem AxisAngle.ratio_of_norm_bound {Q : ℝ³ →L[ℝ] ℝ³}
+    (a : AxisAngle Q) (c r : ℝ) (hc : 0 ≤ c) (hr : 0 ≤ r)
+    (hnorm : ‖Q - 1‖ ≤ r)
+    (hsmall : r ^ 2 * (1 + c ^ 2) ≤ 4 * c ^ 2) :
+    1 - Real.cos a.angle ≤ |Real.sin a.angle| * c := by
+  apply a.ratio_of_norm_sq c hc
+  have hsq : ‖Q - 1‖ ^ 2 ≤ r ^ 2 := by
+    exact (sq_le_sq₀ (norm_nonneg _) hr).2 hnorm
+  exact (mul_le_mul_of_nonneg_right hsq (by positivity)).trans hsmall
+
 /-- Every special orthogonal matrix has an exact `AxisAngle` presentation
 with angle in `(-π,π]`. -/
 theorem exists_axisAngle (A : Matrix (Fin 3) (Fin 3) ℝ)
