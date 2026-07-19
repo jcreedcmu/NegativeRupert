@@ -557,7 +557,7 @@ private lemma norm_sub_round13v_dot_le₄ {x : ℝ} {v P_ : Fin 3 → ℚ} {d : 
   (norm_sub_round13v_dot_le (hdot ▸ hbase) hsum).trans (by unfold κ; norm_num)
 
 open Gℚ_gt_maxHℚ in
-private lemma Gℚ_le_G {p_ : Pose ℚ} {εα εθ εφ : ℚ}
+theorem Gℚ_le_G {p_ : Pose ℚ} {εα εθ εφ : ℚ}
     (hεα : 0 ≤ εα) (hεθ : 0 ≤ εθ) (hεφ : 0 ≤ εφ)
     {S : ℝ³} {S_ : Fin 3 → ℚ} {w : Fin 2 → ℚ}
     (hS : ‖S‖ ≤ 1) (hS_approx : ‖S - toR3 S_‖ ≤ κ) (hw : ‖toR2 w‖ = 1)
@@ -641,7 +641,7 @@ private lemma Gℚ_le_G {p_ : Pose ℚ} {εα εθ εφ : ℚ}
   linarith [hi_le, hfoα, hfoθ, hfoφ, hsoαα, hsoαθ, hsoαφ, hsoθθ, hsoθφ, hsoφφ]
 
 open Gℚ_gt_maxHℚ in
-private lemma H_le_Hℚ {p_ : Pose ℚ} {εθ εφ : ℚ} (hεθ : 0 ≤ εθ) (hεφ : 0 ≤ εφ)
+theorem H_le_Hℚ {p_ : Pose ℚ} {εθ εφ : ℚ} (hεθ : 0 ≤ εθ) (hεφ : 0 ≤ εφ)
     {P : ℝ³} {P_ : Fin 3 → ℚ} {w : Fin 2 → ℚ}
     (hP : ‖P‖ ≤ 1) (hP_approx : ‖P - toR3 P_‖ ≤ κ) (hw : ‖toR2 w‖ = 1)
     (hp : (fourInterval ℚ).contains p_) :
@@ -700,7 +700,37 @@ private lemma H_le_Hℚ {p_ : Pose ℚ} {εθ εφ : ℚ} (hεθ : 0 ≤ εθ) (
   have hsoφφ := mul_le_mul_of_nonneg_left hφφ_abs (mul_nonneg hεφ_real hεφ_real)
   linarith [hm_le, hfoθ, hfoφ, hsoθθ, hsoθφ, hsoφφ]
 
-/--
+/-- The exact outer-support Taylor bound is at most its rationally checked
+counterpart.  This contact-independent form is also used by balanced global
+certificates. -/
+theorem maxH_le_maxHℚ {ι₁ ι₂ : Type}
+    [Fintype ι₁] [Nonempty ι₁] [Fintype ι₂] [Nonempty ι₂]
+    {p : Pose ℚ} {εθ εφ : ℚ} (hεθ : 0 ≤ εθ) (hεφ : 0 ≤ εφ)
+    (poly : GoodPoly ι₁) (poly_ : Polyhedron ι₂ (Fin 3 → ℚ))
+    (happrox : κApproxPoly poly.vertices poly_) {w : Fin 2 → ℚ}
+    (hw : ‖toR2 w‖ = 1) (hp : (fourInterval ℚ).contains p) :
+    GlobalTheorem.maxH p.toReal poly εθ εφ (toR2 w) ≤
+      ((maxHℚ p poly_ εθ εφ w : ℚ) : ℝ) := by
+  unfold GlobalTheorem.maxH
+  apply Finset.max'_le
+  simp only [Function.comp, Finset.mem_image, Finset.mem_univ, true_and]
+  rintro _ ⟨k, rfl⟩
+  let k' := happrox.bijection k
+  have hk_norm : ‖poly.vertices.v k‖ ≤ 1 := poly.vertex_radius_le_one k
+  have hk_approx : ‖poly.vertices.v k - poly_.toReal.v k'‖ ≤ κ := happrox.approx k
+  have h_le_Hℚ : GlobalTheorem.H p.toReal εθ εφ (toR2 w) (poly.vertices.v k) ≤
+      Hℚ p εθ εφ w (poly_.v k') :=
+    H_le_Hℚ hεθ hεφ hk_norm
+      (show ‖poly.vertices.v k - toR3 (poly_.v k')‖ ≤ κ from hk_approx) hw hp
+  have h_le_max : Hℚ p εθ εφ w (poly_.v k') ≤ maxHℚ p poly_ εθ εφ w := by
+    unfold maxHℚ
+    have hmem : (Hℚ p εθ εφ w ∘ poly_.v) k' ∈
+        Finset.image (Hℚ p εθ εφ w ∘ poly_.v) Finset.univ :=
+      Finset.mem_image_of_mem _ (Finset.mem_univ k')
+    exact Finset.le_max' _ _ hmem
+  exact h_le_Hℚ.trans (by exact_mod_cast h_le_max)
+
+/-
 [SY25] Theorem 43, with per-axis widths and a box conclusion in place of the
 closed ball.
 -/

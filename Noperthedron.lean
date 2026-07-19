@@ -4,6 +4,7 @@ import Noperthedron.BalancedSupport.Basic
 import Noperthedron.BalancedSupport.AxisFree
 import Noperthedron.BalancedSupport.Determinant
 import Noperthedron.BalancedSupport.FiniteRotation
+import Noperthedron.BalancedSupport.Global
 import Noperthedron.BalancedSupport.Rupert
 import Noperthedron.BalancedSupport.TranslatedPose
 import Noperthedron.Bounding
@@ -67,6 +68,7 @@ import Noperthedron.RationalApprox.Lemma42
 import Noperthedron.RationalApprox.MatrixBounds
 import Noperthedron.RationalApprox.NewtonSqrt
 import Noperthedron.RationalApprox.RationalGlobal
+import Noperthedron.RationalApprox.RationalBalancedGlobal
 import Noperthedron.RationalApprox.RationalLocal
 import Noperthedron.RationalApprox.TrigInt
 import Noperthedron.RationalApprox.TrigLemmas

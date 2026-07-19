@@ -13,6 +13,7 @@ public import Noperthedron.RationalApprox.ApproximableMatrices
 public import Noperthedron.RationalApprox.MatrixBounds
 public import Noperthedron.RationalApprox.TrigLemmas
 public import Noperthedron.RationalApprox.RationalGlobal
+public import Noperthedron.RationalApprox.RationalBalancedGlobal
 public import Noperthedron.RationalApprox.BoundsKappa
 public import Noperthedron.RationalApprox.BoundsKappa3
 public import Noperthedron.RationalApprox.BoundsKappa4
