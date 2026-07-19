@@ -122,6 +122,77 @@ theorem firstVariationVector_eq (p : CayleyPose ℝ) (offset : ℝ²)
   intro i _
   rw [outerLift_direction p offset (edge i) hsum]
 
+noncomputable def normalizedVariation (p : CayleyPose ℝ)
+    (edge : Fin 4 → EdgeTriple) (index : Fin 4 → Fin 3 → VertexIndex)
+    (B : Fin 4 → ℝ) (j : Fin 4) : ℝ³ :=
+  (B j)⁻¹ • variationVector p (edge j)
+    (fun i => normalizedExactVertex (index j i))
+
+/-- Pointwise projective form of axis-free local rigidity.  Its hypotheses
+are exactly the quantities that the rational triangle checker will bound:
+linear determinant weights, quadratic first-variation vectors, a remainder
+budget, an axis-cover tetrahedron, and exact support inequalities. -/
+theorem not_rupertPose_of_projective_local_certificates
+    (p : CayleyPose ℝ) (offset : ℝ²)
+    (edge : Fin 4 → EdgeTriple)
+    (index : Fin 4 → Fin 3 → VertexIndex)
+    (B : Fin 4 → ℝ) (c : ℝ)
+    (hsum : viewSum p ≠ 0)
+    (hB : ∀ j, 0 < B j)
+    (hcover : ∀ axis : ℝ³, ‖axis‖ = 1 →
+      ∃ j, c ≤ ⟪axis, normalizedVariation p edge index B j⟫)
+    (hbudget : ∀ j, ∑ i, weight p (edge j) i *
+      (‖direction p (edge j i)‖ * ‖normalizedExactVertex (index j i)‖) ≤
+        B j)
+    (hradius : Real.sqrt (p.x ^ 2 + p.y ^ 2 + p.z ^ 2) ≤ c)
+    (hdirection : ∀ j i, direction p (edge j i) ≠ 0)
+    (hweight : ∀ j i, 0 ≤ weight p (edge j) i)
+    (hweight_pos : ∀ j, ∃ i, 0 < weight p (edge j) i)
+    (hsupport : ∀ j i k,
+      ⟪direction p (edge j i),
+          outerProjectionLinear (p.matrixPoseWithOffset offset)
+            (normalizedExactVertex k)⟫ ≤
+        ⟪direction p (edge j i),
+          outerProjectionLinear (p.matrixPoseWithOffset offset)
+            (normalizedExactVertex (index j i))⟫) :
+    ¬ RupertPose (p.matrixPoseWithOffset offset)
+      normalizedExactPolyhedron.hull := by
+  let relative := relativeRotationAtSymmetry
+    (p.matrixPoseWithOffset offset) (VertexIndex.ofFin24 0)
+  obtain ⟨a⟩ := exists_axisAngle relative.val relative.property
+  apply
+    not_rupertPose_of_axisFree_geometric_certificates_of_cover_perturbation
+      (p := p.matrixPoseWithOffset offset)
+      (g := VertexIndex.ofFin24 0) (a := a)
+      (index := index)
+      (weight := fun j => weight p (edge j))
+      (direction := fun j i => direction p (edge j i))
+      (A := fun j => variationVector p (edge j)
+        (fun i => normalizedExactVertex (index j i)))
+      (normalizedA := normalizedVariation p edge index B)
+      (centerNormalizedA := normalizedVariation p edge index B)
+      (B := B) (c := c) (δ := 0)
+  · exact hB
+  · intro j
+    simp only [normalizedVariation, smul_smul]
+    rw [mul_inv_cancel₀ (ne_of_gt (hB j)), one_smul]
+  · intro axis haxis
+    simpa using hcover axis haxis
+  · intro j
+    simp
+  · intro j
+    simpa only [symmetryAction_zero] using
+      (firstVariationVector_eq p offset (edge j)
+        (fun i => normalizedExactVertex (index j i)) hsum).symm
+  · simpa only [symmetryAction_zero] using hbudget
+  · exact p.axisAngle_ratio_le offset a c hradius
+  · exact hdirection
+  · exact hweight
+  · exact hweight_pos
+  · intro j
+    exact weight_balance p (edge j) hsum
+  · simpa only [symmetryAction_zero] using hsupport
+
 end Noperthedron.SnubCube.ProjectiveLocalRigidity
 
 end
