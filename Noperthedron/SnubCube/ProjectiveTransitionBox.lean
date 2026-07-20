@@ -22,11 +22,11 @@ open Noperthedron.Checker
 open ProjectiveTransitionBlowup
 open SparseTribonacciPolynomial
 
-def familyBank : Fin 5 → Family :=
-  ![family2, family89, family192, familyTransverse, familyNested]
+def familyBank : Fin 6 → Family :=
+  ![family2, family89, family192, familyTransverse, familyNested, familyWidth]
 
 structure Box where
-  familyIndex : Fin 5
+  familyIndex : Fin 6
   variableBalls : Fin 5 → RatBall
 deriving DecidableEq, Repr
 
@@ -59,10 +59,15 @@ structure Box.Valid (box : Box) : Prop where
   factor : box.family.FactorValid
   seam_nonnegative : 0 ≤ lower (box.variableBalls 0)
   tangential_nonnegative : 0 ≤ lower (box.variableBalls 1)
-  weights_positive : ∀ i, 0 < lower (box.weightBall i)
+  weights_nonnegative : ∀ i, 0 ≤ lower (box.weightBall i)
+  direction_witness : ∀ i, ∃ j, j ≠ i ∧ 0 < lower (box.weightBall j)
   support_dominance : ∀ i vertex,
-    0 ≤ lower (box.supportSlackBall i vertex)
-  quotient_positive : 0 < lower box.quotientBall
+    0 ≤ lower (box.supportSlackBall i vertex) ∨
+    (0 < box.family.supportFactorPower i vertex ∧
+      upper (box.variableBalls 0) ≤ 0) ∨
+    (0 < box.family.supportTangentialFactorPower i vertex ∧
+      upper (box.variableBalls 1) ≤ 0)
+  quotient_nonnegative : 0 ≤ lower box.quotientBall
 
 instance (box : Box) : Decidable box.Valid :=
   decidable_of_iff _ (Box.valid_iff box).symm
@@ -90,14 +95,16 @@ theorem Box.weight_nonnegative (box : Box) (h : box.Valid)
     (hvalues : ∀ i, (box.variableBalls i).Holds (values i)) (i : Fin 3) :
     0 ≤ evalReal values (box.family.weightPolynomial i) := by
   exact RatBall.nonneg_of_holds_of_lower_nonneg
-    (box.polynomialBall_holds hvalues _) (h.weights_positive i).le
+    (box.polynomialBall_holds hvalues _) (h.weights_nonnegative i)
 
 theorem Box.weight_positive (box : Box) (h : box.Valid)
     {values : Fin 5 → ℝ}
     (hvalues : ∀ i, (box.variableBalls i).Holds (values i)) (i : Fin 3) :
+    0 < lower (box.weightBall i) →
     0 < evalReal values (box.family.weightPolynomial i) := by
+  intro hlower
   exact RatBall.pos_of_holds_of_lower_pos
-    (box.polynomialBall_holds hvalues _) (h.weights_positive i)
+    (box.polynomialBall_holds hvalues _) hlower
 
 theorem Box.tangential_nonnegative (box : Box) (h : box.Valid)
     {values : Fin 5 → ℝ}
@@ -110,7 +117,16 @@ theorem Box.exists_weight_positive (box : Box) (h : box.Valid)
     {values : Fin 5 → ℝ}
     (hvalues : ∀ i, (box.variableBalls i).Holds (values i)) :
     ∃ i, 0 < evalReal values (box.family.weightPolynomial i) := by
-  exact ⟨0, box.weight_positive h hvalues 0⟩
+  obtain ⟨j, _, hj⟩ := h.direction_witness 0
+  exact ⟨j, box.weight_positive h hvalues j hj⟩
+
+theorem Box.direction_weight_witness (box : Box) (h : box.Valid)
+    {values : Fin 5 → ℝ}
+    (hvalues : ∀ i, (box.variableBalls i).Holds (values i)) (i : Fin 3) :
+    ∃ j, j ≠ i ∧
+      0 < evalReal values (box.family.weightPolynomial j) := by
+  obtain ⟨j, hji, hj⟩ := h.direction_witness i
+  exact ⟨j, hji, box.weight_positive h hvalues j hj⟩
 
 theorem Box.support_le_defect (box : Box) (h : box.Valid)
     {values : Fin 5 → ℝ}
@@ -118,9 +134,6 @@ theorem Box.support_le_defect (box : Box) (h : box.Valid)
     (i : Fin 3) (vertex : Fin 24) :
     evalReal values (box.family.supportPolynomial i vertex) ≤
       evalReal values (box.family.defectPolynomial i) := by
-  have hslack := RatBall.nonneg_of_holds_of_lower_nonneg
-    (box.polynomialBall_holds hvalues (box.family.supportQuotient i vertex))
-    (h.support_dominance i vertex)
   have hfactor := box.family.eval_supportSlack_factor i vertex values
   have hseamPower : 0 ≤ values 0 ^
       box.family.supportFactorPower i vertex :=
@@ -131,16 +144,32 @@ theorem Box.support_le_defect (box : Box) (h : box.Valid)
   have hfull : 0 ≤ evalReal values
       (box.family.supportSlackPolynomial i vertex) := by
     rw [hfactor]
-    exact mul_nonneg hseamPower (mul_nonneg htangentialPower hslack)
+    rcases h.support_dominance i vertex with hslack | hseam | htangential
+    · have hquotient := RatBall.nonneg_of_holds_of_lower_nonneg
+        (box.polynomialBall_holds hvalues
+          (box.family.supportQuotient i vertex)) hslack
+      exact mul_nonneg hseamPower (mul_nonneg htangentialPower hquotient)
+    · have hupper := RatBall.le_upper_of_holds (hvalues 0)
+      have hzero : values 0 = 0 := by
+        apply le_antisymm
+        · exact hupper.trans (by exact_mod_cast hseam.2)
+        · exact box.seam_nonnegative h hvalues
+      simp [hzero, Nat.ne_of_gt hseam.1]
+    · have hupper := RatBall.le_upper_of_holds (hvalues 1)
+      have hzero : values 1 = 0 := by
+        apply le_antisymm
+        · exact hupper.trans (by exact_mod_cast htangential.2)
+        · exact box.tangential_nonnegative h hvalues
+      simp [hzero, Nat.ne_of_gt htangential.1]
   rw [Family.supportSlackPolynomial, evalReal_sub_op] at hfull
   linarith
 
-theorem Box.quotient_positive (box : Box) (h : box.Valid)
+theorem Box.quotient_nonnegative (box : Box) (h : box.Valid)
     {values : Fin 5 → ℝ}
     (hvalues : ∀ i, (box.variableBalls i).Holds (values i)) :
-    0 < evalReal values box.family.quotient := by
-  exact RatBall.pos_of_holds_of_lower_pos
-    (box.quotientBall_holds hvalues) h.quotient_positive
+    0 ≤ evalReal values box.family.quotient := by
+  exact RatBall.nonneg_of_holds_of_lower_nonneg
+    (box.quotientBall_holds hvalues) h.quotient_nonnegative
 
 /-- Every valid rational leaf proves the complete denominator-cleared
 transition obstruction nonnegative throughout its five-dimensional box. -/
@@ -150,7 +179,7 @@ theorem Box.obstruction_nonnegative (box : Box) (h : box.Valid)
     0 ≤ evalReal values box.family.obstruction := by
   rw [box.family.eval_obstruction_factor h.factor]
   exact mul_nonneg (pow_nonneg (box.seam_nonnegative h hvalues) _)
-    (le_of_lt (box.quotient_positive h hvalues))
+    (box.quotient_nonnegative h hvalues)
 
 end Noperthedron.SnubCube.ProjectiveTransitionBox
 

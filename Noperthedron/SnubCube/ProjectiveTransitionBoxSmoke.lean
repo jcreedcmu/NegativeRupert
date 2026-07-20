@@ -63,6 +63,25 @@ theorem nestedPointBox_valid_kernel : nestedPointBox.Valid := by
 theorem nestedPointBox_valid_native : nestedPointBox.Valid := by
   native_decide
 
+/-- A codimension-one width certificate with two positive determinant
+weights and one identically zero weight.  Some support quotients have the
+wrong sign off the face, but their exact tangential factor vanishes at
+`e = 0`. -/
+def widthPointBox : Box where
+  familyIndex := 5
+  variableBalls := ![
+    RatBall.const (19 / 20000),
+    RatBall.const 0,
+    RatBall.const 6,
+    RatBall.const (-15),
+    RatBall.const (683 / 100)]
+
+theorem widthPointBox_valid_kernel : widthPointBox.Valid := by
+  decide +kernel
+
+theorem widthPointBox_valid_native : widthPointBox.Valid := by
+  native_decide
+
 end Noperthedron.SnubCube.ProjectiveTransitionBoxSmoke
 
 end

@@ -304,6 +304,15 @@ theorem direction_nonzero_of_weights_positive
     rw [weight_eq_viewSum_mul_determinantWeights p edge hsum 0] at hpositive
     simp [determinantWeights, hzero, det2] at hpositive
 
+theorem direction_nonzero_of_other_weight_positive
+    (p : CayleyPose ℝ) (edge : EdgeTriple) (hsum : viewSum p ≠ 0)
+    (i j : Fin 3) (hji : j ≠ i) (hpositive : 0 < weight p edge j) :
+    direction p (edge i) ≠ 0 := by
+  intro hzero
+  rw [weight_eq_viewSum_mul_determinantWeights p edge hsum j] at hpositive
+  fin_cases i <;> fin_cases j <;>
+    simp_all [determinantWeights, det2]
+
 /-- A checked transition leaf rules out every planar translation of every
 pose represented by its exact blown-up chart box. -/
 theorem Box.valid_imp_not_translated_rupert
@@ -320,20 +329,29 @@ theorem Box.valid_imp_not_translated_rupert
   let μ : Fin 3 → ℝ := weight p edge
   let u : Fin 3 → ℝ² := fun i => direction p (edge i)
   let defect : Fin 3 → ℝ := actualDefect values family
-  have hμpos : ∀ i, 0 < μ i := by
+  have hμnonneg : ∀ i, 0 ≤ μ i := by
     intro i
-    change 0 < weight p (realEdge box.family) i
+    change 0 ≤ weight p (realEdge box.family) i
     rw [← eval_family_weight hview]
-    exact box.weight_positive hvalid hvalues i
+    exact box.weight_nonnegative hvalid hvalues i
+  have hμwitness : ∀ i, ∃ j, j ≠ i ∧ 0 < μ j := by
+    intro i
+    obtain ⟨j, hji, hj⟩ := box.direction_weight_witness hvalid hvalues i
+    refine ⟨j, hji, ?_⟩
+    change 0 < weight p (realEdge box.family) j
+    rw [← eval_family_weight hview]
+    exact hj
   apply Noperthedron.BalancedSupport.not_rupertPose_of_balanced_support_with_defect
     normalizedExactPolyhedron (p.matrixPoseWithOffset offset)
     (fun i => vi (family.supportVertex i))
     (fun i => vi (family.outerVertex i)) μ u defect
   · intro i
-    exact direction_nonzero_of_weights_positive p edge hsum hμpos i
+    obtain ⟨j, hji, hj⟩ := hμwitness i
+    exact direction_nonzero_of_other_weight_positive p edge hsum i j hji hj
   · intro i
-    exact (hμpos i).le
-  · exact ⟨0, hμpos 0⟩
+    exact hμnonneg i
+  · obtain ⟨j, _, hj⟩ := hμwitness 0
+    exact ⟨j, hj⟩
   · exact weight_balance p edge hsum
   · intro i y hy
     obtain ⟨v, ⟨j, rfl⟩, rfl⟩ := hy

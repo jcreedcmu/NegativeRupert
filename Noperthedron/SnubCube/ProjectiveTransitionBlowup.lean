@@ -90,6 +90,18 @@ def familyNested : Family where
   supportCompetitor := ![4, 1, 3]
   factorPower := 2
 
+/-- A two-contact width certificate for the finite-seam `e = 0` boundary.
+The first two edges are exact opposites, hence their determinant weights are
+equal and the third weight is identically zero.  The two positive weighted
+contacts compare the width of the rotated inner shadow with the outer one. -/
+def familyWidth : Family where
+  edgeStart := ![1, 0, 4]
+  edgeFinish := ![0, 1, 2]
+  supportVertex := ![11, 0, 5]
+  outerVertex := ![2, 0, 5]
+  supportCompetitor := ![2, 0, 5]
+  factorPower := 1
+
 def Family.edge (family : Family) (i : Fin 3) : ExactVector :=
   exactEdge (family.edgeStart i) (family.edgeFinish i)
 

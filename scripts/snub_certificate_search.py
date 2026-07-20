@@ -24,8 +24,15 @@ import random
 import sys
 from fractions import Fraction as Q
 
-import numpy as np
-from scipy.spatial import ConvexHull
+try:
+    import numpy as np
+    from scipy.spatial import ConvexHull
+except ModuleNotFoundError:
+    # The exact certificate generators below use only the standard library.
+    # Keep them runnable on proof-checking machines without the optional
+    # floating-geometry search dependencies.
+    np = None
+    ConvexHull = None
 
 
 KAPPA = Q(1, 10**10)
@@ -110,7 +117,8 @@ def normalized_vertices_q():
 
 
 VERTICES_Q = normalized_vertices_q()
-VERTICES = np.asarray([[float(x) for x in v] for v in VERTICES_Q])
+VERTICES = (np.asarray([[float(x) for x in v] for v in VERTICES_Q])
+            if np is not None else None)
 
 
 def normalized_vertices_exact_float():
@@ -125,7 +133,8 @@ def normalized_vertices_exact_float():
     return np.asarray(out)
 
 
-VERTICES_EXACT = normalized_vertices_exact_float()
+VERTICES_EXACT = (normalized_vertices_exact_float()
+                  if np is not None else None)
 
 
 # Exact arithmetic in Q[t]/(t^3-t^2-t-1), matching ExactArithmetic.lean.
@@ -709,16 +718,22 @@ def epoly_leading_and_tail(polynomial):
     return leading, tail
 
 
-def epoly_bernstein_coefficients(polynomial, endpoints):
+def epoly_bernstein_coefficients(polynomial, endpoints, degrees=None):
     """Exact tensor Bernstein coefficients on a rational box."""
     power_basis = epoly_recenter(
         polynomial, [(lo, hi-lo) for lo, hi in endpoints])
-    if not power_basis:
-        degrees = (0,) * len(endpoints)
-        return degrees, {degrees: TEXPR_ZERO}
-    degrees = tuple(max(powers[i] for powers in power_basis)
-                    for i in range(len(endpoints)))
-    answer = {}
+    natural_degrees = ((0,) * len(endpoints) if not power_basis else
+        tuple(max(powers[i] for powers in power_basis)
+              for i in range(len(endpoints))))
+    if degrees is None:
+        degrees = natural_degrees
+    else:
+        degrees = tuple(degrees)
+        if any(actual > requested for actual, requested in
+               zip(natural_degrees, degrees)):
+            raise ValueError("requested Bernstein degree is too small")
+    answer = {index: TEXPR_ZERO for index in
+              itertools.product(*(range(d+1) for d in degrees))}
     for powers, coefficient in power_basis.items():
         for index in itertools.product(*(
                 range(power, degree+1)
@@ -726,9 +741,8 @@ def epoly_bernstein_coefficients(polynomial, endpoints):
             scalar = Q(1)
             for i, power, degree in zip(index, powers, degrees):
                 scalar *= Q(math.comb(i, power), math.comb(degree, power))
-            answer[index] = texpr_add(
-                answer.get(index, TEXPR_ZERO),
-                texpr_scale(scalar, coefficient))
+            answer[index] = texpr_add(answer[index],
+                                      texpr_scale(scalar, coefficient))
     return degrees, answer
 
 
@@ -762,6 +776,37 @@ def bernstein_split(coefficients, degrees, axis):
     return left, right
 
 
+def bernstein_float_table(coefficients):
+    """Numerical shadow used only to choose a subdivision coordinate."""
+    return {index: texpr_float(coefficient)
+            for index, coefficient in coefficients.items()}
+
+
+def bernstein_split_float(coefficients, degrees, axis):
+    """Fast floating de Casteljau split; never used to accept a leaf."""
+    groups = {}
+    for index, coefficient in coefficients.items():
+        key = index[:axis] + index[axis+1:]
+        groups.setdefault(key, [None] * (degrees[axis]+1))[index[axis]] = \
+            coefficient
+    left, right = {}, {}
+    for key, row in groups.items():
+        levels = [row]
+        while len(levels[-1]) > 1:
+            levels.append([(a+b)/2 for a, b in
+                           zip(levels[-1], levels[-1][1:])])
+        left_row = [levels[i][0] for i in range(len(row))]
+        right_row = [levels[len(row)-1-i][i]
+                     for i in range(len(row))]
+        for i, coefficient in enumerate(left_row):
+            index = key[:axis] + (i,) + key[axis:]
+            left[index] = coefficient
+        for i, coefficient in enumerate(right_row):
+            index = key[:axis] + (i,) + key[axis:]
+            right[index] = coefficient
+    return left, right
+
+
 def transition_blowup_families_exact():
     specifications = [
         ([8, 15, 10], [9, 11, 14], [1, 11, 10], [1, 3, 2],
@@ -776,6 +821,10 @@ def transition_blowup_families_exact():
         # `e = O(d)` transition missed by the axis-local family bank.
         ([14, 8, 15], [4, 1, 3], [14, 8, 15], [4, 1, 3],
          [4, 1, 3]),
+        # A two-contact width certificate.  The first two edges are exact
+        # opposites, so their weights agree and the third weight vanishes.
+        ([1, 0, 4], [0, 1, 2], [11, 0, 5], [2, 0, 5],
+         [2, 0, 5]),
     ]
     return [exact_transition_blowup_polynomial(*specification)
             for specification in specifications]
@@ -857,7 +906,7 @@ def transition_guarded_bernstein_cover(max_nodes=5000, max_depth=100,
     class NodeLimit(Exception):
         pass
 
-    def visit(table, endpoints, depth):
+    def visit(table, float_table, endpoints, depth):
         nonlocal node_count
         if node_count >= max_nodes:
             raise NodeLimit
@@ -873,12 +922,13 @@ def transition_guarded_bernstein_cover(max_nodes=5000, max_depth=100,
         for axis in range(5):
             if degrees[axis] == 0:
                 continue
-            children = bernstein_split(table, degrees, axis)
-            lowers = [bernstein_lower(child) for child in children]
+            children = bernstein_split_float(float_table, degrees, axis)
+            lowers = [min(child.values()) for child in children]
             score = (sum(lower > threshold for lower in lowers),
                      min(lowers), sum(lowers))
             candidates.append((score, axis, children))
-        _, axis, children = max(candidates, key=lambda item: item[0])
+        _, axis, float_children = max(candidates, key=lambda item: item[0])
+        children = bernstein_split(table, degrees, axis)
         lo, hi = endpoints[axis]
         mid = (lo + hi) / 2
         child_endpoints = []
@@ -886,11 +936,12 @@ def transition_guarded_bernstein_cover(max_nodes=5000, max_depth=100,
             child = list(endpoints)
             child[axis] = child_range
             child_endpoints.append(child)
-        for child, child_box in zip(children, child_endpoints):
-            visit(child, child_box, depth+1)
+        for child, float_child, child_box in zip(
+                children, float_children, child_endpoints):
+            visit(child, float_child, child_box, depth+1)
 
     try:
-        visit(coefficients, root, 0)
+        visit(coefficients, bernstein_float_table(coefficients), root, 0)
     except NodeLimit:
         truncated = True
     return {
@@ -900,6 +951,304 @@ def transition_guarded_bernstein_cover(max_nodes=5000, max_depth=100,
         "root_lower": bernstein_lower(coefficients),
         "threshold": threshold,
         "node_count": node_count,
+        "truncated": truncated,
+        "leaves": leaves,
+        "failures": failures,
+    }
+
+
+def transition_guarded_family_polynomials():
+    """The three exact obstruction quotients used on the guarded branch.
+
+    Unlike the experimental soft maximum, this retains family 89 on both
+    sides of its guard and permits each subdivision leaf to select whichever
+    of family 89, transverse, or nested has a positive quotient.
+    """
+    certificate = transition_guarded_leading_certificate()
+    families = transition_blowup_families_exact()
+    variables = [epoly_var(5, i) for i in range(5)]
+    substitutions = [variables[0], variables[1], variables[3],
+                     variables[4], certificate["parameter_t"]]
+    family_indices = (1, 3, 4)
+    return {
+        "family_indices": family_indices,
+        "parameter_t": certificate["parameter_t"],
+        "quotients": [epoly_compose(families[i]["quotient"], substitutions)
+                      for i in family_indices],
+    }
+
+
+def transition_guarded_piece_polynomials():
+    """Exact three-piece replacement for the failed soft maximum."""
+    families = transition_blowup_families_exact()
+    variables = [epoly_var(5, i) for i in range(5)]
+    leading89, _ = epoly_leading_and_tail(families[1]["quotient"])
+    constant = leading89[(0, 0, 0, 0, 0)]
+    tangential = leading89[(0, 1, 0, 0, 0)]
+    rotation = leading89[(0, 0, 0, 0, 1)]
+    upper_split = (Q(3, 125), Q(0), Q(0))
+    lower_split = (Q(3, 100), Q(0), Q(0))
+    lower_t = (Q(3, 5), Q(0), Q(0))
+    maximum_slack_constant = texpr_sub(
+        texpr_sub(lower_split, constant), texpr_mul(rotation, lower_t))
+    maximum_slack = epoly_sub(
+        epoly_const(5, maximum_slack_constant),
+        epoly_scale(tangential, variables[1]))
+
+    def substitutions(slack):
+        numerator = epoly_sub(
+            epoly_sub(epoly_const(5, texpr_sub(lower_split, constant)),
+                      epoly_scale(tangential, variables[1])), slack)
+        t = epoly_scale(texpr_inv(rotation), numerator)
+        return [variables[0], variables[1], variables[3], variables[4], t]
+
+    upper_slack = epoly_mul(variables[2],
+                            epoly_const(5, upper_split))
+    middle_slack = epoly_add(
+        epoly_const(5, upper_split),
+        epoly_mul(variables[2], epoly_const(
+            5, texpr_sub(lower_split, upper_split))))
+    lower_slack = epoly_add(
+        epoly_const(5, lower_split),
+        epoly_mul(variables[2], epoly_sub(
+            maximum_slack, epoly_const(5, lower_split))))
+    substitutions_by_piece = {
+        "upper": substitutions(upper_slack),
+        "middle": substitutions(middle_slack),
+        "lower": substitutions(lower_slack),
+    }
+
+    def quotient(family_index, piece):
+        return epoly_compose(families[family_index]["quotient"],
+                             substitutions_by_piece[piece])
+
+    middle_transverse = quotient(3, "middle")
+    middle_nested = quotient(4, "middle")
+    lower_transverse = quotient(3, "lower")
+    lower_nested = quotient(4, "lower")
+    leading_transverse, _ = epoly_leading_and_tail(middle_transverse)
+    leading_nested, _ = epoly_leading_and_tail(middle_nested)
+    transverse_weight = next(
+        coefficient for powers, coefficient in leading_nested.items()
+        if powers == (0, 0, 0, 1, 0))
+    nested_weight = texpr_neg(next(
+        coefficient for powers, coefficient in leading_transverse.items()
+        if powers == (0, 0, 0, 1, 0)))
+
+    def combination(transverse, nested):
+        return epoly_add(epoly_scale(transverse_weight, transverse),
+                         epoly_scale(nested_weight, nested))
+
+    return {
+        "upper_split": upper_split,
+        "lower_split": lower_split,
+        "maximum_slack": maximum_slack,
+        "parameter_t": {piece: values[4] for piece, values in
+                        substitutions_by_piece.items()},
+        "transverse_weight": transverse_weight,
+        "nested_weight": nested_weight,
+        "upper89": quotient(1, "upper"),
+        "middle89": quotient(1, "middle"),
+        "middleTransverse": middle_transverse,
+        "middleNested": middle_nested,
+        "middleWidth": quotient(5, "middle"),
+        "middleCombination": combination(
+            middle_transverse, middle_nested),
+        "lowerCombination": combination(
+            lower_transverse, lower_nested),
+    }
+
+
+def transition_guarded_middle_cover(max_nodes=5000, max_depth=100,
+                                     polar=False):
+    """Exact nonnegative OR-cover of the narrow overlap piece."""
+    certificate = transition_guarded_piece_polynomials()
+    polynomials = [certificate["middle89"],
+                   certificate["middleTransverse"],
+                   certificate["middleNested"],
+                   certificate["middleWidth"],
+                   certificate["middleCombination"]]
+    labels = ["family89", "familyTransverse", "familyNested", "familyWidth",
+              "transverseNestedCombination"]
+    if polar:
+        variables = [epoly_var(5, i) for i in range(5)]
+        one = epoly_const(5, TEXPR_ONE)
+        substitutions = [epoly_mul(variables[0], variables[1]),
+            epoly_mul(variables[0], epoly_sub(one, variables[1])),
+            variables[2], variables[3], variables[4]]
+        polynomials = [epoly_compose(polynomial, substitutions)
+                       for polynomial in polynomials]
+        root = [(Q(0), Q(1, 500)), (Q(0), Q(1)), (Q(0), Q(1)),
+                (Q(-16), Q(16)), (Q(-16), Q(16))]
+    else:
+        root = [(Q(0), Q(1, 1000)), (Q(0), Q(2)), (Q(0), Q(1)),
+                (Q(-16), Q(16)), (Q(-16), Q(16))]
+    root_tables = [epoly_bernstein_coefficients(polynomial, root)
+                   for polynomial in polynomials]
+    degrees = [item[0] for item in root_tables]
+    tables = [item[1] for item in root_tables]
+    float_tables = [bernstein_float_table(table) for table in tables]
+    leaves = []
+    failures = []
+    node_count = 0
+    maximum_depth = 0
+    split_axis_counts = [0] * 5
+    label_leaf_counts = [0] * len(labels)
+    truncated = False
+
+    class NodeLimit(Exception):
+        pass
+
+    def visit(current, current_float, endpoints, depth, path):
+        nonlocal node_count, maximum_depth
+        if node_count >= max_nodes:
+            raise NodeLimit
+        node_count += 1
+        maximum_depth = max(maximum_depth, depth)
+        lowers = [bernstein_lower(table) for table in current]
+        label = max(range(len(lowers)), key=lowers.__getitem__)
+        if lowers[label] >= 0:
+            label_leaf_counts[label] += 1
+            leaves.append({"path": path, "endpoints": endpoints,
+                           "label": labels[label], "lower": lowers[label]})
+            return
+        if depth >= max_depth:
+            failures.append({"path": path, "endpoints": endpoints,
+                             "lowers": lowers})
+            return
+        candidates = []
+        path_axis_counts = [sum(split_axis == axis
+                                for split_axis, _ in path)
+                            for axis in range(5)]
+        for axis in range(5):
+            split_labels = [bernstein_split_float(table, degree, axis)
+                            for table, degree in zip(current_float, degrees)]
+            child_envelopes = [max(min(split_labels[label][side].values())
+                                   for label in range(len(labels)))
+                               for side in range(2)]
+            score = (sum(lower >= 0 for lower in child_envelopes),
+                     -path_axis_counts[axis],
+                     min(child_envelopes), sum(child_envelopes))
+            candidates.append((score, axis, split_labels))
+        _, axis, split_float = max(candidates, key=lambda item: item[0])
+        split_axis_counts[axis] += 1
+        split_exact = [bernstein_split(table, degree, axis)
+                       for table, degree in zip(current, degrees)]
+        lo, hi = endpoints[axis]
+        mid = (lo + hi) / 2
+        for side, child_range in enumerate(((lo, mid), (mid, hi))):
+            child_endpoints = list(endpoints)
+            child_endpoints[axis] = child_range
+            visit([label[side] for label in split_exact],
+                  [label[side] for label in split_float],
+                  child_endpoints, depth+1, path + [(axis, side)])
+
+    try:
+        visit(tables, float_tables, root, 0, [])
+    except NodeLimit:
+        truncated = True
+    return {
+        "root": root,
+        "labels": labels,
+        "polar": polar,
+        "degrees": degrees,
+        "coefficient_counts": [len(table) for table in tables],
+        "root_lowers": [bernstein_lower(table) for table in tables],
+        "node_count": node_count,
+        "maximum_depth": maximum_depth,
+        "split_axis_counts": split_axis_counts,
+        "label_leaf_counts": label_leaf_counts,
+        "truncated": truncated,
+        "leaves": leaves,
+        "failures": failures,
+    }
+
+
+def transition_guarded_family_cover(max_nodes=5000, max_depth=100,
+                                     threshold=Q(0)):
+    """Exact adaptive OR-cover by three full finite-seam quotients."""
+    certificate = transition_guarded_family_polynomials()
+    root = [(Q(0), Q(1, 1000)), (Q(0), Q(2)), (Q(0), Q(1)),
+            (Q(-16), Q(16)), (Q(-16), Q(16))]
+    root_tables = [epoly_bernstein_coefficients(polynomial, root)
+                   for polynomial in certificate["quotients"]]
+    degrees = [item[0] for item in root_tables]
+    coefficients = [item[1] for item in root_tables]
+    float_coefficients = [bernstein_float_table(table)
+                          for table in coefficients]
+    leaves = []
+    failures = []
+    node_count = 0
+    maximum_depth = 0
+    split_axis_counts = [0] * 5
+    family_leaf_counts = [0] * len(coefficients)
+    truncated = False
+
+    class NodeLimit(Exception):
+        pass
+
+    def visit(tables, float_tables, endpoints, depth, path):
+        nonlocal node_count, maximum_depth
+        if node_count >= max_nodes:
+            raise NodeLimit
+        node_count += 1
+        maximum_depth = max(maximum_depth, depth)
+        lowers = [bernstein_lower(table) for table in tables]
+        family = max(range(len(lowers)), key=lowers.__getitem__)
+        if lowers[family] > threshold:
+            family_leaf_counts[family] += 1
+            leaves.append({"path": path, "endpoints": endpoints,
+                           "family": certificate["family_indices"][family],
+                           "lower": lowers[family]})
+            return
+        if depth >= max_depth:
+            failures.append({"path": path, "endpoints": endpoints,
+                             "lowers": lowers})
+            return
+        candidates = []
+        for axis in range(5):
+            if all(family_degrees[axis] == 0
+                   for family_degrees in degrees):
+                continue
+            split_families = [bernstein_split_float(
+                table, family_degrees, axis)
+                for table, family_degrees in zip(float_tables, degrees)]
+            child_envelopes = [max(min(split_families[family][side].values())
+                                   for family in range(len(tables)))
+                               for side in range(2)]
+            score = (sum(lower > float(threshold)
+                         for lower in child_envelopes),
+                     min(child_envelopes), sum(child_envelopes))
+            candidates.append((score, axis, split_families))
+        _, axis, split_float_families = max(
+            candidates, key=lambda item: item[0])
+        split_axis_counts[axis] += 1
+        split_families = [bernstein_split(table, family_degrees, axis)
+                          for table, family_degrees in zip(tables, degrees)]
+        lo, hi = endpoints[axis]
+        mid = (lo + hi) / 2
+        for side, child_range in enumerate(((lo, mid), (mid, hi))):
+            child_endpoints = list(endpoints)
+            child_endpoints[axis] = child_range
+            visit([family[side] for family in split_families],
+                  [family[side] for family in split_float_families],
+                  child_endpoints, depth+1, path + [(axis, side)])
+
+    try:
+        visit(coefficients, float_coefficients, root, 0, [])
+    except NodeLimit:
+        truncated = True
+    return {
+        "root": root,
+        "family_indices": certificate["family_indices"],
+        "degrees": degrees,
+        "coefficient_counts": [len(table) for table in coefficients],
+        "root_lowers": [bernstein_lower(table) for table in coefficients],
+        "threshold": threshold,
+        "node_count": node_count,
+        "maximum_depth": maximum_depth,
+        "split_axis_counts": split_axis_counts,
+        "family_leaf_counts": family_leaf_counts,
         "truncated": truncated,
         "leaves": leaves,
         "failures": failures,
@@ -2477,6 +2826,111 @@ def transition_family_gap_profile(d=1e-6, e=0.0, a=0.0, b=-16.0,
             "top": rows[:12]}
 
 
+def search_transition_farkas_family(d, e, a, b, ratio):
+    """Search all projected vertex-pair normals at one transition point.
+
+    This is a dependency-free implementation of the planar Farkas dual.
+    Each candidate normal chooses an outer support vertex of the unrotated
+    snub cube and an inner vertex maximizing the rotated support.  A balanced
+    triple with positive weighted excess is a translated-support family.
+    """
+    vertices = [[texpr_float(coordinate) for coordinate in vertex]
+                for vertex in VERTICES_SYMBOLIC]
+    transition_edge = [x-y for x, y in
+                       zip(vertices[15], vertices[11])]
+    transition_delta = [x-y for x, y in
+                        zip(vertices[3], vertices[15])]
+    seam = cross3(transition_edge, transition_delta)
+    h = d*e
+    u = (d-seam[0]*(1-h)-seam[2]*h)/(seam[1]-seam[0])
+    view = [1-u-h, u, h]
+    view_norm = math.sqrt(qdot(view, view))
+    view_unit = [x/view_norm for x in view]
+    reference = [1.0, 0.0, 0.0]
+    if abs(qdot(reference, view_unit)) > .9:
+        reference = [0.0, 1.0, 0.0]
+    basis0 = cross3(view_unit, reference)
+    basis0_norm = math.sqrt(qdot(basis0, basis0))
+    basis0 = [x/basis0_norm for x in basis0]
+    basis1 = cross3(view_unit, basis0)
+
+    x, y, z = d*d*a, d*d*b, d*ratio
+    denominator = 1+x*x+y*y+z*z
+    numerator = [
+        [1+x*x-y*y-z*z, 2*(x*y-z), 2*(x*z+y)],
+        [2*(x*y+z), 1-x*x+y*y-z*z, 2*(y*z-x)],
+        [2*(x*z-y), 2*(y*z+x), 1-x*x-y*y+z*z],
+    ]
+    rotated = [[sum(numerator[i][j]*vertex[j] for j in range(3)) /
+                denominator for i in range(3)] for vertex in vertices]
+
+    # Identical projected directions can arise from several parallel chords;
+    # only the one with greatest support excess can enter an optimum.
+    by_direction = {}
+    for start in range(24):
+        for finish in range(start):
+            base_edge = [vertices[start][i]-vertices[finish][i]
+                         for i in range(3)]
+            for reverse in (False, True):
+                edge = ([-value for value in base_edge]
+                        if reverse else base_edge)
+                oriented_start, oriented_finish = ((finish, start)
+                    if reverse else (start, finish))
+                normal = cross3(view, edge)
+                normal_norm = math.sqrt(qdot(normal, normal))
+                if normal_norm < 1e-12:
+                    continue
+                normal = [value/normal_norm for value in normal]
+                plane = (qdot(normal, basis0), qdot(normal, basis1))
+                outer = max(range(24),
+                            key=lambda i: qdot(normal, vertices[i]))
+                inner = max(range(24),
+                            key=lambda i: qdot(normal, rotated[i]))
+                excess = (qdot(normal, rotated[inner]) -
+                          qdot(normal, vertices[outer]))
+                key = (round(plane[0], 10), round(plane[1], 10))
+                record = {"plane": plane, "excess": excess,
+                          "start": oriented_start,
+                          "finish": oriented_finish,
+                          "inner": inner, "outer": outer}
+                if key not in by_direction or excess > \
+                        by_direction[key]["excess"]:
+                    by_direction[key] = record
+    candidates = list(by_direction.values())
+
+    def det(left, right):
+        return left[0]*right[1]-left[1]*right[0]
+
+    best = None
+    for first, second, third in itertools.combinations(candidates, 3):
+        weights = [det(second["plane"], third["plane"]),
+                   det(third["plane"], first["plane"]),
+                   det(first["plane"], second["plane"])]
+        if max(weights) <= 1e-12:
+            weights = [-weight for weight in weights]
+        if min(weights) < -1e-10 or sum(weights) <= 1e-12:
+            continue
+        margin = sum(weight*record["excess"] for weight, record in
+                     zip(weights, (first, second, third))) / sum(weights)
+        if best is None or margin > best[0]:
+            best = (margin, weights, (first, second, third))
+    if best is None:
+        raise RuntimeError("no balanced projected-normal triple")
+    margin, weights, records = best
+    return {
+        "point": [d, e, a, b, ratio],
+        "direction_count": len(candidates),
+        "normalized_margin": margin,
+        "normalized_weights": weights,
+        "edge_starts": [record["start"] for record in records],
+        "edge_finishes": [record["finish"] for record in records],
+        "support_vertices": [record["inner"] for record in records],
+        "outer_vertices": [record["outer"] for record in records],
+        "support_competitors": [record["outer"] for record in records],
+        "individual_excess": [record["excess"] for record in records],
+    }
+
+
 def qpoly_eval_centered(coefficients, centers, radii):
     """Tight centered enclosure of a normalized quadratic polynomial."""
     x, y, z = centers
@@ -3421,7 +3875,7 @@ def qjson(x):
         return {k: qjson(v) for k, v in x.items()}
     if isinstance(x, (tuple, list)):
         return [qjson(v) for v in x]
-    if isinstance(x, (np.integer,)):
+    if np is not None and isinstance(x, np.integer):
         return int(x)
     return x
 
@@ -3873,7 +4327,23 @@ def main():
     guarded_cover_parser.add_argument("--max-nodes", type=int, default=5000)
     guarded_cover_parser.add_argument("--max-depth", type=int, default=100)
     guarded_cover_parser.add_argument("--threshold", default="0")
+    guarded_family_parser = sub.add_parser(
+        "projective-transition-guarded-family-cover")
+    guarded_family_parser.add_argument("--max-nodes", type=int, default=5000)
+    guarded_family_parser.add_argument("--max-depth", type=int, default=100)
+    guarded_family_parser.add_argument("--threshold", default="0")
+    guarded_middle_parser = sub.add_parser(
+        "projective-transition-guarded-middle-cover")
+    guarded_middle_parser.add_argument("--max-nodes", type=int, default=5000)
+    guarded_middle_parser.add_argument("--max-depth", type=int, default=100)
+    guarded_middle_parser.add_argument("--polar", action="store_true")
     sub.add_parser("projective-transition-gap-profile")
+    farkas_parser = sub.add_parser("projective-transition-farkas-search")
+    farkas_parser.add_argument("--d", type=float, default=.0009525383113968972)
+    farkas_parser.add_argument("--e", type=float, default=0.0)
+    farkas_parser.add_argument("--a", type=float, default=5.9032002193099125)
+    farkas_parser.add_argument("--b", type=float, default=-14.874129731767692)
+    farkas_parser.add_argument("--ratio", type=float, default=6.830650718887462)
     args = parser.parse_args()
     if args.command == "local-smoke":
         result = local_smoke(Q(args.theta), Q(args.phi),
@@ -3997,8 +4467,29 @@ def main():
         summary["failure_count"] = len(result["failures"])
         summary["failure_examples"] = result["failures"][:3]
         print(json.dumps(qjson(summary), indent=2))
+    elif args.command == "projective-transition-guarded-family-cover":
+        result = transition_guarded_family_cover(
+            args.max_nodes, args.max_depth, Q(args.threshold))
+        summary = {key: value for key, value in result.items()
+                   if key not in ("leaves", "failures")}
+        summary["leaf_count"] = len(result["leaves"])
+        summary["failure_count"] = len(result["failures"])
+        summary["failure_examples"] = result["failures"][:3]
+        print(json.dumps(qjson(summary), indent=2))
+    elif args.command == "projective-transition-guarded-middle-cover":
+        result = transition_guarded_middle_cover(
+            args.max_nodes, args.max_depth, args.polar)
+        summary = {key: value for key, value in result.items()
+                   if key not in ("leaves", "failures")}
+        summary["leaf_count"] = len(result["leaves"])
+        summary["failure_count"] = len(result["failures"])
+        summary["failure_examples"] = result["failures"][:3]
+        print(json.dumps(qjson(summary), indent=2))
     elif args.command == "projective-transition-gap-profile":
         print(json.dumps(qjson(transition_family_gap_profile()), indent=2))
+    elif args.command == "projective-transition-farkas-search":
+        print(json.dumps(qjson(search_transition_farkas_family(
+            args.d, args.e, args.a, args.b, args.ratio)), indent=2))
 
 
 if __name__ == "__main__":
