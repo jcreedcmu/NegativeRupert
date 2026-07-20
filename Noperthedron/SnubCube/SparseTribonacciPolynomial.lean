@@ -370,6 +370,109 @@ theorem evalReal_pos_of_lower_pos {n : ℕ} {vars : Fin n → RatBall}
     0 < evalReal values polynomial :=
   RatBall.pos_of_holds_of_lower_pos (evalBall_holds hvars polynomial) hpos
 
+/-! ## Exact affine recentering
+
+Expanding around a rational box center before interval evaluation retains
+the cancellations between large monomials that direct natural-interval
+evaluation loses.  The expansion remains an exact sparse polynomial over the
+same cubic field, so both the transformation and its final sign check are
+kernel executable.
+-/
+
+def polynomialPower {n : ℕ} (value : Polynomial n) : ℕ → Polynomial n
+  | 0 => 1
+  | power + 1 => polynomialPower value power * value
+
+def polynomialProduct {n : ℕ} : List (Polynomial n) → Polynomial n
+  | [] => 1
+  | head :: tail => head * polynomialProduct tail
+
+def affineVariable {n : ℕ} (centers radii : Fin n → ℚ)
+    (index : Fin n) : Polynomial n :=
+  const (ofRat (centers index)) +
+    const (ofRat (radii index)) * var index
+
+def Term.recenter {n : ℕ} (term : Term n)
+    (centers radii : Fin n → ℚ) : Polynomial n :=
+  const term.coefficient * polynomialProduct
+    (List.ofFn fun i =>
+      polynomialPower (affineVariable centers radii i) (term.powers i))
+
+def recenter {n : ℕ} (centers radii : Fin n → ℚ)
+    (polynomial : Polynomial n) : Polynomial n :=
+  polynomial.foldr (fun term answer => term.recenter centers radii + answer) 0
+
+theorem evalReal_polynomialPower {n : ℕ} (vars : Fin n → ℝ)
+    (value : Polynomial n) (power : ℕ) :
+    evalReal vars (polynomialPower value power) =
+      evalReal vars value ^ power := by
+  induction power with
+  | zero => simp [polynomialPower]
+  | succ power ih => simp [polynomialPower, ih, pow_succ]
+
+theorem evalReal_polynomialProduct {n : ℕ} (vars : Fin n → ℝ)
+    (values : List (Polynomial n)) :
+    evalReal vars (polynomialProduct values) =
+      (values.map (evalReal vars)).prod := by
+  induction values with
+  | nil => simp [polynomialProduct]
+  | cons head tail ih => simp [polynomialProduct, ih]
+
+theorem evalReal_affineVariable {n : ℕ} (vars : Fin n → ℝ)
+    (centers radii : Fin n → ℚ) (index : Fin n) :
+    evalReal vars (affineVariable centers radii index) =
+      (centers index : ℝ) + (radii index : ℝ) * vars index := by
+  simp [affineVariable]
+
+theorem evalReal_term_recenter {n : ℕ} (vars : Fin n → ℝ)
+    (centers radii : Fin n → ℚ) (term : Term n) :
+    evalReal vars (term.recenter centers radii) =
+      term.evalReal (fun i =>
+        (centers i : ℝ) + (radii i : ℝ) * vars i) := by
+  simp only [Term.recenter, evalReal_mul_op, evalReal_const,
+    evalReal_polynomialProduct, List.map_ofFn,
+    List.prod_ofFn, Term.evalReal, Function.comp_apply]
+  simp_rw [evalReal_polynomialPower, evalReal_affineVariable]
+
+theorem evalReal_recenter {n : ℕ} (vars : Fin n → ℝ)
+    (centers radii : Fin n → ℚ) (polynomial : Polynomial n) :
+    evalReal vars (recenter centers radii polynomial) =
+      evalReal (fun i =>
+        (centers i : ℝ) + (radii i : ℝ) * vars i) polynomial := by
+  induction polynomial with
+  | nil => simp [recenter]
+  | cons head tail ih =>
+      change evalReal vars (head.recenter centers radii +
+          recenter centers radii tail) = _
+      rw [evalReal_add_op, evalReal_term_recenter vars centers radii head, ih,
+        evalReal_cons]
+
+def recenteredEvalBall {n : ℕ} (vars : Fin n → RatBall)
+    (polynomial : Polynomial n) : RatBall :=
+  evalBall (fun _ => RatBall.unit)
+    (recenter (fun i => (vars i).center) (fun i => (vars i).radius)
+      polynomial)
+
+theorem recenteredEvalBall_holds {n : ℕ} {vars : Fin n → RatBall}
+    {values : Fin n → ℝ} (hvars : ∀ i, (vars i).Holds (values i))
+    (polynomial : Polynomial n) :
+    (recenteredEvalBall vars polynomial).Holds
+      (evalReal values polynomial) := by
+  classical
+  choose normalized hnormalized hvalue using fun i =>
+    RatBall.exists_normalized_of_holds (hvars i)
+  have henclose := evalBall_holds hnormalized
+    (recenter (fun i => (vars i).center) (fun i => (vars i).radius)
+      polynomial)
+  rw [evalReal_recenter] at henclose
+  have hfunctions :
+      (fun i => ((vars i).center : ℝ) +
+        ((vars i).radius : ℝ) * normalized i) = values := by
+    funext i
+    exact (hvalue i).symm
+  rw [hfunctions] at henclose
+  exact henclose
+
 end Noperthedron.SnubCube.SparseTribonacciPolynomial
 
 end

@@ -46,6 +46,9 @@ def mul (a b : RatBall) : RatBall :=
 def ofEndpoints (lo hi : ℚ) : RatBall :=
   ⟨(lo + hi) / 2, (hi - lo) / 2⟩
 
+/-- The canonical centered unit interval used after affine recentering. -/
+def unit : RatBall := ⟨0, 1⟩
+
 /-! The enclosure operations form additive and multiplicative commutative
 monoids (but deliberately not a semiring: interval multiplication does not
 distribute over the widened addition operation).  These instances let
@@ -212,6 +215,45 @@ theorem lower_le_of_holds {b : RatBall} {x : ℝ} (h : b.Holds x) :
   push_cast
   rw [abs_le] at h
   linarith
+
+theorem le_upper_of_holds {b : RatBall} {x : ℝ} (h : b.Holds x) :
+    x ≤ (b.center + b.radius : ℚ) := by
+  unfold Holds at h
+  push_cast
+  rw [abs_le] at h
+  linarith
+
+theorem nonneg_of_holds_of_lower_nonneg {b : RatBall} {x : ℝ}
+    (h : b.Holds x) (hnonneg : 0 ≤ b.center - b.radius) : 0 ≤ x := by
+  have hnonnegReal : (0 : ℝ) ≤ (b.center - b.radius : ℚ) := by
+    exact_mod_cast hnonneg
+  exact hnonnegReal.trans (lower_le_of_holds h)
+
+/-- Every value enclosed by a center-radius ball has a normalized coordinate
+in `[-1,1]`.  This is the semantic bridge for exact polynomial recentering. -/
+theorem exists_normalized_of_holds {b : RatBall} {x : ℝ} (h : b.Holds x) :
+    ∃ y : ℝ, unit.Holds y ∧
+      x = (b.center : ℝ) + (b.radius : ℝ) * y := by
+  by_cases hr : b.radius = 0
+  · refine ⟨0, ?_, ?_⟩
+    · simp [unit, Holds]
+    · unfold Holds at h
+      rw [hr] at h
+      norm_num at h ⊢
+      linarith
+  · have hrnonnegReal : (0 : ℝ) ≤ (b.radius : ℚ) := by
+      exact (abs_nonneg (x - (b.center : ℝ))).trans h
+    have hrnonnegQ : (0 : ℚ) ≤ b.radius := by
+      exact_mod_cast hrnonnegReal
+    have hrposQ : 0 < b.radius := lt_of_le_of_ne hrnonnegQ (Ne.symm hr)
+    have hrpos : (0 : ℝ) < (b.radius : ℚ) := by exact_mod_cast hrposQ
+    refine ⟨(x - (b.center : ℝ)) / (b.radius : ℝ), ?_, ?_⟩
+    · unfold unit Holds
+      norm_num
+      rw [abs_div]
+      simpa [abs_of_pos hrpos] using (div_le_one hrpos).mpr h
+    · field_simp
+      ring
 
 theorem pos_of_holds_of_lower_pos {b : RatBall} {x : ℝ}
     (h : b.Holds x) (hpos : 0 < b.center - b.radius) : 0 < x := by

@@ -445,13 +445,15 @@ def exact_z_transition_ratio_boxes():
 
 
 def exact_transition_blowup_polynomial(starts, finishes, supports,
-                                       competitors):
+                                       competitors, outers=None):
     """Exact cleared obstruction in `(d,e,a,b,t)`, with its `d` factor removed.
 
     `competitors[i]` is a vertex attaining the support defect for contact
     `i` on the intended chart.  Separate linear checks certify that these
     choices dominate every vertex on each generated chart box.
     """
+    if outers is None:
+        outers = supports
     arity = 5
     d, e, a, b, ratio = [epoly_var(arity, i) for i in range(arity)]
     one = epoly_const(arity, TEXPR_ONE)
@@ -500,9 +502,11 @@ def exact_transition_blowup_polynomial(starts, finishes, supports,
 
     obstruction = {}
     support_polynomials = []
-    for weight, edge, support, competitor in zip(
-            weights, edges, supports, competitors):
+    all_support_polynomials = []
+    for weight, edge, support, outer, competitor in zip(
+            weights, edges, supports, outers, competitors):
         q = VERTICES_SYMBOLIC[support]
+        outer_q = VERTICES_SYMBOLIC[outer]
         displacement = [
             add_terms(epoly_scale(texpr_mul(minus_two, q[0]),
                                    epoly_add(yy, zz)),
@@ -523,6 +527,11 @@ def exact_transition_blowup_polynomial(starts, finishes, supports,
                       epoly_scale(texpr_mul(minus_two, q[2]),
                                    epoly_add(xx, yy))),
         ]
+        for coordinate in range(3):
+            displacement[coordinate] = epoly_add(
+                displacement[coordinate],
+                epoly_scale(texpr_sub(q[coordinate], outer_q[coordinate]),
+                            denominator))
         contact = [epoly_sub(epoly_scale(edge[1], displacement[2]),
                              epoly_scale(edge[2], displacement[1])),
                    epoly_sub(epoly_scale(edge[2], displacement[0]),
@@ -534,9 +543,14 @@ def exact_transition_blowup_polynomial(starts, finishes, supports,
             contact_value = epoly_add(contact_value,
                 epoly_mul(view[coordinate], contact[coordinate]))
         delta = [texpr_sub(x, y) for x, y in zip(
-            VERTICES_SYMBOLIC[competitor], q)]
+            VERTICES_SYMBOLIC[competitor], outer_q)]
         support_value = dot_view_exact(symbolic_cross(edge, delta))
         support_polynomials.append(support_value)
+        all_support_polynomials.append([
+            dot_view_exact(symbolic_cross(edge, [
+                texpr_sub(x, y) for x, y in
+                zip(VERTICES_SYMBOLIC[vertex], outer_q)]))
+            for vertex in range(24)])
         cleared_margin = epoly_sub(
             contact_value, epoly_mul(denominator, support_value))
         obstruction = epoly_add(obstruction,
@@ -548,9 +562,261 @@ def exact_transition_blowup_polynomial(starts, finishes, supports,
                  e_power, a_power, b_power, t_power): coefficient
                 for (d_power, e_power, a_power, b_power, t_power), coefficient
                 in obstruction.items()}
+    support_quotients = []
+    for i, row in enumerate(all_support_polynomials):
+        quotient_row = []
+        for value in row:
+            working = epoly_sub(support_polynomials[i], value)
+            for coordinate in range(2):
+                if (working and
+                        min(power[coordinate] for power in working) >= 1):
+                    working = {
+                        power[:coordinate] + (power[coordinate]-1,) +
+                        power[coordinate+1:]: coefficient
+                        for power, coefficient in working.items()
+                    }
+            quotient_row.append(working)
+        support_quotients.append(quotient_row)
     return {"quotient": quotient, "weights": weights,
             "support_polynomials": support_polynomials,
+            "all_support_polynomials": all_support_polynomials,
+            "support_quotients": support_quotients,
             "minimum_d_power": minimum_d_power}
+
+
+TRIBONACCI_BALL = (
+    (Q(1839286755214161, 10**15) +
+     Q(1839286755214162, 10**15)) / 2,
+    Q(1, 2 * 10**15),
+)
+
+
+def texpr_ball(value):
+    """Mirror ``TribonacciExpr.evalBall`` exactly."""
+    root_sq = ball_mul(TRIBONACCI_BALL, TRIBONACCI_BALL)
+    return ball_add(
+        ball_add(ball_const(value[0]),
+                 ball_scale(value[1], TRIBONACCI_BALL)),
+        ball_scale(value[2], root_sq))
+
+
+def ball_pow(value, power):
+    answer = ball_const(1)
+    for _ in range(power):
+        answer = ball_mul(answer, value)
+    return answer
+
+
+def epoly_ball(polynomial, variables):
+    """Mirror the canonical sparse Lean evaluator exactly."""
+    total = ball_const(0)
+    for powers in sorted(polynomial):
+        monomial = ball_const(1)
+        for variable, power in zip(variables, powers):
+            monomial = ball_mul(monomial, ball_pow(variable, power))
+        total = ball_add(total, ball_mul(
+            texpr_ball(polynomial[powers]), monomial))
+    return total
+
+
+def epoly_pow(value, power):
+    answer = epoly_const(5, TEXPR_ONE)
+    for _ in range(power):
+        answer = epoly_mul(answer, value)
+    return answer
+
+
+def epoly_recenter(polynomial, variables):
+    """Exactly substitute `xᵢ = centerᵢ + radiusᵢ*yᵢ`."""
+    affine = []
+    for index, (center, radius) in enumerate(variables):
+        affine.append(epoly_add(
+            epoly_const(5, (center, Q(0), Q(0))),
+            epoly_scale((radius, Q(0), Q(0)), epoly_var(5, index))))
+    answer = {}
+    for powers, coefficient in polynomial.items():
+        term = epoly_const(5, coefficient)
+        for value, power in zip(affine, powers):
+            term = epoly_mul(term, epoly_pow(value, power))
+        answer = epoly_add(answer, term)
+    return answer
+
+
+def epoly_centered_ball(polynomial, variables):
+    centered = epoly_recenter(polynomial, variables)
+    unit_variables = [(Q(0), Q(1)) for _ in variables]
+    return epoly_ball(centered, unit_variables)
+
+
+def transition_blowup_families_exact():
+    specifications = [
+        ([8, 15, 10], [9, 11, 14], [1, 11, 10], [1, 3, 2],
+         [1, 11, 10]),
+        ([5, 10, 8], [15, 14, 9], [15, 10, 1], [15, 2, 1],
+         [15, 10, 1]),
+        ([14, 8, 5], [4, 9, 15], [14, 1, 15], [14, 1, 15],
+         [14, 1, 15]),
+        ([1, 5, 2], [9, 15, 14], [9, 15, 14], [1, 5, 2],
+         [1, 5, 2]),
+    ]
+    return [exact_transition_blowup_polynomial(*specification)
+            for specification in specifications]
+
+
+def transition_box_base_diagnostics(family, endpoints):
+    variables = [((lo + hi) / 2, (hi - lo) / 2)
+                 for lo, hi in endpoints]
+    weight_balls = [epoly_ball(value, variables)
+                    for value in family["weights"]]
+    support_slacks = []
+    worst_support = None
+    for i, row in enumerate(family["support_quotients"]):
+        for vertex, quotient in enumerate(row):
+            difference_ball = epoly_ball(quotient, variables)
+            slack = difference_ball[0] - difference_ball[1]
+            support_slacks.append(slack)
+            if worst_support is None or slack < worst_support[0]:
+                worst_support = (slack, i, vertex)
+    return {
+        "valid": (endpoints[0][0] >= 0 and endpoints[1][0] >= 0 and
+                  min(center-radius for center, radius in weight_balls) >= 0 and
+                  max(center-radius for center, radius in weight_balls) > 0 and
+                  min(support_slacks) >= 0),
+        "weight_lowers": [center-radius for center, radius in weight_balls],
+        "worst_support": worst_support,
+    }
+
+
+def transition_box_diagnostics(family, endpoints, base=None):
+    variables = [((lo + hi) / 2, (hi - lo) / 2)
+                 for lo, hi in endpoints]
+    if base is None:
+        base = transition_box_base_diagnostics(family, endpoints)
+    quotient = epoly_centered_ball(family["quotient"], variables)
+    quotient_lower = quotient[0] - quotient[1]
+    return {**base, "valid": base["valid"] and quotient_lower > 0,
+            "quotient_lower": quotient_lower}
+
+
+def transition_box_probe():
+    endpoints = [
+        (Q(1, 10**9), Q(1, 1000)),
+        (Q(0), Q(2)),
+        (Q(-16), Q(16)),
+        (Q(-16), Q(16)),
+        (Q(3, 5), Q(10)),
+    ]
+    return {
+        "endpoints": endpoints,
+        "families": [transition_box_diagnostics(family, endpoints)
+                     for family in transition_blowup_families_exact()],
+    }
+
+
+def transition_box_cover(max_nodes=20000, max_depth=30):
+    """Adaptively cover a representative hard transition band exactly.
+
+    The seam scale and transverse Cayley ratios remain unsplit.  The
+    obstruction quotients show that only the tangential view ratio `e` and
+    main rotation ratio `t` need subdivision on this band.
+    """
+    families = transition_blowup_families_exact()
+    root = [
+        (Q(1, 10**9), Q(1, 1000)),
+        (Q(0), Q(2)),
+        (Q(-16), Q(16)),
+        (Q(-16), Q(16)),
+        (Q(3, 5), Q(10)),
+    ]
+    leaves = []
+    failures = []
+    node_count = 0
+    base_cache = {}
+
+    def evaluate(endpoints):
+        answer = []
+        for family_index, family in enumerate(families):
+            key = (family_index, endpoints[0], endpoints[1])
+            if key not in base_cache:
+                base_cache[key] = transition_box_base_diagnostics(
+                    family, endpoints)
+            answer.append(transition_box_diagnostics(
+                family, endpoints, base_cache[key]))
+        return answer
+
+    def visit(endpoints, depth, diagnostics=None):
+        nonlocal node_count
+        node_count += 1
+        if node_count > max_nodes:
+            failures.append(("node-limit", endpoints))
+            return
+        if diagnostics is None:
+            diagnostics = evaluate(endpoints)
+        valid = [i for i, row in enumerate(diagnostics) if row["valid"]]
+        if valid:
+            family_index = max(valid,
+                key=lambda i: diagnostics[i]["quotient_lower"])
+            leaves.append({"family_index": family_index,
+                           "endpoints": endpoints,
+                           "quotient_lower":
+                               diagnostics[family_index]["quotient_lower"]})
+            return
+        if depth >= max_depth:
+            failures.append(("depth-limit", endpoints, diagnostics))
+            return
+
+        candidates = []
+        for coordinate in (1, 4):
+            lo, hi = endpoints[coordinate]
+            mid = (lo + hi) / 2
+            child_data = []
+            for child_range in ((lo, mid), (mid, hi)):
+                child = list(endpoints)
+                child[coordinate] = child_range
+                child_diagnostics = evaluate(child)
+                child_data.append((child, child_diagnostics))
+            valid_children = sum(any(row["valid"] for row in rows)
+                                 for _, rows in child_data)
+            best_lowers = [max(row["quotient_lower"] for row in rows)
+                           for _, rows in child_data]
+            candidates.append(((valid_children, min(best_lowers),
+                                sum(best_lowers)), child_data))
+        _, children = max(candidates, key=lambda item: item[0])
+        for child, child_diagnostics in children:
+            visit(child, depth + 1, child_diagnostics)
+
+    # A modest deterministic seed grid avoids asking the greedy splitter to
+    # rediscover the long, nearly diagonal family-switch curves from one
+    # enormous rectangle.  Only the handful of cells crossing those curves
+    # are refined recursively.
+    e_parts = 8
+    t_parts = 47
+    for e_index in range(e_parts):
+        for t_index in range(t_parts):
+            seed = list(root)
+            seed[1] = (Q(2 * e_index, e_parts),
+                       Q(2 * (e_index + 1), e_parts))
+            t_lo = Q(3, 5) + Q(47, 5) * Q(t_index, t_parts)
+            t_hi = Q(3, 5) + Q(47, 5) * Q(t_index + 1, t_parts)
+            seed[4] = (t_lo, t_hi)
+            seed_diagnostics = evaluate(seed)
+            if any(row["valid"] for row in seed_diagnostics):
+                visit(seed, 0, seed_diagnostics)
+            else:
+                # The only coarse false negatives observed here come from
+                # dependency across the two broad transverse intervals.
+                # One exact quadrant split removes it while retaining the
+                # full seam-scale range in every child.
+                for a_range in ((Q(-16), Q(0)), (Q(0), Q(16))):
+                    for b_range in ((Q(-16), Q(0)), (Q(0), Q(16))):
+                        child = list(seed)
+                        child[2] = a_range
+                        child[3] = b_range
+                        visit(child, 0)
+    return {"root": root, "node_count": node_count,
+            "leaves": leaves, "failures": failures,
+            "family_counts": [sum(leaf["family_index"] == i
+                                  for leaf in leaves) for i in range(4)]}
 
 
 def vertex_matrix_int(index: int):
@@ -1895,6 +2161,55 @@ def projective_transition_blowup_profile(samples: int, seed: int):
             "d": d, "e": e, "a": a, "b": b, "t": t, **result}
             for d, e, a, b, t, result in records[:20]],
     }
+
+
+def transition_family_gap_profile(d=1e-6, e=0.0, a=0.0, b=-16.0,
+                                  ratio=6.7):
+    """Rank the complete transition bank at a discovered thin gap."""
+    families = transition_axis_families()
+    transition_edge = VERTICES_EXACT[15] - VERTICES_EXACT[11]
+    transition_delta = VERTICES_EXACT[3] - VERTICES_EXACT[15]
+    seam = np.cross(transition_edge, transition_delta)
+    slope = float(seam[1] - seam[0])
+    h = d * e
+    u = (d-float(seam[0])*(1-h)-float(seam[2])*h)/slope
+    view = np.asarray([1-u-h, u, h])
+    x, y, z = d*d*a, d*d*b, d*ratio
+    denominator = 1+x*x+y*y+z*z
+    numerator = np.asarray([
+        [1+x*x-y*y-z*z, 2*(x*y-z), 2*(x*z+y)],
+        [2*(x*y+z), 1-x*x+y*y-z*z, 2*(y*z-x)],
+        [2*(x*z-y), 2*(y*z+x), 1-x*x-y*y+z*z]])
+    rows = []
+    for index, family in enumerate(families):
+        weights = np.asarray([
+            view @ np.cross(family["edges"][1], family["edges"][2]),
+            view @ np.cross(family["edges"][2], family["edges"][0]),
+            view @ np.cross(family["edges"][0], family["edges"][1])])
+        if weights.min() < -1e-10:
+            continue
+        obstruction = 0.0
+        competitors = []
+        for weight, edge, selected in zip(
+                weights, family["edges"], family["supports"]):
+            q = VERTICES_EXACT[selected]
+            displacement = numerator @ q - denominator*q
+            displacement_value = float(view @ np.cross(edge, displacement))
+            support_values = [float(view @ np.cross(
+                edge, VERTICES_EXACT[k]-q)) for k in range(24)]
+            competitor = int(np.argmax(support_values))
+            competitors.append(competitor)
+            obstruction += weight * (
+                displacement_value-denominator*support_values[competitor])
+        rows.append({"family_index": index,
+                     "quotient": obstruction/(d*d),
+                     "starts": family["starts"],
+                     "finishes": family["finishes"],
+                     "supports": family["supports"],
+                     "competitors": competitors})
+    rows.sort(key=lambda row: row["quotient"], reverse=True)
+    return {"point": [d, e, a, b, ratio], "bank_size": len(families),
+            "top": rows[:12]}
 
 
 def qpoly_eval_centered(coefficients, centers, radii):
@@ -3282,6 +3597,13 @@ def main():
         "projective-transition-blowup-profile")
     transition_blowup_parser.add_argument("--samples", type=int, default=5000)
     transition_blowup_parser.add_argument("--seed", type=int, default=1)
+    sub.add_parser("projective-transition-box-probe")
+    transition_cover_parser = sub.add_parser(
+        "projective-transition-box-cover")
+    transition_cover_parser.add_argument("--max-nodes", type=int,
+                                         default=20000)
+    transition_cover_parser.add_argument("--max-depth", type=int, default=30)
+    sub.add_parser("projective-transition-gap-profile")
     args = parser.parse_args()
     if args.command == "local-smoke":
         result = local_smoke(Q(args.theta), Q(args.phi),
@@ -3386,6 +3708,18 @@ def main():
     elif args.command == "projective-transition-blowup-profile":
         result = projective_transition_blowup_profile(args.samples, args.seed)
         print(json.dumps(qjson(result), indent=2))
+    elif args.command == "projective-transition-box-probe":
+        print(json.dumps(qjson(transition_box_probe()), indent=2))
+    elif args.command == "projective-transition-box-cover":
+        result = transition_box_cover(args.max_nodes, args.max_depth)
+        summary = {key: value for key, value in result.items()
+                   if key not in ("leaves", "failures")}
+        summary["leaf_count"] = len(result["leaves"])
+        summary["failure_count"] = len(result["failures"])
+        summary["failure_examples"] = result["failures"][:3]
+        print(json.dumps(qjson(summary), indent=2))
+    elif args.command == "projective-transition-gap-profile":
+        print(json.dumps(qjson(transition_family_gap_profile()), indent=2))
 
 
 if __name__ == "__main__":
