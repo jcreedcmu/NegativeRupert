@@ -3,6 +3,7 @@ module
 public import Noperthedron.Nopert214.AtlasProjectiveEdgeCertificate
 public import Noperthedron.Nopert214.AtlasLocalCertificate
 public import Noperthedron.Nopert214.AtlasProjectiveLocalCertificate
+public import Noperthedron.Nopert214.AtlasProjectiveGlobalCertificate
 
 @[expose] public section
 
@@ -127,6 +128,8 @@ inductive Row where
   | viewSplit (id : ℕ) (children : Fin 4 → ℕ)
       (interval : Interval) (root : Fin 8) (triangle : Triangle)
   | projective (id : ℕ) (box : AtlasProjectiveEdgeCertificate.Box)
+  | projectiveGlobal (id : ℕ)
+      (box : AtlasProjectiveGlobalCertificate.Box)
   | symmetryLocal (id : ℕ) (box : AtlasLocalCertificate.Box)
       (region : Region)
   | projectiveLocal (id : ℕ) (box : AtlasProjectiveLocalCertificate.Box)
@@ -134,7 +137,8 @@ inductive Row where
 
 def Row.id : Row → ℕ
   | .cayleySplit id .. | .viewRoot id .. | .viewSplit id .. |
-      .projective id .. | .symmetryLocal id .. | .radiusPrune id .. => id
+      .projective id .. | .projectiveGlobal id .. |
+      .symmetryLocal id .. | .radiusPrune id .. => id
   | .projectiveLocal id .. => id
 
 def Row.interval : Row → Interval
@@ -142,6 +146,7 @@ def Row.interval : Row → Interval
   | .viewRoot _ _ interval => interval
   | .viewSplit _ _ interval _ _ => interval
   | .projective _ box => box.interval
+  | .projectiveGlobal _ box => box.interval
   | .symmetryLocal _ box _ => box.interval
   | .projectiveLocal _ box => box.interval
   | .radiusPrune _ interval _ => interval
@@ -151,6 +156,7 @@ def Row.region : Row → Region
   | .viewRoot .. => .sphere
   | .viewSplit _ _ _ root triangle => .triangle root triangle
   | .projective _ box => .triangle box.root box.triangle
+  | .projectiveGlobal _ box => .triangle box.root box.triangle
   | .symmetryLocal _ _ region => region
   | .projectiveLocal _ box => .triangle box.root box.triangle
   | .radiusPrune _ _ region => region
@@ -178,6 +184,7 @@ def Row.ValidAt (chart : ChartIndex) (get : ℕ → Row)
       (get (children child)).region =
         .triangle root (split triangle child)
   | .projective _ box => box.chart = chart ∧ box.Valid
+  | .projectiveGlobal _ box => box.chart = chart ∧ box.Valid
   | .symmetryLocal _ box _ => box.chart = chart ∧ box.Valid
   | .projectiveLocal _ box => box.chart = chart ∧ box.Valid
   | .radiusPrune _ interval _ => interval.outsideCayleyBall
@@ -209,6 +216,13 @@ theorem valid_imp_noRupert_ix (chart : ChartIndex) (get : ℕ → Row)
       subst hchart
       exact box.valid_imp_not_translated_rupert hbox hp offset
         hregion.1 hregion.2 hrupert
+  | projectiveGlobal id box =>
+      unfold NoRupert
+      rintro ⟨p, hp, -, offset, hregion, hrupert⟩
+      obtain ⟨hchart, hbox⟩ := hvalid
+      subst hchart
+      exact box.valid_imp_not_translated_rupert hbox p hp
+        hregion.1 hregion.2 offset hrupert
   | symmetryLocal id box region =>
       unfold NoRupert
       rintro ⟨p, hp, -, offset, -, hrupert⟩

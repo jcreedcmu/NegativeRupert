@@ -659,7 +659,7 @@ theorem Box.exactSupport_eq_zero_of_tie (box : Box) {p : AtlasPose ℝ}
   rw [hdelta]
   simp [linearValue, cross3]
 
-theorem Box.exactSupport_le_upper (box : Box) (h : box.Valid)
+theorem Box.exactSupport_le_upper (box : Box)
     {p : AtlasPose ℝ}
     (hscale : 1 ≤ viewScale box.root p)
     (hmem : InTriangle (toReal box.triangle)
@@ -694,7 +694,7 @@ theorem Box.valid_support (box : Box) (h : box.Valid)
           (exactVertex ((box.certificate j).supportIndex box i))) := by
   have hscaleNe :=
     (lt_of_lt_of_le (by norm_num : (0 : ℝ) < 1) hscale).ne'
-  have hupper := box.exactSupport_le_upper h hscale hmem j i k
+  have hupper := box.exactSupport_le_upper hscale hmem j i k
   have hchecked := h.support j i k
   have hsigned : (box.certificate j).exactSupport box p i k ≤ 0 :=
     hupper.trans (by exact_mod_cast hchecked)
@@ -721,7 +721,7 @@ theorem Box.valid_direction_nonzero (box : Box) (h : box.Valid)
     direction box.root p ((box.certificate j).exactEdge i) ≠ 0 := by
   intro hzero
   let k := (box.certificate j).nonzeroWitness i
-  have hupper := box.exactSupport_le_upper h hscale hmem j i k
+  have hupper := box.exactSupport_le_upper hscale hmem j i k
   have hstrict : (box.supportUpper j i k : ℝ) < 0 := by
     exact_mod_cast h.direction_nonzero j i
   have hexact : (box.certificate j).exactSupport box p i k < 0 :=
@@ -827,7 +827,7 @@ theorem Box.weightAt_cast (box : Box) (j : Fin 4)
   simp [Box.weightAt, AxisCertificate.approxWeight, dotQ,
     linearValue, toReal]
 
-theorem Box.weightLower_le_exact (box : Box) (h : box.Valid)
+theorem Box.weightLower_le_exact (box : Box)
     {p : AtlasPose ℝ}
     (hscale : 1 ≤ viewScale box.root p)
     (hmem : InTriangle (toReal box.triangle)
@@ -855,7 +855,7 @@ theorem Box.weightLower_le_exact (box : Box) (h : box.Valid)
   rw [herrorEq] at herr
   linarith [herr.1]
 
-theorem Box.exactWeight_le_upper (box : Box) (h : box.Valid)
+theorem Box.exactWeight_le_upper (box : Box)
     {p : AtlasPose ℝ}
     (hscale : 1 ≤ viewScale box.root p)
     (hmem : InTriangle (toReal box.triangle)
@@ -893,7 +893,7 @@ theorem Box.valid_weight_nonneg (box : Box) (h : box.Valid)
     0 ≤ (box.certificate j).exactWeight box p i := by
   have hlower : (0 : ℝ) ≤ (box.weightLower j i : ℝ) := by
     exact_mod_cast h.weight_nonneg j i
-  exact hlower.trans (box.weightLower_le_exact h hscale hmem j i)
+  exact hlower.trans (box.weightLower_le_exact hscale hmem j i)
 
 theorem Box.valid_weight_pos (box : Box) (h : box.Valid)
     {p : AtlasPose ℝ}
@@ -906,7 +906,7 @@ theorem Box.valid_weight_pos (box : Box) (h : box.Valid)
   refine ⟨i, ?_⟩
   have hiReal : (0 : ℝ) < (box.weightLower j i : ℝ) := by
     exact_mod_cast hi
-  exact hiReal.trans_le (box.weightLower_le_exact h hscale hmem j i)
+  exact hiReal.trans_le (box.weightLower_le_exact hscale hmem j i)
 
 theorem AxisCertificate.exactWeight_abs_le_four (box : Box)
     (cert : AxisCertificate) {p : AtlasPose ℝ}
@@ -1386,7 +1386,7 @@ theorem Box.valid_budget (box : Box) (h : box.Valid)
     apply Finset.sum_le_sum
     intro i _
     have hw0 := box.valid_weight_nonneg h hscale hmem j i
-    have hwUpper := box.exactWeight_le_upper h hscale hmem j i
+    have hwUpper := box.exactWeight_le_upper hscale hmem j i
     have hfactor : ‖direction box.root p (cert.exactEdge i)‖ *
         ‖exactVertex (cert.supportIndex box i)‖ ≤ 2 := by
       calc
