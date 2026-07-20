@@ -451,6 +451,60 @@ def local_random_profile(samples, seed, cone_samples=1):
     }
 
 
+def rational_local_zero_certificate(denominator=10_000):
+    """Rationalize the four-certificate local witness at outer view (0, 0)."""
+    result = best_local_tetrahedron(0.0, 0.0)
+    if not result["found"]:
+        raise RuntimeError("no local tetrahedron at the zero outer view")
+    certificates = []
+    for certificate in result["certificates"]:
+        directions = [rational_unit_direction(
+            contact["direction"], denominator)
+            for contact in certificate["contacts"]]
+        weights = [cross(directions[1], directions[2]),
+                   cross(directions[2], directions[0]),
+                   cross(directions[0], directions[1])]
+        if all(weight < 0 for weight in weights):
+            weights = [-weight for weight in weights]
+        if not all(weight > 0 for weight in weights):
+            raise RuntimeError("local rationalization lost positive balance")
+        total = sum(weights)
+        a = [Q(0), Q(0), Q(0)]
+        support_slacks = []
+        contacts = []
+        for weight, direction, old_contact in zip(
+                weights, directions, certificate["contacts"]):
+            vertex_index = old_contact["vertex"]
+            x, y, z = VERTICES_Q[vertex_index]
+            u, v = direction
+            term = (-z * u, -z * v, x * u + y * v)
+            a = [value + weight * coordinate
+                 for value, coordinate in zip(a, term)]
+            projected = [(other[1], -other[0]) for other in VERTICES_Q]
+            support = dot(direction, projected[vertex_index])
+            slack = min(support - dot(direction, projected[other])
+                        for other in range(len(projected))
+                        if other != vertex_index)
+            support_slacks.append(slack)
+            contacts.append({
+                "vertex": vertex_index,
+                "direction": list(direction),
+            })
+        certificates.append({
+            "contacts": contacts,
+            "weights": weights,
+            "B": total,
+            "A": a,
+            "normalized_A": [coordinate / total for coordinate in a],
+            "support_slack": min(support_slacks),
+        })
+    return {
+        "center": [Q(0), Q(0)],
+        "suggested_c": Q(1, 100),
+        "certificates": certificates,
+    }
+
+
 def random_profile(samples, seed):
     rng = random.Random(seed)
     minimum = None
@@ -499,6 +553,8 @@ def main():
     local_profile.add_argument("--samples", type=int, default=100)
     local_profile.add_argument("--seed", type=int, default=1)
     local_profile.add_argument("--cone-samples", type=int, default=1)
+    local_zero = sub.add_parser("local-rational-zero")
+    local_zero.add_argument("--denominator", type=int, default=10_000)
     args = parser.parse_args()
     if args.command == "profile":
         print(json.dumps(random_profile(args.samples, args.seed), indent=2))
@@ -518,6 +574,9 @@ def main():
     elif args.command == "local-profile":
         print(json.dumps(local_random_profile(
             args.samples, args.seed, args.cone_samples), indent=2))
+    elif args.command == "local-rational-zero":
+        print(json.dumps(rational_local_zero_certificate(
+            args.denominator), indent=2, default=str))
     else:
         values = tuple(Q(value) for value in args.values.split(","))
         if len(values) != 5:
