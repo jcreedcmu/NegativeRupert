@@ -3880,6 +3880,90 @@ def qjson(x):
     return x
 
 
+def lean_rational(value):
+    return f"({value.numerator} / {value.denominator} : ℚ)"
+
+
+def lean_tribonacci_expr(value):
+    return (f"⟨{lean_rational(value[0])}, {lean_rational(value[1])}, "
+            f"{lean_rational(value[2])}⟩")
+
+
+def emit_guarded_lower_lean():
+    """Emit the exact full lower-piece Bernstein table as a Lean module."""
+    certificate = transition_guarded_piece_polynomials()
+    root = [(Q(0), Q(1, 1000)), (Q(0), Q(2)), (Q(0), Q(1)),
+            (Q(-16), Q(16)), (Q(-16), Q(16))]
+    degrees, coefficients = epoly_bernstein_coefficients(
+        certificate["lowerCombination"], root)
+    if degrees != (4, 4, 2, 2, 2):
+        raise AssertionError(f"unexpected lower degrees: {degrees}")
+    coefficient_values = [lean_tribonacci_expr(coefficients[index])
+                          for index in sorted(coefficients)]
+    chunks = [coefficient_values[start:start+27]
+              for start in range(0, len(coefficient_values), 27)]
+    chunk_definitions = "\n\n".join(
+        f"def lowerCoefficientChunk{index} : Array TribonacciExpr := #[\n  " +
+        ",\n  ".join(chunk) + "\n]"
+        for index, chunk in enumerate(chunks))
+    chunk_names = ", ".join(
+        f"lowerCoefficientChunk{index}" for index in range(len(chunks)))
+    return f'''module
+
+public import Noperthedron.SnubCube.ProjectiveTransitionGuarded
+public meta import Noperthedron.SnubCube.ProjectiveTransitionGuarded
+
+@[expose] public section
+
+namespace Noperthedron.SnubCube.ProjectiveTransitionGuardedGenerated
+
+open BernsteinCertificate
+open ProjectiveTransitionGuarded
+open SparseTribonacciPolynomial
+
+{chunk_definitions}
+
+def lowerCoefficientChunks : List (Array TribonacciExpr) :=
+  [{chunk_names}]
+
+def lowerFlatIndex (index : Fin 5 → Nat) : Nat :=
+  index 0 * 135 + index 1 * 27 + index 2 * 9 + index 3 * 3 + index 4
+
+def lowerCoefficient (index : Fin 5 → Nat) : TribonacciExpr :=
+  let flat := lowerFlatIndex index
+  (lowerCoefficientChunks.getD (flat / 27) #[]).getD (flat % 27) 0
+
+def lowerIndices : List (Fin 5 → Nat) :=
+  (List.range 5).flatMap fun i0 =>
+  (List.range 5).flatMap fun i1 =>
+  (List.range 3).flatMap fun i2 =>
+  (List.range 3).flatMap fun i3 =>
+  (List.range 3).map fun i4 => ![i0, i1, i2, i3, i4]
+
+def lowerTable : Table 5 where
+  degrees := ![4, 4, 2, 2, 2]
+  coefficient := lowerCoefficient
+  indices := lowerIndices
+
+def lowerCenters : Fin 5 → ℚ := ![1 / 2000, 1, 1 / 2, 0, 0]
+def lowerRadii : Fin 5 → ℚ := ![1 / 2000, 1, 1 / 2, 16, 16]
+def lowerRecentered : Polynomial 5 :=
+  recenter lowerCenters lowerRadii lowerCombination
+
+theorem lower_complete_native : lowerTable.Complete := by native_decide
+theorem lower_valid_kernel : lowerTable.LowerValid 0 := by decide +kernel
+theorem lower_valid_native : lowerTable.LowerValid 0 := by native_decide
+
+-- The production module will use the sparse power-to-Bernstein identity
+-- checker rather than expanding `lowerTable.toPolynomial` here.  Direct
+-- normalization is correct but needlessly expensive for this tensor.
+
+end Noperthedron.SnubCube.ProjectiveTransitionGuardedGenerated
+
+end
+'''
+
+
 def best_tetrahedron(points, trial_limit: int = 50000):
     """Choose a well-conditioned tetrahedron containing the origin.
 
@@ -4344,6 +4428,7 @@ def main():
     farkas_parser.add_argument("--a", type=float, default=5.9032002193099125)
     farkas_parser.add_argument("--b", type=float, default=-14.874129731767692)
     farkas_parser.add_argument("--ratio", type=float, default=6.830650718887462)
+    sub.add_parser("projective-transition-guarded-lower-lean")
     args = parser.parse_args()
     if args.command == "local-smoke":
         result = local_smoke(Q(args.theta), Q(args.phi),
@@ -4490,6 +4575,8 @@ def main():
     elif args.command == "projective-transition-farkas-search":
         print(json.dumps(qjson(search_transition_farkas_family(
             args.d, args.e, args.a, args.b, args.ratio)), indent=2))
+    elif args.command == "projective-transition-guarded-lower-lean":
+        print(emit_guarded_lower_lean(), end="")
 
 
 if __name__ == "__main__":
