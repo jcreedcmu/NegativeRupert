@@ -1898,6 +1898,40 @@ def qpoly_centered_lower_tight(coefficients, centers, radii):
     return lower
 
 
+def qpoly_bernstein_lower(coefficients, centers, radii):
+    """Exact tensor-degree-(2,2,2) Bernstein lower bound on a box."""
+    lx, ly, lz = [c-r for c, r in zip(centers, radii)]
+    wx, wy, wz = [2*r for r in radii]
+    c = coefficients
+    a0 = (c[0]+c[1]*lx+c[2]*ly+c[3]*lz+c[4]*lx*lx+
+          c[5]*lx*ly+c[6]*lx*lz+c[7]*ly*ly+c[8]*ly*lz+
+          c[9]*lz*lz)
+    ax = wx*(c[1]+2*c[4]*lx+c[5]*ly+c[6]*lz)
+    ay = wy*(c[2]+c[5]*lx+2*c[7]*ly+c[8]*lz)
+    az = wz*(c[3]+c[6]*lx+c[8]*ly+2*c[9]*lz)
+    axx, ayy, azz = c[4]*wx*wx, c[7]*wy*wy, c[9]*wz*wz
+    axy, axz, ayz = c[5]*wx*wy, c[6]*wx*wz, c[8]*wy*wz
+    result = None
+    for i in range(3):
+        u = Q(i, 2)
+        for j in range(3):
+            v = Q(j, 2)
+            for k in range(3):
+                w = Q(k, 2)
+                value = (a0+u*ax+v*ay+w*az+
+                         (axx if i == 2 else 0)+
+                         (ayy if j == 2 else 0)+
+                         (azz if k == 2 else 0)+
+                         u*v*axy+u*w*axz+v*w*ayz)
+                result = value if result is None else min(result, value)
+    return result
+
+
+def qpoly_box_lower(coefficients, centers, radii):
+    return max(qpoly_centered_lower_tight(coefficients, centers, radii),
+               qpoly_bernstein_lower(coefficients, centers, radii))
+
+
 def view_qpoly(view, component_polynomials):
     total = exact_certificate.qpoly_zero()
     for coefficient, polynomial in zip(view, component_polynomials):
@@ -2108,7 +2142,7 @@ def atlas_simplex_edge_smoke(chart, relative_center, relative_half_widths,
             adjusted[4] += multiplier
             adjusted[7] += multiplier
             adjusted[9] += multiplier
-            return qpoly_centered_lower_tight(
+            return qpoly_box_lower(
                 tuple(adjusted), relative_center, relative_half_widths)
 
         multiplier = max(candidates, key=adjusted_lower)
@@ -2213,6 +2247,31 @@ def qpoly_centered_lower_tight_float(coefficients, centers, radii):
     return lower
 
 
+def qpoly_bernstein_lower_float(coefficients, centers, radii):
+    lx, ly, lz = [c-r for c, r in zip(centers, radii)]
+    wx, wy, wz = [2*r for r in radii]
+    c = coefficients
+    a0 = (c[0]+c[1]*lx+c[2]*ly+c[3]*lz+c[4]*lx*lx+
+          c[5]*lx*ly+c[6]*lx*lz+c[7]*ly*ly+c[8]*ly*lz+
+          c[9]*lz*lz)
+    ax = wx*(c[1]+2*c[4]*lx+c[5]*ly+c[6]*lz)
+    ay = wy*(c[2]+c[5]*lx+2*c[7]*ly+c[8]*lz)
+    az = wz*(c[3]+c[6]*lx+c[8]*ly+2*c[9]*lz)
+    axx, ayy, azz = c[4]*wx*wx, c[7]*wy*wy, c[9]*wz*wz
+    axy, axz, ayz = c[5]*wx*wy, c[6]*wx*wz, c[8]*wy*wz
+    return min(
+        a0+(i/2)*ax+(j/2)*ay+(k/2)*az+
+        (axx if i == 2 else 0)+(ayy if j == 2 else 0)+
+        (azz if k == 2 else 0)+(i*j/4)*axy+(i*k/4)*axz+
+        (j*k/4)*ayz
+        for i in range(3) for j in range(3) for k in range(3))
+
+
+def qpoly_box_lower_float(coefficients, centers, radii):
+    return max(qpoly_centered_lower_tight_float(coefficients, centers, radii),
+               qpoly_bernstein_lower_float(coefficients, centers, radii))
+
+
 def qpoly_centered_lower_tight_np(coefficients, centers, radii):
     """Vectorized counterpart of qpoly_centered_lower_tight_float."""
     c = np.asarray(coefficients)
@@ -2231,6 +2290,38 @@ def qpoly_centered_lower_tight_np(coefficients, centers, radii):
     lower -= (np.abs(c[..., 5])*rx*ry+np.abs(c[..., 6])*rx*rz+
               np.abs(c[..., 8])*ry*rz)
     return lower
+
+
+def qpoly_bernstein_lower_np(coefficients, centers, radii):
+    c = np.asarray(coefficients)
+    lx, ly, lz = centers-radii
+    wx, wy, wz = 2*radii
+    a0 = (c[..., 0]+c[..., 1]*lx+c[..., 2]*ly+c[..., 3]*lz+
+          c[..., 4]*lx*lx+c[..., 5]*lx*ly+c[..., 6]*lx*lz+
+          c[..., 7]*ly*ly+c[..., 8]*ly*lz+c[..., 9]*lz*lz)
+    ax = wx*(c[..., 1]+2*c[..., 4]*lx+c[..., 5]*ly+c[..., 6]*lz)
+    ay = wy*(c[..., 2]+c[..., 5]*lx+2*c[..., 7]*ly+c[..., 8]*lz)
+    az = wz*(c[..., 3]+c[..., 6]*lx+c[..., 8]*ly+2*c[..., 9]*lz)
+    axx, ayy, azz = (c[..., 4]*wx*wx, c[..., 7]*wy*wy,
+                     c[..., 9]*wz*wz)
+    axy, axz, ayz = (c[..., 5]*wx*wy, c[..., 6]*wx*wz,
+                     c[..., 8]*wy*wz)
+    values = []
+    for i in range(3):
+        for j in range(3):
+            for k in range(3):
+                values.append(
+                    a0+(i/2)*ax+(j/2)*ay+(k/2)*az+
+                    (axx if i == 2 else 0)+(ayy if j == 2 else 0)+
+                    (azz if k == 2 else 0)+(i*j/4)*axy+
+                    (i*k/4)*axz+(j*k/4)*ayz)
+    return np.min(np.stack(values), axis=0)
+
+
+def qpoly_box_lower_np(coefficients, centers, radii):
+    return np.maximum(
+        qpoly_centered_lower_tight_np(coefficients, centers, radii),
+        qpoly_bernstein_lower_np(coefficients, centers, radii))
 
 
 def atlas_simplex_float_screen_py(chart, relative_center,
@@ -2313,7 +2404,7 @@ def atlas_simplex_float_screen_py(chart, relative_center,
             adjusted[4] += multiplier
             adjusted[7] += multiplier
             adjusted[9] += multiplier
-            return qpoly_centered_lower_tight_float(
+            return qpoly_box_lower_float(
                 adjusted, centers, radii)
 
         displacement_lowers.append(max(map(adjusted_lower, candidates)))
@@ -2403,7 +2494,7 @@ def atlas_simplex_float_screen(chart, relative_center,
             adjusted[4] += multiplier
             adjusted[7] += multiplier
             adjusted[9] += multiplier
-            return float(qpoly_centered_lower_tight_np(
+            return float(qpoly_box_lower_np(
                 adjusted, centers, radii))
 
         displacement_lowers.append(max(map(adjusted_lower, candidates)))

@@ -1,6 +1,7 @@
 module
 
 public import Noperthedron.Nopert214.AtlasProjectiveView
+public import Noperthedron.Nopert214.QuadraticBernstein
 
 @[expose] public section
 
@@ -189,9 +190,14 @@ def Box.adjustedDisplacementAt (box : Box) (j : Fin 3) : RatBall :=
   RatQuadratic3.evalTightBall box.edgeShell.variableBalls
     (box.adjustedQuadratic j)
 
+def Box.adjustedDisplacementCornerLower (box : Box) (j : Fin 3) : ℚ :=
+  max ((box.adjustedDisplacementAt j).center -
+      (box.adjustedDisplacementAt j).radius)
+    (QuadraticBernstein.lower box.edgeShell.variableBalls
+      (box.adjustedQuadratic j))
+
 def Box.adjustedDisplacementLower (box : Box) : ℚ :=
-  min3 fun j => (box.adjustedDisplacementAt j).center -
-    (box.adjustedDisplacementAt j).radius
+  min3 box.adjustedDisplacementCornerLower
 
 @[mk_iff]
 structure Box.Valid (box : Box) : Prop where
@@ -319,6 +325,27 @@ theorem Box.adjustedDisplacementAt_holds (box : Box) {p : AtlasPose ℝ}
     RatQuadratic3.evalReal_add, RatQuadratic3.evalReal_scale,
     box.viewQuadratic_eval j p, cayleyConstraintQuadratic_eval] using hball
 
+theorem Box.bernsteinLower_le_adjustedDisplacement (box : Box)
+    {p : AtlasPose ℝ} (hp : p ∈ box.interval.toReal) (j : Fin 3) :
+    (QuadraticBernstein.lower box.edgeShell.variableBalls
+        (box.adjustedQuadratic j) : ℝ) ≤
+      linearValue (toReal box.triangle j)
+          (box.edgeShell.approxTotalVector p) +
+        (box.ballMultiplier j : ℝ) *
+          (p.x ^ 2 + p.y ^ 2 + p.z ^ 2 - 3) := by
+  have hvars : ∀ c : Fin 3,
+      (box.edgeShell.variableBalls c).Holds (![p.x, p.y, p.z] c) := by
+    intro c
+    fin_cases c
+    · exact box.interval.coordinateBall_holds hp 2
+    · exact box.interval.coordinateBall_holds hp 3
+    · exact box.interval.coordinateBall_holds hp 4
+  have h := QuadraticBernstein.lower_le_evalReal hvars
+    (box.adjustedQuadratic j)
+  simpa only [Box.adjustedQuadratic, RatQuadratic3.evalReal_add,
+    RatQuadratic3.evalReal_scale, box.viewQuadratic_eval j p,
+    cayleyConstraintQuadratic_eval] using h
+
 theorem Box.adjustedDisplacementLower_le_projectiveApprox
     (box : Box) (h : box.Valid) {p : AtlasPose ℝ}
     (hp : p ∈ box.interval.toReal) (hbounded : p.CayleyBounded)
@@ -334,19 +361,27 @@ theorem Box.adjustedDisplacementLower_le_projectiveApprox
   intro j
   have hball := box.adjustedDisplacementAt_holds hp j
   have hlower := RatBall.lower_le_of_holds hball
+  push_cast at hlower
+  have hbernstein := box.bernsteinLower_le_adjustedDisplacement hp j
   have hmin := min3_le
-    (fun j => (box.adjustedDisplacementAt j).center -
-      (box.adjustedDisplacementAt j).radius) j
+    box.adjustedDisplacementCornerLower j
   have hminReal : (box.adjustedDisplacementLower : ℝ) ≤
-      (((box.adjustedDisplacementAt j).center -
-        (box.adjustedDisplacementAt j).radius : ℚ) : ℝ) := by
+      (box.adjustedDisplacementCornerLower j : ℚ) := by
     exact_mod_cast hmin
+  have hcorner : (box.adjustedDisplacementCornerLower j : ℝ) ≤
+      linearValue (toReal box.triangle j)
+          (box.edgeShell.approxTotalVector p) +
+        (box.ballMultiplier j : ℝ) *
+          (p.x ^ 2 + p.y ^ 2 + p.z ^ 2 - 3) := by
+    unfold Box.adjustedDisplacementCornerLower
+    push_cast
+    exact max_le hlower hbernstein
   have hlambda : 0 ≤ (box.ballMultiplier j : ℝ) := by
     exact_mod_cast h.ball_multiplier_nonneg j
   have hadjustment : (box.ballMultiplier j : ℝ) *
       (p.x ^ 2 + p.y ^ 2 + p.z ^ 2 - 3) ≤ 0 :=
     mul_nonpos_of_nonneg_of_nonpos hlambda hconstraint
-  exact hminReal.trans (by linarith)
+  exact hminReal.trans (hcorner.trans (by linarith))
 
 theorem Box.displacementLower_le_projectiveApprox (box : Box)
     {p : AtlasPose ℝ} (hp : p ∈ box.interval.toReal)
