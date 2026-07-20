@@ -387,6 +387,18 @@ def polynomialProduct {n : ℕ} : List (Polynomial n) → Polynomial n
   | [] => 1
   | head :: tail => head * polynomialProduct tail
 
+def Term.compose {n m : ℕ} (term : Term n)
+    (substitutions : Fin n → Polynomial m) : Polynomial m :=
+  const term.coefficient * polynomialProduct
+    (List.ofFn fun i =>
+      polynomialPower (substitutions i) (term.powers i))
+
+/-- Exact simultaneous substitution between sparse polynomial rings. -/
+def compose {n m : ℕ} (polynomial : Polynomial n)
+    (substitutions : Fin n → Polynomial m) : Polynomial m :=
+  polynomial.foldr
+    (fun term answer => term.compose substitutions + answer) 0
+
 def affineVariable {n : ℕ} (centers radii : Fin n → ℚ)
     (index : Fin n) : Polynomial n :=
   const (ofRat (centers index)) +
@@ -417,6 +429,27 @@ theorem evalReal_polynomialProduct {n : ℕ} (vars : Fin n → ℝ)
   induction values with
   | nil => simp [polynomialProduct]
   | cons head tail ih => simp [polynomialProduct, ih]
+
+theorem evalReal_term_compose {n m : ℕ} (vars : Fin m → ℝ)
+    (substitutions : Fin n → Polynomial m) (term : Term n) :
+    evalReal vars (term.compose substitutions) =
+      term.evalReal (fun i => evalReal vars (substitutions i)) := by
+  simp only [Term.compose, evalReal_mul_op, evalReal_const,
+    evalReal_polynomialProduct, List.map_ofFn, List.prod_ofFn,
+    Term.evalReal, Function.comp_apply]
+  simp_rw [evalReal_polynomialPower]
+
+theorem evalReal_compose {n m : ℕ} (vars : Fin m → ℝ)
+    (substitutions : Fin n → Polynomial m) (polynomial : Polynomial n) :
+    evalReal vars (compose polynomial substitutions) =
+      evalReal (fun i => evalReal vars (substitutions i)) polynomial := by
+  induction polynomial with
+  | nil => simp [compose]
+  | cons head tail ih =>
+      change evalReal vars (head.compose substitutions +
+          compose tail substitutions) = _
+      rw [evalReal_add_op, evalReal_term_compose vars substitutions head, ih,
+        evalReal_cons]
 
 theorem evalReal_affineVariable {n : ℕ} (vars : Fin n → ℝ)
     (centers radii : Fin n → ℚ) (index : Fin n) :

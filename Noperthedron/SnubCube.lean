@@ -42,6 +42,7 @@ public import Noperthedron.SnubCube.ProjectiveTransitionBox
 public import Noperthedron.SnubCube.ProjectiveTransitionBoxSmoke
 public import Noperthedron.SnubCube.ProjectiveTransitionChart
 public import Noperthedron.SnubCube.ProjectiveTransitionGeometry
+public import Noperthedron.SnubCube.ProjectiveTransitionGuarded
 public import Noperthedron.SnubCube.ProjectiveView
 public import Noperthedron.SnubCube.SolutionTree
 public import Noperthedron.SnubCube.SparseTribonacciPolynomial

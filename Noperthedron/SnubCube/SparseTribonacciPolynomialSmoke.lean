@@ -41,6 +41,15 @@ theorem cancelledSquare_eval (d x : ℝ) :
   simp [cancelledSquare]
   ring
 
+def composedCancelledSquare : Polynomial 1 :=
+  compose cancelledSquare ![var 0, 1 + var 0]
+
+theorem composedCancelledSquare_eval (x : ℝ) :
+    evalReal ![x] composedCancelledSquare = x ^ 2 := by
+  rw [composedCancelledSquare, evalReal_compose]
+  simp [cancelledSquare]
+  ring
+
 def quotientBox : Fin 2 → RatBall := ![
   RatBall.ofEndpoints (-1 / 1000) (1 / 1000),
   RatBall.ofEndpoints (-10) 10]
