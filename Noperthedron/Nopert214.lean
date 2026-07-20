@@ -8,6 +8,7 @@ public import Noperthedron.Nopert214.Approximation
 public import Noperthedron.Nopert214.Symmetry
 public import Noperthedron.Nopert214.SymmetryLocal
 public import Noperthedron.Nopert214.Tightening
+public import Noperthedron.Nopert214.AtlasPose
 public import Noperthedron.BalancedSupport.UniversalDomain
 
 public section
