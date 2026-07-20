@@ -10,6 +10,8 @@ public import Noperthedron.Nopert214.SymmetryLocal
 public import Noperthedron.Nopert214.Tightening
 public import Noperthedron.Nopert214.AtlasInterval
 public import Noperthedron.Nopert214.AtlasQuadratic
+public import Noperthedron.Nopert214.AtlasEdgeCertificate
+public import Noperthedron.Nopert214.AtlasEdgeCertificateSmoke
 public import Noperthedron.BalancedSupport.UniversalDomain
 
 public section
