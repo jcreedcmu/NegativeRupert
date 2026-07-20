@@ -21,6 +21,7 @@ import itertools
 import json
 import math
 import random
+import sys
 from fractions import Fraction as Q
 
 import numpy as np
@@ -628,17 +629,23 @@ def epoly_pow(value, power):
 
 def epoly_recenter(polynomial, variables):
     """Exactly substitute `xᵢ = centerᵢ + radiusᵢ*yᵢ`."""
-    affine = []
-    for index, (center, radius) in enumerate(variables):
-        affine.append(epoly_add(
-            epoly_const(5, (center, Q(0), Q(0))),
-            epoly_scale((radius, Q(0), Q(0)), epoly_var(5, index))))
     answer = {}
     for powers, coefficient in polynomial.items():
-        term = epoly_const(5, coefficient)
-        for value, power in zip(affine, powers):
-            term = epoly_mul(term, epoly_pow(value, power))
-        answer = epoly_add(answer, term)
+        for new_powers in itertools.product(
+                *(range(power + 1) for power in powers)):
+            scalar = Q(1)
+            for power, new_power, (center, radius) in zip(
+                    powers, new_powers, variables):
+                scalar *= (Q(math.comb(power, new_power)) *
+                           center ** (power-new_power) *
+                           radius ** new_power)
+            if scalar == 0:
+                continue
+            value = texpr_scale(scalar, coefficient)
+            answer[new_powers] = texpr_add(
+                answer.get(new_powers, TEXPR_ZERO), value)
+            if answer[new_powers] == TEXPR_ZERO:
+                del answer[new_powers]
     return answer
 
 
@@ -679,8 +686,7 @@ def transition_box_base_diagnostics(family, endpoints):
                 worst_support = (slack, i, vertex)
     return {
         "valid": (endpoints[0][0] >= 0 and endpoints[1][0] >= 0 and
-                  min(center-radius for center, radius in weight_balls) >= 0 and
-                  max(center-radius for center, radius in weight_balls) > 0 and
+                  min(center-radius for center, radius in weight_balls) > 0 and
                   min(support_slacks) >= 0),
         "weight_lowers": [center-radius for center, radius in weight_balls],
         "worst_support": worst_support,
@@ -742,11 +748,16 @@ def transition_box_cover(max_nodes=20000, max_depth=30):
                     family, endpoints)
             answer.append(transition_box_diagnostics(
                 family, endpoints, base_cache[key]))
+            if answer[-1]["valid"]:
+                break
         return answer
 
     def visit(endpoints, depth, diagnostics=None):
         nonlocal node_count
         node_count += 1
+        if node_count % 500 == 0:
+            print(f"checked {node_count} boxes; accepted {len(leaves)}; "
+                  f"failed {len(failures)}", file=sys.stderr, flush=True)
         if node_count > max_nodes:
             failures.append(("node-limit", endpoints))
             return
@@ -765,23 +776,17 @@ def transition_box_cover(max_nodes=20000, max_depth=30):
             failures.append(("depth-limit", endpoints, diagnostics))
             return
 
-        candidates = []
-        for coordinate in (1, 4):
-            lo, hi = endpoints[coordinate]
-            mid = (lo + hi) / 2
-            child_data = []
-            for child_range in ((lo, mid), (mid, hi)):
-                child = list(endpoints)
-                child[coordinate] = child_range
-                child_diagnostics = evaluate(child)
-                child_data.append((child, child_diagnostics))
-            valid_children = sum(any(row["valid"] for row in rows)
-                                 for _, rows in child_data)
-            best_lowers = [max(row["quotient_lower"] for row in rows)
-                           for _, rows in child_data]
-            candidates.append(((valid_children, min(best_lowers),
-                                sum(best_lowers)), child_data))
-        _, children = max(candidates, key=lambda item: item[0])
+        target_width = {1: Q(1, 16), 2: Q(4), 3: Q(4), 4: Q(1, 20)}
+        coordinate = max((1, 2, 3, 4), key=lambda i:
+                         (endpoints[i][1]-endpoints[i][0]) /
+                         target_width[i])
+        lo, hi = endpoints[coordinate]
+        mid = (lo + hi) / 2
+        children = []
+        for child_range in ((lo, mid), (mid, hi)):
+            child = list(endpoints)
+            child[coordinate] = child_range
+            children.append((child, evaluate(child)))
         for child, child_diagnostics in children:
             visit(child, depth + 1, child_diagnostics)
 

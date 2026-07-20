@@ -38,6 +38,7 @@ public import Noperthedron.SnubCube.ProjectiveTransitionBlowup
 public import Noperthedron.SnubCube.ProjectiveTransitionBlowupSmoke
 public import Noperthedron.SnubCube.ProjectiveTransitionBox
 public import Noperthedron.SnubCube.ProjectiveTransitionBoxSmoke
+public import Noperthedron.SnubCube.ProjectiveTransitionGeometry
 public import Noperthedron.SnubCube.ProjectiveView
 public import Noperthedron.SnubCube.SolutionTree
 public import Noperthedron.SnubCube.SparseTribonacciPolynomial

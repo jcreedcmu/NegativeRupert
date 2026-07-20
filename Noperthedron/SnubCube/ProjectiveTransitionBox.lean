@@ -11,7 +11,7 @@ public import Noperthedron.SnubCube.ProjectiveTransitionBlowup
 A leaf chooses one of the three exact contact families and a rational box in
 the five chart variables `(d,e,a,b,t)`.  Its decidable validity predicate
 checks every pointwise inequality needed later by the balanced-support
-argument: nonnegative determinant weights, a strict weight witness, exact
+argument: strictly positive determinant weights, exact
 support dominance over all 24 vertices, and positivity of the obstruction
 quotient after its structural seam factor has been removed.
 -/
@@ -59,8 +59,7 @@ structure Box.Valid (box : Box) : Prop where
   factor : box.family.FactorValid
   seam_nonnegative : 0 ≤ lower (box.variableBalls 0)
   tangential_nonnegative : 0 ≤ lower (box.variableBalls 1)
-  weights_nonnegative : ∀ i, 0 ≤ lower (box.weightBall i)
-  weight_strict : ∃ i, 0 < lower (box.weightBall i)
+  weights_positive : ∀ i, 0 < lower (box.weightBall i)
   support_dominance : ∀ i vertex,
     0 ≤ lower (box.supportSlackBall i vertex)
   quotient_positive : 0 < lower box.quotientBall
@@ -91,7 +90,14 @@ theorem Box.weight_nonnegative (box : Box) (h : box.Valid)
     (hvalues : ∀ i, (box.variableBalls i).Holds (values i)) (i : Fin 3) :
     0 ≤ evalReal values (box.family.weightPolynomial i) := by
   exact RatBall.nonneg_of_holds_of_lower_nonneg
-    (box.polynomialBall_holds hvalues _) (h.weights_nonnegative i)
+    (box.polynomialBall_holds hvalues _) (h.weights_positive i).le
+
+theorem Box.weight_positive (box : Box) (h : box.Valid)
+    {values : Fin 5 → ℝ}
+    (hvalues : ∀ i, (box.variableBalls i).Holds (values i)) (i : Fin 3) :
+    0 < evalReal values (box.family.weightPolynomial i) := by
+  exact RatBall.pos_of_holds_of_lower_pos
+    (box.polynomialBall_holds hvalues _) (h.weights_positive i)
 
 theorem Box.tangential_nonnegative (box : Box) (h : box.Valid)
     {values : Fin 5 → ℝ}
@@ -104,9 +110,7 @@ theorem Box.exists_weight_positive (box : Box) (h : box.Valid)
     {values : Fin 5 → ℝ}
     (hvalues : ∀ i, (box.variableBalls i).Holds (values i)) :
     ∃ i, 0 < evalReal values (box.family.weightPolynomial i) := by
-  obtain ⟨i, hi⟩ := h.weight_strict
-  exact ⟨i, RatBall.pos_of_holds_of_lower_pos
-    (box.polynomialBall_holds hvalues _) hi⟩
+  exact ⟨0, box.weight_positive h hvalues 0⟩
 
 theorem Box.support_le_defect (box : Box) (h : box.Valid)
     {values : Fin 5 → ℝ}

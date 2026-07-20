@@ -82,6 +82,23 @@ theorem weight_balance (p : CayleyPose ℝ) (edge : EdgeTriple)
   simp_rw [weight_eq_viewSum_mul_determinantWeights p edge hsum, mul_smul]
   rw [← Finset.smul_sum, hdet, smul_zero]
 
+/-- Projective support values are actual planar support differences in the
+scaled moving edge direction. -/
+theorem inner_direction_outerProjection_eq_support
+    (p : CayleyPose ℝ) (offset : ℝ²) (edge delta : ℝ³)
+    (hsum : viewSum p ≠ 0) :
+    inner ℝ (direction p edge)
+        (outerProjectionLinear (p.matrixPoseWithOffset offset) delta) =
+      linearValue (normalizedView p) (cross3 edge delta) := by
+  rw [direction, real_inner_smul_left]
+  have hproj : outerProjectionLinear (p.matrixPoseWithOffset offset) delta =
+      rotM p.θ p.φ delta := by
+    simpa [outerProjectionLinear, ContinuousLinearMap.comp_apply] using
+      p.matrixPoseWithOffset_outer_rotation_project offset delta
+  rw [hproj, inner_quarterTurn_rotM_eq]
+  simp [normalizedView, linearValue, Fin.sum_univ_three]
+  field_simp [hsum]
+
 /-- Pulling the scaled moving planar direction back to space gives the cross
 product of the normalized projective view with the oriented edge. -/
 theorem outerLift_direction (p : CayleyPose ℝ) (offset : ℝ²)
