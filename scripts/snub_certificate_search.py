@@ -655,6 +655,39 @@ def epoly_centered_ball(polynomial, variables):
     return epoly_ball(centered, unit_variables)
 
 
+TRIBONACCI_FLOAT = 1.8392867552141612
+
+
+def texpr_float(value):
+    return (float(value[0]) + float(value[1]) * TRIBONACCI_FLOAT +
+            float(value[2]) * TRIBONACCI_FLOAT**2)
+
+
+def epoly_centered_float_lower(polynomial, endpoints):
+    """Fast heuristic mirror of recentered interval evaluation.
+
+    This is used only to choose a split coordinate; accepted leaves are
+    always rechecked by exact rational arithmetic.
+    """
+    centered = {}
+    variables = [(float((lo+hi)/2), float((hi-lo)/2))
+                 for lo, hi in endpoints]
+    for powers, coefficient in polynomial.items():
+        coefficient = texpr_float(coefficient)
+        for new_powers in itertools.product(
+                *(range(power + 1) for power in powers)):
+            scalar = coefficient
+            for power, new_power, (center, radius) in zip(
+                    powers, new_powers, variables):
+                scalar *= (math.comb(power, new_power) *
+                           center ** (power-new_power) *
+                           radius ** new_power)
+            centered[new_powers] = centered.get(new_powers, 0.0) + scalar
+    zero = (0,) * len(endpoints)
+    return centered.get(zero, 0.0) - sum(
+        abs(value) for powers, value in centered.items() if powers != zero)
+
+
 def transition_blowup_families_exact():
     specifications = [
         ([8, 15, 10], [9, 11, 14], [1, 11, 10], [1, 3, 2],
@@ -665,6 +698,10 @@ def transition_blowup_families_exact():
          [14, 1, 15]),
         ([1, 5, 2], [9, 15, 14], [9, 15, 14], [1, 5, 2],
          [1, 5, 2]),
+        # A translated-support Farkas certificate for the nested
+        # `e = O(d)` transition missed by the axis-local family bank.
+        ([14, 8, 15], [4, 1, 3], [14, 8, 15], [4, 1, 3],
+         [4, 1, 3]),
     ]
     return [exact_transition_blowup_polynomial(*specification)
             for specification in specifications]
@@ -719,14 +756,14 @@ def transition_box_probe():
     }
 
 
-def transition_box_cover(max_nodes=20000, max_depth=30):
+def transition_box_cover(max_nodes=20000, max_depth=100):
     """Adaptively cover a representative hard transition band exactly.
 
-    The seam scale and transverse Cayley ratios remain unsplit.  The
-    obstruction quotients show that only the tangential view ratio `e` and
-    main rotation ratio `t` need subdivision on this band.
+    Every accepted leaf is checked with exact rational centered-form bounds.
+    Floating-point bounds only choose which coordinate to bisect next.
     """
     families = transition_blowup_families_exact()
+    nested_family_index = 4
     root = [
         (Q(1, 10**9), Q(1, 1000)),
         (Q(0), Q(2)),
@@ -737,56 +774,76 @@ def transition_box_cover(max_nodes=20000, max_depth=30):
     leaves = []
     failures = []
     node_count = 0
+    max_depth_seen = 0
+    truncated = False
     base_cache = {}
+
+    class NodeLimit(Exception):
+        pass
 
     def evaluate(endpoints):
         answer = []
-        for family_index, family in enumerate(families):
+        # Prefer the translated-support families: around the difficult
+        # family-89/family-192 switch they have substantially larger margins
+        # and therefore certify broader boxes.
+        for family_index in (nested_family_index, 3, 1, 2, 0):
+            family = families[family_index]
             key = (family_index, endpoints[0], endpoints[1])
             if key not in base_cache:
                 base_cache[key] = transition_box_base_diagnostics(
                     family, endpoints)
-            answer.append(transition_box_diagnostics(
-                family, endpoints, base_cache[key]))
+            answer.append({**transition_box_diagnostics(
+                family, endpoints, base_cache[key]),
+                "certificate_index": family_index})
             if answer[-1]["valid"]:
-                break
+                return answer
         return answer
 
     def visit(endpoints, depth, diagnostics=None):
-        nonlocal node_count
+        nonlocal node_count, max_depth_seen
+        if node_count >= max_nodes:
+            raise NodeLimit
         node_count += 1
+        max_depth_seen = max(max_depth_seen, depth)
         if node_count % 500 == 0:
             print(f"checked {node_count} boxes; accepted {len(leaves)}; "
                   f"failed {len(failures)}", file=sys.stderr, flush=True)
-        if node_count > max_nodes:
-            failures.append(("node-limit", endpoints))
-            return
         if diagnostics is None:
             diagnostics = evaluate(endpoints)
-        valid = [i for i, row in enumerate(diagnostics) if row["valid"]]
+        valid = [row for row in diagnostics if row["valid"]]
         if valid:
-            family_index = max(valid,
-                key=lambda i: diagnostics[i]["quotient_lower"])
-            leaves.append({"family_index": family_index,
+            certificate = max(valid,
+                key=lambda row: row["quotient_lower"])
+            leaves.append({"family_index": certificate["certificate_index"],
                            "endpoints": endpoints,
-                           "quotient_lower":
-                               diagnostics[family_index]["quotient_lower"]})
+                           "quotient_lower": certificate["quotient_lower"]})
             return
         if depth >= max_depth:
+            if not failures:
+                print("first depth-limit box:", endpoints,
+                      diagnostics, file=sys.stderr, flush=True)
             failures.append(("depth-limit", endpoints, diagnostics))
             return
 
-        target_width = {1: Q(1, 16), 2: Q(4), 3: Q(4), 4: Q(1, 20)}
-        coordinate = max((1, 2, 3, 4), key=lambda i:
-                         (endpoints[i][1]-endpoints[i][0]) /
-                         target_width[i])
-        lo, hi = endpoints[coordinate]
-        mid = (lo + hi) / 2
-        children = []
-        for child_range in ((lo, mid), (mid, hi)):
-            child = list(endpoints)
-            child[coordinate] = child_range
-            children.append((child, evaluate(child)))
+        candidates = []
+        for coordinate in range(5):
+            lo, hi = endpoints[coordinate]
+            mid = (lo + hi) / 2
+            candidate_children = []
+            best_lowers = []
+            for child_range in ((lo, mid), (mid, hi)):
+                child = list(endpoints)
+                child[coordinate] = child_range
+                candidate_children.append(child)
+                family_lowers = [epoly_centered_float_lower(
+                    families[i]["quotient"], child)
+                    for i in (1, 2, nested_family_index, 3)]
+                best_lowers.append(max(family_lowers))
+            score = (sum(lower > 0 for lower in best_lowers),
+                     min(best_lowers), sum(best_lowers))
+            candidates.append((score, candidate_children))
+        _, chosen_children = max(candidates, key=lambda item: item[0])
+        children = [(child, evaluate(child)) for child in chosen_children]
         for child, child_diagnostics in children:
             visit(child, depth + 1, child_diagnostics)
 
@@ -796,32 +853,36 @@ def transition_box_cover(max_nodes=20000, max_depth=30):
     # are refined recursively.
     e_parts = 8
     t_parts = 47
-    for e_index in range(e_parts):
-        for t_index in range(t_parts):
-            seed = list(root)
-            seed[1] = (Q(2 * e_index, e_parts),
-                       Q(2 * (e_index + 1), e_parts))
-            t_lo = Q(3, 5) + Q(47, 5) * Q(t_index, t_parts)
-            t_hi = Q(3, 5) + Q(47, 5) * Q(t_index + 1, t_parts)
-            seed[4] = (t_lo, t_hi)
-            seed_diagnostics = evaluate(seed)
-            if any(row["valid"] for row in seed_diagnostics):
-                visit(seed, 0, seed_diagnostics)
-            else:
-                # The only coarse false negatives observed here come from
-                # dependency across the two broad transverse intervals.
-                # One exact quadrant split removes it while retaining the
-                # full seam-scale range in every child.
-                for a_range in ((Q(-16), Q(0)), (Q(0), Q(16))):
-                    for b_range in ((Q(-16), Q(0)), (Q(0), Q(16))):
-                        child = list(seed)
-                        child[2] = a_range
-                        child[3] = b_range
-                        visit(child, 0)
+    try:
+        for e_index in range(e_parts):
+            for t_index in range(t_parts):
+                seed = list(root)
+                seed[1] = (Q(2 * e_index, e_parts),
+                           Q(2 * (e_index + 1), e_parts))
+                t_lo = Q(3, 5) + Q(47, 5) * Q(t_index, t_parts)
+                t_hi = Q(3, 5) + Q(47, 5) * Q(t_index + 1, t_parts)
+                seed[4] = (t_lo, t_hi)
+                seed_diagnostics = evaluate(seed)
+                if any(row["valid"] for row in seed_diagnostics):
+                    visit(seed, 0, seed_diagnostics)
+                else:
+                    # The only coarse false negatives observed here come
+                    # from dependency across the two broad transverse
+                    # intervals.  One exact quadrant split removes it while
+                    # retaining the full seam-scale range in every child.
+                    for a_range in ((Q(-16), Q(0)), (Q(0), Q(16))):
+                        for b_range in ((Q(-16), Q(0)), (Q(0), Q(16))):
+                            child = list(seed)
+                            child[2] = a_range
+                            child[3] = b_range
+                            visit(child, 0)
+    except NodeLimit:
+        truncated = True
     return {"root": root, "node_count": node_count,
+            "max_depth_seen": max_depth_seen, "truncated": truncated,
             "leaves": leaves, "failures": failures,
             "family_counts": [sum(leaf["family_index"] == i
-                                  for leaf in leaves) for i in range(4)]}
+                                  for leaf in leaves) for i in range(5)]}
 
 
 def vertex_matrix_int(index: int):
@@ -3607,7 +3668,7 @@ def main():
         "projective-transition-box-cover")
     transition_cover_parser.add_argument("--max-nodes", type=int,
                                          default=20000)
-    transition_cover_parser.add_argument("--max-depth", type=int, default=30)
+    transition_cover_parser.add_argument("--max-depth", type=int, default=100)
     sub.add_parser("projective-transition-gap-profile")
     args = parser.parse_args()
     if args.command == "local-smoke":
