@@ -16,8 +16,8 @@ Around the hard symmetry-wall seam, use exact chart variables
 * `a,b`: transverse Cayley ratios, with `x=d²*a`, `y=d²*b`;
 * `t`: the main Cayley ratio, with `z=d*t`.
 
-The three generated contact families below cover the numerical transition
-chart.  Their complete denominator-cleared support-defect obstructions are
+The generated contact families below cover the numerical transition chart.
+Their complete denominator-cleared support-defect obstructions are
 constructed from exact indexed snub-cube data and normalized in Lean.
 -/
 
@@ -76,6 +76,18 @@ def familyTransverse : Family where
   supportVertex := ![9, 15, 14]
   outerVertex := ![1, 5, 2]
   supportCompetitor := ![1, 5, 2]
+  factorPower := 2
+
+/-- A translated-support Farkas certificate for the nested transition where
+the tangential view ratio is itself comparable to the seam scale.  Direct
+containment duality selects three outer silhouette edges and different inner
+support vertices, so all three contacts have `Pi ≠ Qi`. -/
+def familyNested : Family where
+  edgeStart := ![14, 8, 15]
+  edgeFinish := ![4, 1, 3]
+  supportVertex := ![14, 8, 15]
+  outerVertex := ![4, 1, 3]
+  supportCompetitor := ![4, 1, 3]
   factorPower := 2
 
 def Family.edge (family : Family) (i : Fin 3) : ExactVector :=

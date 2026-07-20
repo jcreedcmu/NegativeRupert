@@ -22,11 +22,11 @@ open Noperthedron.Checker
 open ProjectiveTransitionBlowup
 open SparseTribonacciPolynomial
 
-def familyBank : Fin 4 → Family :=
-  ![family2, family89, family192, familyTransverse]
+def familyBank : Fin 5 → Family :=
+  ![family2, family89, family192, familyTransverse, familyNested]
 
 structure Box where
-  familyIndex : Fin 4
+  familyIndex : Fin 5
   variableBalls : Fin 5 → RatBall
 deriving DecidableEq, Repr
 

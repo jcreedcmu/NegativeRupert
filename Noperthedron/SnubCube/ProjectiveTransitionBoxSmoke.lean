@@ -45,6 +45,24 @@ theorem transverseGapBox_valid_kernel : transverseGapBox.Valid := by
 theorem transverseGapBox_valid_native : transverseGapBox.Valid := by
   native_decide
 
+/-- The translated-support family found by direct containment duality at the
+nested `e = O(d)` transition.  The four earlier families all have negative
+obstruction quotient at this exact point. -/
+def nestedPointBox : Box where
+  familyIndex := 4
+  variableBalls := ![
+    RatBall.const (1 / 10^6),
+    RatBall.const (32 / 10^6),
+    RatBall.const 16,
+    RatBall.const (-16),
+    RatBall.const (67 / 10)]
+
+theorem nestedPointBox_valid_kernel : nestedPointBox.Valid := by
+  decide +kernel
+
+theorem nestedPointBox_valid_native : nestedPointBox.Valid := by
+  native_decide
+
 end Noperthedron.SnubCube.ProjectiveTransitionBoxSmoke
 
 end
