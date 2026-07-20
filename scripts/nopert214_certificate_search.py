@@ -2716,10 +2716,6 @@ def generate_atlas_projective_table(
                     local = atlas_projective_local_triangle(
                         chart, center, widths, root, triangle,
                         symmetry_index, cone_samples=5, trials=50_000)
-                    if local is None:
-                        local = atlas_projective_local_triangle(
-                            chart, center, widths, root, triangle,
-                            symmetry_index, cone_samples=5, trials=500_000)
                     if local is not None and local["accepted"]:
                         rows[row_id] = {**common, "kind": "local",
                             "certificate": {
