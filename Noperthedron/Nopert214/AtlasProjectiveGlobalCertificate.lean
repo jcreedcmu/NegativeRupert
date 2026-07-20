@@ -32,6 +32,7 @@ structure Box where
   chart : CayleyAtlas.ChartIndex
   certificate : AxisCertificate
   innerIndex : Fin 3 → VertexIndex
+  ballMultiplier : ℚ
 deriving DecidableEq
 
 /-- A local-checker shell lets the global checker reuse the already proved
@@ -121,6 +122,58 @@ def Box.displacementBall (box : Box) : RatBall :=
       (RatBall.mul byz (RatBall.mul y z)))
     (RatBall.mul bzz (RatBall.mul z z))
 
+/-- The defining inequality for the bounded Cayley chart, evaluated on the
+same relative-coordinate box as the displacement polynomial. -/
+def Box.cayleyConstraintBall (box : Box) : RatBall :=
+  let x := box.relativeBalls 0
+  let y := box.relativeBalls 1
+  let z := box.relativeBalls 2
+  RatBall.sub
+    (RatBall.add (RatBall.add (RatBall.mul x x) (RatBall.mul y y))
+      (RatBall.mul z z))
+    (RatBall.const 3)
+
+/-- An S-procedure strengthening, with the Cayley constraint folded into the
+quadratic coefficients *before* interval evaluation.  This preserves the
+correlation that cancels radial variation near the boundary of the Cayley
+ball. -/
+def Box.adjustedDisplacementBall (box : Box) : RatBall :=
+  let lambda := box.ballMultiplier
+  let b0 := RatBall.add (box.coefficientBall RatQuadratic3.c0)
+    (RatBall.const (-3 * lambda))
+  let bx := box.coefficientBall RatQuadratic3.cx
+  let b_y := box.coefficientBall RatQuadratic3.cy
+  let bz := box.coefficientBall RatQuadratic3.cz
+  let bxx := RatBall.add (box.coefficientBall RatQuadratic3.cxx)
+    (RatBall.const lambda)
+  let bxy := box.coefficientBall RatQuadratic3.cxy
+  let bxz := box.coefficientBall RatQuadratic3.cxz
+  let byy := RatBall.add (box.coefficientBall RatQuadratic3.cyy)
+    (RatBall.const lambda)
+  let byz := box.coefficientBall RatQuadratic3.cyz
+  let bzz := RatBall.add (box.coefficientBall RatQuadratic3.czz)
+    (RatBall.const lambda)
+  let x := box.relativeBalls 0
+  let y := box.relativeBalls 1
+  let z := box.relativeBalls 2
+  RatBall.add
+    (RatBall.add
+      (RatBall.add
+        (RatBall.add
+          (RatBall.add
+            (RatBall.add
+              (RatBall.add
+                (RatBall.add
+                  (RatBall.add b0 (RatBall.mul bx x))
+                  (RatBall.mul b_y y))
+                (RatBall.mul bz z))
+              (RatBall.mul bxx (RatBall.mul x x)))
+            (RatBall.mul bxy (RatBall.mul x y)))
+          (RatBall.mul bxz (RatBall.mul x z)))
+        (RatBall.mul byy (RatBall.mul y y)))
+      (RatBall.mul byz (RatBall.mul y z)))
+    (RatBall.mul bzz (RatBall.mul z z))
+
 def Box.dBound (box : Box) : ℚ :=
   1 + AtlasEdgeCertificate.endpointAbsBound
         box.interval.min.x box.interval.max.x ^ 2 +
@@ -140,8 +193,10 @@ structure Box.Valid (box : Box) : Prop where
   support : ∀ i k, box.supportUpper i k ≤ 0
   direction_nonzero : ∀ i,
     box.supportUpper i (box.certificate.nonzeroWitness i) < 0
+  ball_multiplier_nonneg : 0 ≤ box.ballMultiplier
   displacement : box.displacementError ≤
-    box.displacementBall.center - box.displacementBall.radius
+    box.adjustedDisplacementBall.center -
+      box.adjustedDisplacementBall.radius
 
 instance (box : Box) : Decidable box.Valid :=
   decidable_of_iff _ (Box.valid_iff box).symm
@@ -417,6 +472,74 @@ theorem Box.displacementBall_holds (box : Box) {p : AtlasPose ℝ}
     box.displacementBall.Holds (box.approxClearedDisplacement p) := by
   rw [← box.reconstructedDisplacement_eq_approx p]
   exact box.displacementBall_holds_reconstructed hp hmem
+
+theorem Box.cayleyConstraintBall_holds (box : Box) {p : AtlasPose ℝ}
+    (hp : p ∈ box.interval.toReal) :
+    box.cayleyConstraintBall.Holds
+      (p.x ^ 2 + p.y ^ 2 + p.z ^ 2 - 3) := by
+  have hx := box.relativeBalls_hold hp 0
+  have hy := box.relativeBalls_hold hp 1
+  have hz := box.relativeBalls_hold hp 2
+  have hsum := RatBall.holds_add
+    (RatBall.holds_add (RatBall.holds_mul hx hx)
+      (RatBall.holds_mul hy hy))
+    (RatBall.holds_mul hz hz)
+  have hresult := RatBall.holds_sub hsum (RatBall.holds_const 3)
+  simpa [Box.cayleyConstraintBall, pow_two] using hresult
+
+theorem Box.adjustedDisplacementBall_holds (box : Box)
+    {p : AtlasPose ℝ} (hp : p ∈ box.interval.toReal)
+    (hmem : InTriangle (toReal box.triangle)
+      (AtlasProjectiveView.normalizedView box.root p)) :
+    box.adjustedDisplacementBall.Holds
+      (box.approxClearedDisplacement p +
+        (box.ballMultiplier : ℝ) *
+          (p.x ^ 2 + p.y ^ 2 + p.z ^ 2 - 3)) := by
+  let n := AtlasProjectiveView.normalizedView box.root p
+  let value := fun coefficient =>
+    (box.viewCoefficientQuadratic coefficient).evalReal (n 0) (n 1) (n 2)
+  have hc (coefficient : RatQuadratic3 → ℚ) :
+      (box.coefficientBall coefficient).Holds (value coefficient) :=
+    box.coefficientBall_holds hmem coefficient
+  have hx : (box.relativeBalls 0).Holds p.x := box.relativeBalls_hold hp 0
+  have hy : (box.relativeBalls 1).Holds p.y := box.relativeBalls_hold hp 1
+  have hz : (box.relativeBalls 2).Holds p.z := box.relativeBalls_hold hp 2
+  have h0 := RatBall.holds_add (hc RatQuadratic3.c0)
+    (RatBall.holds_const (-3 * box.ballMultiplier))
+  have h1 := RatBall.holds_mul (hc RatQuadratic3.cx) hx
+  have h2 := RatBall.holds_mul (hc RatQuadratic3.cy) hy
+  have h3 := RatBall.holds_mul (hc RatQuadratic3.cz) hz
+  have h4 := RatBall.holds_mul
+    (RatBall.holds_add (hc RatQuadratic3.cxx)
+      (RatBall.holds_const box.ballMultiplier))
+    (RatBall.holds_mul hx hx)
+  have h5 := RatBall.holds_mul (hc RatQuadratic3.cxy)
+    (RatBall.holds_mul hx hy)
+  have h6 := RatBall.holds_mul (hc RatQuadratic3.cxz)
+    (RatBall.holds_mul hx hz)
+  have h7 := RatBall.holds_mul
+    (RatBall.holds_add (hc RatQuadratic3.cyy)
+      (RatBall.holds_const box.ballMultiplier))
+    (RatBall.holds_mul hy hy)
+  have h8 := RatBall.holds_mul (hc RatQuadratic3.cyz)
+    (RatBall.holds_mul hy hz)
+  have h9 := RatBall.holds_mul
+    (RatBall.holds_add (hc RatQuadratic3.czz)
+      (RatBall.holds_const box.ballMultiplier))
+    (RatBall.holds_mul hz hz)
+  have hsum := RatBall.holds_add
+    (RatBall.holds_add
+      (RatBall.holds_add
+        (RatBall.holds_add
+          (RatBall.holds_add
+            (RatBall.holds_add
+              (RatBall.holds_add
+                (RatBall.holds_add (RatBall.holds_add h0 h1) h2) h3) h4) h5)
+            h6) h7) h8) h9
+  rw [← box.reconstructedDisplacement_eq_approx p]
+  convert hsum using 1 <;>
+    simp only [Box.adjustedDisplacementBall, Box.reconstructedDisplacement,
+      value, n] <;> push_cast <;> ring
 
 private theorem abs_le_endpointAbsBound {lo hi : ℚ} {x : ℝ}
     (hx : x ∈ Set.Icc (lo : ℝ) (hi : ℝ)) :
@@ -812,42 +935,56 @@ theorem Box.actualClearedDisplacement_eq_pose (box : Box)
 
 theorem Box.valid_exactClearedDisplacement (box : Box) (h : box.Valid)
     {p : AtlasPose ℝ} (hp : p ∈ box.interval.toReal)
+    (hbounded : p.CayleyBounded)
     (hscale : 1 ≤ viewScale box.root p)
     (hmem : InTriangle (toReal box.triangle)
       (AtlasProjectiveView.normalizedView box.root p)) :
     0 ≤ box.exactClearedDisplacement p := by
-  have hball := box.displacementBall_holds hp hmem
+  have hball := box.adjustedDisplacementBall_holds hp hmem
   have hlower := RatBall.lower_le_of_holds hball
-  change (box.displacementBall.center - box.displacementBall.radius : ℚ) ≤
-    box.approxClearedDisplacement p at hlower
+  change (box.adjustedDisplacementBall.center -
+      box.adjustedDisplacementBall.radius : ℚ) ≤
+    box.approxClearedDisplacement p + (box.ballMultiplier : ℝ) *
+      (p.x ^ 2 + p.y ^ 2 + p.z ^ 2 - 3) at hlower
   push_cast at hlower
   have hchecked : (box.displacementError : ℝ) ≤
-      (box.displacementBall.center : ℝ) -
-        (box.displacementBall.radius : ℝ) := by
+      (box.adjustedDisplacementBall.center : ℝ) -
+        (box.adjustedDisplacementBall.radius : ℝ) := by
     exact_mod_cast h.displacement
+  have hconstraint : p.x ^ 2 + p.y ^ 2 + p.z ^ 2 - 3 ≤ 0 := by
+    unfold AtlasPose.CayleyBounded at hbounded
+    linarith
+  have hlambda : 0 ≤ (box.ballMultiplier : ℝ) := by
+    exact_mod_cast h.ball_multiplier_nonneg
+  have hadjustment :
+      (box.ballMultiplier : ℝ) *
+        (p.x ^ 2 + p.y ^ 2 + p.z ^ 2 - 3) ≤ 0 :=
+    mul_nonpos_of_nonneg_of_nonpos hlambda hconstraint
   have herr := box.clearedDisplacement_error hp hscale
   rw [abs_le] at herr
   linarith
 
 theorem Box.valid_actualClearedDisplacement (box : Box) (h : box.Valid)
     {p : AtlasPose ℝ} (hp : p ∈ box.interval.toReal)
+    (hbounded : p.CayleyBounded)
     (hscale : 1 ≤ viewScale box.root p)
     (hmem : InTriangle (toReal box.triangle)
       (AtlasProjectiveView.normalizedView box.root p)) :
     0 ≤ box.actualClearedDisplacement p := by
-  have hexact := box.valid_exactClearedDisplacement h hp hscale hmem
+  have hexact := box.valid_exactClearedDisplacement h hp hbounded hscale hmem
   rw [box.exactClearedDisplacement_eq_denom_mul] at hexact
   exact nonneg_of_mul_nonneg_right hexact (cayleyDenom_pos p.x p.y p.z)
 
 theorem Box.valid_imp_not_translated_rupert (box : Box) (h : box.Valid) :
     ∀ p ∈ box.interval.toReal,
+      p.CayleyBounded →
       1 ≤ viewScale box.root p →
       InTriangle (toReal box.triangle)
         (AtlasProjectiveView.normalizedView box.root p) →
       ∀ offset : ℝ²,
         ¬ RupertPose (p.matrixPoseWithOffset box.chart offset)
           exactPolyhedron.hull := by
-  intro p hp hscale hmem offset
+  intro p hp hbounded hscale hmem offset
   have hscaleNe : viewScale box.root p ≠ 0 :=
     (lt_of_lt_of_le (by norm_num : (0 : ℝ) < 1) hscale).ne'
   apply AtlasProjectiveGlobalRigidity.not_rupertPose_of_projective_global_certificate
@@ -860,21 +997,22 @@ theorem Box.valid_imp_not_translated_rupert (box : Box) (h : box.Valid) :
   · obtain ⟨i, hi⟩ := box.valid_weight_pos h hscale hmem
     exact ⟨i, by simpa [AxisCertificate.exactWeight, Box.localShell] using hi⟩
   · exact box.valid_support h offset hscale hmem
-  · have hactual := box.valid_actualClearedDisplacement h hp hscale hmem
+  · have hactual := box.valid_actualClearedDisplacement h hp hbounded hscale hmem
     rw [box.actualClearedDisplacement_eq_pose offset hscaleNe] at hactual
     simpa [AxisCertificate.exactWeight, Box.localShell] using hactual
 
 theorem Box.valid_imp_no_translated_rupert_in_interval
     (box : Box) (h : box.Valid) :
     ¬ ∃ p ∈ box.interval.toReal,
+      p.CayleyBounded ∧
       1 ≤ viewScale box.root p ∧
       InTriangle (toReal box.triangle)
         (AtlasProjectiveView.normalizedView box.root p) ∧
       ∃ offset : ℝ²,
         RupertPose (p.matrixPoseWithOffset box.chart offset)
           exactPolyhedron.hull := by
-  rintro ⟨p, hp, hscale, hmem, offset, hrupert⟩
-  exact box.valid_imp_not_translated_rupert h p hp hscale hmem offset hrupert
+  rintro ⟨p, hp, hbounded, hscale, hmem, offset, hrupert⟩
+  exact box.valid_imp_not_translated_rupert h p hp hbounded hscale hmem offset hrupert
 
 end Noperthedron.Nopert214.AtlasProjectiveGlobalCertificate
 

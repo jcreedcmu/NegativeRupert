@@ -218,10 +218,10 @@ theorem valid_imp_noRupert_ix (chart : ChartIndex) (get : ℕ → Row)
         hregion.1 hregion.2 hrupert
   | projectiveGlobal id box =>
       unfold NoRupert
-      rintro ⟨p, hp, -, offset, hregion, hrupert⟩
+      rintro ⟨p, hp, hbounded, offset, hregion, hrupert⟩
       obtain ⟨hchart, hbox⟩ := hvalid
       subst hchart
-      exact box.valid_imp_not_translated_rupert hbox p hp
+      exact box.valid_imp_not_translated_rupert hbox p hp hbounded
         hregion.1 hregion.2 offset hrupert
   | symmetryLocal id box region =>
       unfold NoRupert

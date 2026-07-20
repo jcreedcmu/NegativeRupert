@@ -22,6 +22,7 @@ import heapq
 import itertools
 import json
 import math
+import os
 import random
 import sys
 from fractions import Fraction as Q
@@ -510,6 +511,40 @@ def projective_local_axis_candidates(view, cone_samples=1):
     return cycle, candidates
 
 
+def projective_axis_contacts(view, cone_samples=4):
+    """Return the raw mixed silhouette contacts without enumerating triples."""
+    length = norm3(view)
+    unit_view = tuple(value / length for value in view)
+    axis_index = min(range(3), key=lambda i: abs(unit_view[i]))
+    axis = tuple(float(i == axis_index) for i in range(3))
+    first = cross3(unit_view, axis)
+    first = scale3(1 / norm3(first), first)
+    second = cross3(unit_view, first)
+    projected = [(dot3(vertex, first), dot3(vertex, second))
+                 for vertex in VERTICES]
+    cycle = convex_hull(projected)
+    edges = []
+    for position, start in enumerate(cycle):
+        finish = cycle[(position + 1) % len(cycle)]
+        edges.append(tuple(VERTICES[finish][i] - VERTICES[start][i]
+                           for i in range(3)))
+    contacts = []
+    for position, vertex in enumerate(cycle):
+        previous = cycle[(position - 1) % len(cycle)]
+        following = cycle[(position + 1) % len(cycle)]
+        before = edges[(position - 1) % len(cycle)]
+        after = edges[position]
+        for sample in range(cone_samples):
+            lam = (sample + 1) / (cone_samples + 1)
+            contacts.append({"vertex": vertex,
+                             "edge_start": previous,
+                             "edge_finish": vertex,
+                             "edge_start2": vertex,
+                             "edge_finish2": following,
+                             "mix": round(1000 * lam)})
+    return cycle, unit_view, contacts
+
+
 PROJECTIVE_CERTIFICATE_DENOMINATOR = 10**9
 PROJECTIVE_SUPPORT_ERROR = 10 * exact_certificate.KAPPA
 PROJECTIVE_VARIATION_ERROR = 150 * exact_certificate.KAPPA
@@ -715,12 +750,39 @@ def projective_local_float_candidates(triangle, cone_samples=4):
                 for i in range(3)]
     _, candidates = projective_local_axis_candidates(centroid, cone_samples)
     triangle_f = [[float(x) for x in corner] for corner in triangle]
+    support_cache = {}
+
+    def contact_support(contact):
+        key = (contact["edge_start"], contact["edge_finish"],
+               contact["edge_start2"], contact["edge_finish2"],
+               contact["mix"], contact["vertex"])
+        if key in support_cache:
+            return support_cache[key]
+        edge = [float(x) for x in projective_mixed_edge_q(contact)]
+        selected = contact["vertex"]
+        strict_slack = math.inf
+        support_ok = True
+        for k, vertex in enumerate(VERTICES):
+            if k == selected:
+                continue
+            delta = [a-b for a, b in zip(vertex, VERTICES[selected])]
+            coefficient = cross3(edge, delta)
+            upper = max(dot3(corner, coefficient)
+                        for corner in triangle_f) + \
+                float(PROJECTIVE_SUPPORT_ERROR)
+            strict_slack = min(strict_slack, -upper)
+            if upper > 0:
+                support_ok = False
+                break
+        support_cache[key] = edge, selected, strict_slack, support_ok
+        return support_cache[key]
+
     feasible = []
     for candidate in candidates:
         contacts = [dict(contact) for contact in candidate["contacts"]]
-        edges = [[float(x) for x in projective_mixed_edge_q(contact)]
-                 for contact in contacts]
-        supports = [contact["vertex"] for contact in contacts]
+        support_data = [contact_support(contact) for contact in contacts]
+        edges = [data[0] for data in support_data]
+        supports = [data[1] for data in support_data]
         probe = [dot3(triangle_f[0], cross3(edges[1], edges[2])),
                  dot3(triangle_f[0], cross3(edges[2], edges[0])),
                  dot3(triangle_f[0], cross3(edges[0], edges[1]))]
@@ -738,24 +800,8 @@ def projective_local_float_candidates(triangle, cone_samples=4):
                         for values in weights_at]
         if min(weight_lower) < 0 or max(weight_lower) <= 0:
             continue
-        strict_slack = math.inf
-        support_ok = True
-        for edge, selected in zip(edges, supports):
-            for k, vertex in enumerate(VERTICES):
-                if k == selected:
-                    continue
-                delta = [a-b for a, b in zip(vertex, VERTICES[selected])]
-                coefficient = cross3(edge, delta)
-                upper = max(dot3(corner, coefficient)
-                            for corner in triangle_f) + \
-                    float(PROJECTIVE_SUPPORT_ERROR)
-                strict_slack = min(strict_slack, -upper)
-                if upper > 0:
-                    support_ok = False
-                    break
-            if not support_ok:
-                break
-        if not support_ok:
+        strict_slack = min(data[2] for data in support_data)
+        if not all(data[3] for data in support_data):
             continue
         n = centroid
         weights = [dot3(n, coefficient)
@@ -872,7 +918,7 @@ def atlas_projective_local_triangle(
 
 def atlas_projective_global_triangle(
         chart, relative_center, relative_radii, root, triangle,
-        cone_samples=4):
+        cone_samples=4, candidate_limit=12, selected_candidate=None):
     """Generate one exact moving balanced-triple global certificate.
 
     This mirrors ``AtlasProjectiveGlobalCertificate.Box``: the three support
@@ -881,12 +927,17 @@ def atlas_projective_global_triangle(
     by a quadratic interval in that view whose coefficients are themselves
     quadratic intervals in the relative Cayley coordinates.
     """
-    candidates = projective_local_float_candidates(triangle, cone_samples)
+    candidates = (projective_local_float_candidates(triangle, cone_samples)
+                  if selected_candidate is None else [selected_candidate])
     view_center = [sum(corner[c] for corner in triangle) / 3
                    for c in range(3)]
     view_balls = exact_certificate.projective_triangle_balls(triangle)
+    ranked = sorted(candidates, key=lambda candidate:
+        projective_global_candidate_center_margin(
+            chart, relative_center, view_center, candidate["contacts"]),
+        reverse=True)
     best = None
-    for candidate in candidates:
+    for candidate in ranked[:candidate_limit]:
         try:
             row = projective_local_axis_row_mixed(
                 triangle, candidate["contacts"])
@@ -951,11 +1002,33 @@ def atlas_projective_global_triangle(
                      exact_certificate.ball_mul(y, y),
                      exact_certificate.ball_mul(y, z),
                      exact_certificate.ball_mul(z, z)]
-        displacement_ball = exact_certificate.ball_const(0)
-        for coefficient, monomial in zip(coefficient_balls, monomials):
-            displacement_ball = exact_certificate.ball_add(
-                displacement_ball,
-                exact_certificate.ball_mul(coefficient, monomial))
+        # The lower bound is a concave piecewise-linear function of the
+        # nonnegative S-procedure multiplier.  Its only breakpoints occur
+        # when one of the four adjusted coefficient centers crosses zero.
+        multiplier_candidates = [Q(0)]
+        if coefficient_balls[0][0] > 0:
+            multiplier_candidates.append(coefficient_balls[0][0] / 3)
+        for index in (4, 7, 9):
+            if coefficient_balls[index][0] < 0:
+                multiplier_candidates.append(-coefficient_balls[index][0])
+
+        def adjusted_ball(multiplier):
+            adjusted = list(coefficient_balls)
+            adjusted[0] = exact_certificate.ball_add(
+                adjusted[0], exact_certificate.ball_const(-3*multiplier))
+            for index in (4, 7, 9):
+                adjusted[index] = exact_certificate.ball_add(
+                    adjusted[index], exact_certificate.ball_const(multiplier))
+            total = exact_certificate.ball_const(0)
+            for coefficient, monomial in zip(adjusted, monomials):
+                total = exact_certificate.ball_add(
+                    total, exact_certificate.ball_mul(coefficient, monomial))
+            return total
+
+        ball_multiplier, displacement_ball = max(
+            ((multiplier, adjusted_ball(multiplier))
+             for multiplier in multiplier_candidates),
+            key=lambda item: item[1][0]-item[1][1])
         d_bound = 1 + sum(max(abs(center-radius), abs(center+radius))**2
                           for center, radius in
                           zip(relative_center, relative_radii))
@@ -970,6 +1043,7 @@ def atlas_projective_global_triangle(
             "triangle": triangle,
             "certificate": row,
             "inner_index": inner_indices,
+            "ball_multiplier": ball_multiplier,
             "diagnostics": {
                 "feasible_candidates": len(candidates),
                 "coefficient_balls": coefficient_balls,
@@ -982,6 +1056,237 @@ def atlas_projective_global_triangle(
         if best is None or lower > best[0]:
             best = (lower, result)
     return None if best is None else best[1]
+
+
+def projective_global_candidate_center_margin(
+        chart, relative_center, view, contacts):
+    """Fast center score for choosing triples before exact interval audit."""
+    contacts = [dict(contact) for contact in contacts]
+    edges = [list(map(float, projective_mixed_edge_q(contact)))
+             for contact in contacts]
+    weights = [dot3(view, cross3(edges[1], edges[2])),
+               dot3(view, cross3(edges[2], edges[0])),
+               dot3(view, cross3(edges[0], edges[1]))]
+    x, y, z = map(float, relative_center)
+    numerator = (
+        (1+x*x-y*y-z*z, 2*(x*y-z), 2*(x*z+y)),
+        (2*(x*y+z), 1-x*x+y*y-z*z, 2*(y*z-x)),
+        (2*(x*z-y), 2*(y*z+x), 1-x*x-y*y+z*z),
+    )
+    denom = 1+x*x+y*y+z*z
+    total = 0.0
+    for weight, edge, contact in zip(weights, edges, contacts):
+        outer = VERTICES[contact["vertex"]]
+        best = -math.inf
+        for inner in VERTICES:
+            displacement = [
+                ATLAS_CHART_SIGNS[chart][c] *
+                    sum(numerator[c][j]*inner[j] for j in range(3)) -
+                    denom*outer[c]
+                for c in range(3)]
+            best = max(best, dot3(view, cross3(edge, displacement)))
+        total += weight*best
+    return total
+
+
+def atlas_projective_global_float_screen(
+        chart, relative_center, relative_radii, triangle,
+        cone_samples=4, candidate_limit=1, candidates=None):
+    """Fast floating mirror of the moving balanced-triple checker."""
+    inherited = candidates is not None
+    if candidates is None:
+        candidates = projective_global_float_candidates(
+            triangle, cone_samples)
+    if not candidates:
+        return None
+    view_center = [sum(float(corner[c]) for corner in triangle) / 3
+                   for c in range(3)]
+    view_lo = [min(float(corner[c]) for corner in triangle)
+               for c in range(3)]
+    view_hi = [max(float(corner[c]) for corner in triangle)
+               for c in range(3)]
+    triangle_f = [[float(x) for x in corner] for corner in triangle]
+    view_centers = [(lo+hi)/2 for lo, hi in zip(view_lo, view_hi)]
+    view_radii = [(hi-lo)/2 for lo, hi in zip(view_lo, view_hi)]
+    relative_center_f = tuple(map(float, relative_center))
+    relative_radii_f = tuple(map(float, relative_radii))
+    x0, y0, z0 = relative_center_f
+    numerator0 = (
+        (1+x0*x0-y0*y0-z0*z0, 2*(x0*y0-z0), 2*(x0*z0+y0)),
+        (2*(x0*y0+z0), 1-x0*x0+y0*y0-z0*z0, 2*(y0*z0-x0)),
+        (2*(x0*z0-y0), 2*(y0*z0+x0), 1-x0*x0-y0*y0+z0*z0),
+    )
+    denom0 = 1+x0*x0+y0*y0+z0*z0
+    reward_cache = {}
+
+    def center_data(contact):
+        key = (contact["edge_start"], contact["edge_finish"],
+               contact["edge_start2"], contact["edge_finish2"],
+               contact["mix"], contact["vertex"])
+        if key in reward_cache:
+            return reward_cache[key]
+        edge_q = projective_mixed_edge_q(contact)
+        edge = list(map(float, edge_q))
+        best = None
+        outer = VERTICES[contact["vertex"]]
+        for inner, vertex in enumerate(VERTICES):
+            displacement = [
+                float(ATLAS_CHART_SIGNS[chart][c]) *
+                    sum(numerator0[c][j]*vertex[j] for j in range(3)) -
+                    denom0*outer[c]
+                for c in range(3)]
+            value = dot3(view_center, cross3(edge, displacement))
+            if best is None or value > best[0]:
+                best = (value, inner, edge_q, edge)
+        reward_cache[key] = best
+        return best
+
+    ranked = []
+    for candidate in candidates:
+        contacts = candidate["contacts"]
+        edges = [center_data(contact)[3] for contact in contacts]
+        weights = [dot3(view_center, cross3(edges[1], edges[2])),
+                   dot3(view_center, cross3(edges[2], edges[0])),
+                   dot3(view_center, cross3(edges[0], edges[1]))]
+        score = sum(weight*center_data(contact)[0]
+                    for weight, contact in zip(weights, contacts))
+        ranked.append((score, candidate))
+    ranked.sort(key=lambda item: item[0], reverse=True)
+
+    def fadd(a, b):
+        return a[0]+b[0], a[1]+b[1]
+
+    def fmul(a, b):
+        return (a[0]*b[0],
+                abs(a[0])*b[1] + abs(b[0])*a[1] + a[1]*b[1])
+
+    best = None
+    audited = 0
+    for _, candidate in ranked:
+        contacts = candidate["contacts"]
+        edges = [center_data(contact)[3] for contact in contacts]
+        weight_coefficients = [cross3(edges[1], edges[2]),
+                               cross3(edges[2], edges[0]),
+                               cross3(edges[0], edges[1])]
+        weight_lower = [min(dot3(corner, coefficient)
+                            for corner in triangle_f) -
+                        float(PROJECTIVE_SUPPORT_ERROR)
+                        for coefficient in weight_coefficients]
+        if min(weight_lower) < 0 or max(weight_lower) <= 0:
+            continue
+        audited += 1
+        contact_polynomials = [atlas_mixed_contact_qpolys(
+            chart, tuple(center_data(contact)[2]), center_data(contact)[1],
+            contact["vertex"]) for contact in contacts]
+        coefficient_balls = []
+        for coefficient_index in range(10):
+            view_polynomial = [0.0]*10
+            for i in range(3):
+                a = weight_coefficients[i]
+                b = [float(contact_polynomials[i][c][coefficient_index])
+                     for c in range(3)]
+                product = [0.0, 0.0, 0.0, 0.0,
+                           a[0]*b[0], a[0]*b[1]+a[1]*b[0],
+                           a[0]*b[2]+a[2]*b[0], a[1]*b[1],
+                           a[1]*b[2]+a[2]*b[1], a[2]*b[2]]
+                view_polynomial = [x+y for x, y in
+                                   zip(view_polynomial, product)]
+            coefficient_balls.append(qpoly_eval_centered_float_py(
+                view_polynomial, view_centers, view_radii))
+        variables = list(zip(relative_center_f, relative_radii_f))
+        x, y, z = variables
+        monomials = [(1.0, 0.0), x, y, z, fmul(x, x), fmul(x, y),
+                     fmul(x, z), fmul(y, y), fmul(y, z), fmul(z, z)]
+        multiplier_candidates = [0.0]
+        if coefficient_balls[0][0] > 0:
+            multiplier_candidates.append(coefficient_balls[0][0]/3)
+        for index in (4, 7, 9):
+            if coefficient_balls[index][0] < 0:
+                multiplier_candidates.append(-coefficient_balls[index][0])
+
+        def adjusted_total(multiplier):
+            adjusted = list(coefficient_balls)
+            adjusted[0] = fadd(adjusted[0], (-3*multiplier, 0.0))
+            for index in (4, 7, 9):
+                adjusted[index] = fadd(adjusted[index], (multiplier, 0.0))
+            total = (0.0, 0.0)
+            for coefficient, monomial in zip(adjusted, monomials):
+                total = fadd(total, fmul(coefficient, monomial))
+            return total
+
+        ball_multiplier, total = max(
+            ((multiplier, adjusted_total(multiplier))
+             for multiplier in multiplier_candidates),
+            key=lambda item: item[1][0]-item[1][1])
+        endpoint_abs = [max(abs(c-r), abs(c+r)) for c, r in variables]
+        d_bound = 1+sum(value*value for value in endpoint_abs)
+        lower = total[0]-total[1]-300*d_bound*float(exact_certificate.KAPPA)
+        if best is None or lower > best[0]:
+            best = (lower, candidate, ball_multiplier)
+        if audited >= candidate_limit:
+            break
+    if best is None:
+        return None
+    if inherited and best[0] <= 1e-8:
+        return atlas_projective_global_float_screen(
+            chart, relative_center, relative_radii, triangle,
+            cone_samples, candidate_limit, None)
+    return {"lower_bound": best[0], "candidate": best[1],
+            "ball_multiplier": best[2],
+            "feasible_candidates": len(candidates),
+            "candidates": candidates}
+
+
+@functools.lru_cache(maxsize=None)
+def projective_global_float_candidates(triangle, cone_samples=4):
+    """Triangle-valid support triples without local-variation calculations."""
+    triangle_f = [[float(x) for x in corner] for corner in triangle]
+    centroid = [sum(corner[c] for corner in triangle_f)/3
+                for c in range(3)]
+    _, _, contacts = projective_axis_contacts(centroid, cone_samples)
+    def fdot(a, b):
+        return a[0]*b[0]+a[1]*b[1]+a[2]*b[2]
+    valid = []
+    for contact in contacts:
+        edge = [float(x) for x in projective_mixed_edge_q(contact)]
+        selected = contact["vertex"]
+        ok = True
+        for k, vertex in enumerate(VERTICES):
+            if k == selected:
+                continue
+            delta = [a-b for a, b in zip(vertex, VERTICES[selected])]
+            coefficient = cross3(edge, delta)
+            upper = max(fdot(triangle_f[0], coefficient),
+                        fdot(triangle_f[1], coefficient),
+                        fdot(triangle_f[2], coefficient)) + \
+                float(PROJECTIVE_SUPPORT_ERROR)
+            if upper > 0:
+                ok = False
+                break
+        if ok:
+            valid.append((contact, edge))
+    feasible = []
+    for indices in itertools.combinations(range(len(valid)), 3):
+        chosen = [valid[index] for index in indices]
+        chosen_contacts = [dict(item[0]) for item in chosen]
+        edges = [item[1] for item in chosen]
+        coefficients = [cross3(edges[1], edges[2]),
+                        cross3(edges[2], edges[0]),
+                        cross3(edges[0], edges[1])]
+        probe = [fdot(centroid, coefficient)
+                 for coefficient in coefficients]
+        if max(probe) < 0:
+            chosen_contacts[1], chosen_contacts[2] = \
+                chosen_contacts[2], chosen_contacts[1]
+            edges[1], edges[2] = edges[2], edges[1]
+            coefficients = [cross3(edges[1], edges[2]),
+                            cross3(edges[2], edges[0]),
+                            cross3(edges[0], edges[1])]
+            probe = [fdot(centroid, coefficient)
+                     for coefficient in coefficients]
+        if min(probe) >= 0 and max(probe) > 0:
+            feasible.append({"contacts": chosen_contacts})
+    return feasible
 
 
 @functools.lru_cache(maxsize=None)
@@ -1640,7 +1945,7 @@ def nopert214_silhouette_cycle(view):
 
 
 def atlas_simplex_edge_smoke(chart, relative_center, relative_half_widths,
-                              triangle, cycle=None):
+                              triangle, cycle=None, inner_indices=None):
     """Exact edge certificate uniform over one signed projective triangle."""
     centroid = [sum((view[i] for view in triangle), Q(0))/3
                 for i in range(3)]
@@ -1669,20 +1974,26 @@ def atlas_simplex_edge_smoke(chart, relative_center, relative_half_widths,
             return None
         total_defect += max(-value for row in support_values for value in row) \
             + exact_certificate.SUPPORT_ERROR
-        best = None
-        all_polynomials = []
-        for inner in range(len(VERTICES_Q)):
-            polynomials = atlas_edge_contact_qpolys(
-                chart, q0, q1, inner)
-            all_polynomials.append(polynomials)
-            components = [exact_certificate.qpoly_eval_centered(
-                polynomial, relative_center, relative_half_widths)
-                for polynomial in polynomials]
-            lower = min(sum(view[i]*(components[i][0]-components[i][1])
-                            for i in range(3)) for view in triangle)
-            if best is None or lower > best[0]:
-                best = (lower, inner, polynomials)
-        _, inner, polynomials = best
+        if inner_indices is None:
+            best = None
+            all_polynomials = []
+            for inner in range(len(VERTICES_Q)):
+                polynomials = atlas_edge_contact_qpolys(
+                    chart, q0, q1, inner)
+                all_polynomials.append(polynomials)
+                components = [exact_certificate.qpoly_eval_centered(
+                    polynomial, relative_center, relative_half_widths)
+                    for polynomial in polynomials]
+                lower = min(sum(
+                    view[i]*(components[i][0]-components[i][1])
+                    for i in range(3)) for view in triangle)
+                if best is None or lower > best[0]:
+                    best = (lower, inner, polynomials)
+            _, inner, polynomials = best
+        else:
+            inner = inner_indices[position]
+            polynomials = atlas_edge_contact_qpolys(chart, q0, q1, inner)
+            all_polynomials = None
         total_polys = [exact_certificate.qpoly_add(a, b)
                        for a, b in zip(total_polys, polynomials)]
         edge_polynomial_choices.append(all_polynomials)
@@ -1690,7 +2001,7 @@ def atlas_simplex_edge_smoke(chart, relative_center, relative_half_widths,
                          "inner_index": inner, "nonzero_witness": witness})
     # Optimize contacts for the interval radius of the summed polynomial.
     # This retains cancellations that choosing each edge independently loses.
-    for _ in range(2):
+    for _ in range(0 if inner_indices is not None else 2):
         changed = False
         for edge_index, all_polynomials in enumerate(edge_polynomial_choices):
             old = all_polynomials[contacts[edge_index]["inner_index"]]
@@ -1994,7 +2305,8 @@ def interval_outside_cayley_ball(center, half_widths):
 
 
 def explore_atlas_projective_tree(max_nodes=10_000, max_view_depth=5,
-                                  min_relative_half_width=Q(1, 100)):
+                                  min_relative_half_width=Q(1, 100),
+                                  exact_audit_limit=10):
     """Bounded exact experiment for the joint relative/projective tree.
 
     This deliberately produces only counts and small pending diagnostics;
@@ -2004,40 +2316,67 @@ def explore_atlas_projective_tree(max_nodes=10_000, max_view_depth=5,
     for chart in range(4):
         for root, triangle in enumerate(SIGNED_PROJECTIVE_ROOTS):
             stack.append((chart, (Q(0), Q(0), Q(0)),
-                          (Q(2), Q(2), Q(2)), root, triangle, 0))
+                          (Q(2), Q(2), Q(2)), root, triangle, 0, None))
     counts = {"nodes": 0, "accepted": 0, "radius_pruned": 0,
               "view_splits": 0, "relative_splits": 0,
-              "exact_audits": 0, "exact_audit_passed": 0}
+              "edge_accepted": 0, "global_accepted": 0,
+              "exact_audits": 0, "exact_audit_passed": 0,
+              "global_exact_audits": 0,
+              "global_exact_audit_passed": 0}
     pending = []
     while stack and counts["nodes"] < max_nodes:
-        chart, center, widths, root, triangle, view_depth = stack.pop()
+        (chart, center, widths, root, triangle, view_depth,
+            inherited_global_candidates) = stack.pop()
         counts["nodes"] += 1
         if interval_outside_cayley_ball(center, widths):
             counts["radius_pruned"] += 1
             continue
         result = atlas_simplex_float_screen(
             chart, center, widths, triangle)
+        global_result = None
         if (result["minimum_strict_support_lower"] > 1e-8 and
                 result["lower_bound"] > 1e-8):
-            if counts["exact_audits"] < 10:
+            if counts["exact_audits"] < exact_audit_limit:
                 counts["exact_audits"] += 1
                 exact = atlas_simplex_edge_smoke(
-                    chart, center, widths, triangle, result["cycle"])
+                    chart, center, widths, triangle, result["cycle"],
+                    result["inner_indices"])
                 if exact is not None and exact["accepted"]:
                     counts["exact_audit_passed"] += 1
             counts["accepted"] += 1
+            counts["edge_accepted"] += 1
             continue
+        if result["minimum_strict_support_lower"] > 0:
+            global_result = atlas_projective_global_float_screen(
+                chart, center, widths, triangle,
+                candidates=inherited_global_candidates)
+            if (global_result is not None and
+                    global_result["lower_bound"] > 1e-8):
+                if counts["global_exact_audits"] < exact_audit_limit:
+                    counts["global_exact_audits"] += 1
+                    exact = atlas_projective_global_triangle(
+                        chart, center, widths, root, triangle)
+                    if exact is not None and exact["accepted"]:
+                        counts["global_exact_audit_passed"] += 1
+                counts["accepted"] += 1
+                counts["global_accepted"] += 1
+                continue
         # A missing result is a silhouette/support transition, which only a
         # view split can resolve.  Once support is stable, split the widest
         # relative coordinate before spending more projective triangles.
         if (result["minimum_strict_support_lower"] <= 0 and
                 view_depth < max_view_depth):
             counts["view_splits"] += 1
-            stack.extend((chart, center, widths, root, child, view_depth+1)
+            stack.extend((chart, center, widths, root, child, view_depth+1,
+                          None)
                          for child in split_projective_triangle(triangle))
             continue
         widest = max(range(3), key=lambda i: widths[i])
-        if widths[widest] > min_relative_half_width:
+        use_fine_relative_split = (global_result is not None and
+            global_result["lower_bound"] > -2e-3)
+        if (widths[widest] > max(min_relative_half_width, Q(1, 256)) or
+                (widths[widest] > min_relative_half_width and
+                 use_fine_relative_split)):
             counts["relative_splits"] += 1
             child_widths = list(widths)
             child_widths[widest] /= 2
@@ -2045,24 +2384,203 @@ def explore_atlas_projective_tree(max_nodes=10_000, max_view_depth=5,
                 child_center = list(center)
                 child_center[widest] += direction*child_widths[widest]
                 stack.append((chart, tuple(child_center), tuple(child_widths),
-                              root, triangle, view_depth))
+                              root, triangle, view_depth,
+                              None if global_result is None else
+                                global_result["candidates"]))
             continue
         if view_depth < max_view_depth:
             counts["view_splits"] += 1
-            stack.extend((chart, center, widths, root, child, view_depth+1)
+            stack.extend((chart, center, widths, root, child, view_depth+1,
+                          None if global_result is None else
+                            global_result["candidates"])
                          for child in split_projective_triangle(triangle))
             continue
         if len(pending) < 20:
             pending.append({"chart": chart, "center": center,
                             "half_widths": widths, "root": root,
+                            "triangle": triangle,
                             "view_depth": view_depth,
                             "reason": "support" if
                                 result["minimum_strict_support_lower"] <= 0
                                 else "displacement",
-                            "lower_bound": result["lower_bound"]})
+                            "lower_bound": result["lower_bound"],
+                            "global_lower_bound": None if global_result is None
+                                else global_result["lower_bound"],
+                            "global_feasible_candidates": None if
+                                global_result is None else
+                                global_result["feasible_candidates"]})
     counts["queued"] = len(stack)
     counts["pending_sample"] = pending
     return counts
+
+
+def generate_atlas_projective_table(
+        chart, max_nodes=200_000, max_view_depth=12,
+        min_relative_half_width=Q(1, 1024), checkpoint_path=None,
+        checkpoint_every=1000, resume=False):
+    """Generate one exact chart table for the formal projective checker."""
+    root_center = (Q(0), Q(0), Q(0))
+    root_widths = (Q(2), Q(2), Q(2))
+    if resume and checkpoint_path and os.path.exists(checkpoint_path):
+        with open(checkpoint_path, "r", encoding="utf-8") as source:
+            saved = json.load(source)
+        if saved["chart"] != chart:
+            raise ValueError("checkpoint chart does not match")
+        rows = saved["rows"]
+        stack = []
+        for state in saved["pending"]:
+            row_id, center, widths, root, triangle, view_depth = state
+            stack.append((row_id, tuple(map(Q, center)), tuple(map(Q, widths)),
+                          root, tuple(tuple(map(Q, corner))
+                                      for corner in triangle),
+                          view_depth, None))
+        counts = saved["counts"]
+        failures = saved["failures"]
+    else:
+        rows = [None]
+        root_children = []
+        stack = []
+        for root, triangle in enumerate(SIGNED_PROJECTIVE_ROOTS):
+            child = len(rows)
+            rows.append(None)
+            root_children.append(child)
+            stack.append((child, root_center, root_widths, root, triangle,
+                          0, None))
+        rows[0] = {"kind": "view_root", "id": 0,
+                   "children": root_children,
+                   "center": root_center, "widths": root_widths}
+        counts = {"view_root": 1, "view_split": 0, "relative_split": 0,
+                  "edge": 0, "global": 0, "radius": 0,
+                  "exact_rejections": 0}
+        failures = []
+
+    def allocate(count):
+        children = list(range(len(rows), len(rows)+count))
+        rows.extend([None]*count)
+        return children
+
+    def checkpoint(complete=False):
+        if checkpoint_path is None:
+            return
+        with open(checkpoint_path, "w", encoding="utf-8") as output:
+            json.dump({"complete": complete, "chart": chart, "rows": rows,
+                       "pending": [state[:-1] for state in stack],
+                       "pending_candidates_omitted": True,
+                       "counts": counts,
+                       "failures": failures}, output, default=str)
+
+    while stack and len(rows) < max_nodes:
+        (row_id, center, widths, root, triangle, view_depth,
+         inherited_global_candidates) = stack.pop()
+        common = {"id": row_id, "center": center, "widths": widths,
+                  "root": root, "triangle": triangle,
+                  "view_depth": view_depth}
+        if interval_outside_cayley_ball(center, widths):
+            rows[row_id] = {**common, "kind": "radius"}
+            counts["radius"] += 1
+            continue
+        edge_float = atlas_simplex_float_screen(
+            chart, center, widths, triangle)
+        global_float = None
+        if (edge_float["minimum_strict_support_lower"] > 1e-8 and
+                edge_float["lower_bound"] > 1e-8):
+            exact = atlas_simplex_edge_smoke(
+                chart, center, widths, triangle, edge_float["cycle"],
+                edge_float["inner_indices"])
+            if exact is not None and exact["accepted"]:
+                rows[row_id] = {**common, "kind": "edge",
+                                "certificate": {
+                                    "cycle": exact["cycle"],
+                                    "contacts": exact["contacts"]}}
+                counts["edge"] += 1
+                continue
+            counts["exact_rejections"] += 1
+        if edge_float["minimum_strict_support_lower"] > 0:
+            global_float = atlas_projective_global_float_screen(
+                chart, center, widths, triangle,
+                candidate_limit=64 if view_depth >= 7 else 1,
+                candidates=inherited_global_candidates)
+            if (global_float is not None and
+                    global_float["lower_bound"] > 1e-8):
+                exact = atlas_projective_global_triangle(
+                    chart, center, widths, root, triangle,
+                    selected_candidate=global_float["candidate"])
+                if exact is not None and exact["accepted"]:
+                    axis = exact["certificate"]
+                    axis_keys = ("edge_start", "edge_finish",
+                                 "edge_start2", "edge_finish2", "mix",
+                                 "support_index", "nonzero_witness", "B")
+                    rows[row_id] = {**common, "kind": "global",
+                        "certificate": {
+                            "axis": {key: axis[key] for key in axis_keys},
+                            "inner_index": exact["inner_index"],
+                            "ball_multiplier": exact["ball_multiplier"]}}
+                    counts["global"] += 1
+                    continue
+                counts["exact_rejections"] += 1
+
+        support_transition = \
+            edge_float["minimum_strict_support_lower"] <= 0
+        widest = max(range(3), key=lambda i: widths[i])
+        use_fine_relative_split = (global_float is not None and
+            global_float["lower_bound"] > -2e-3)
+        relative_split = (not support_transition and
+            (widths[widest] > max(min_relative_half_width, Q(1, 256)) or
+             (widths[widest] > min_relative_half_width and
+              use_fine_relative_split)))
+        if relative_split:
+            children = allocate(2)
+            rows[row_id] = {**common, "kind": "relative_split",
+                            "coordinate": widest+2,
+                            "children": children}
+            counts["relative_split"] += 1
+            child_widths = list(widths)
+            child_widths[widest] /= 2
+            inherited = None if global_float is None else \
+                global_float["candidates"]
+            for direction, child in zip((-1, 1), children):
+                child_center = list(center)
+                child_center[widest] += direction*child_widths[widest]
+                stack.append((child, tuple(child_center),
+                              tuple(child_widths), root, triangle, view_depth,
+                              inherited))
+        elif view_depth < max_view_depth:
+            children = allocate(4)
+            rows[row_id] = {**common, "kind": "view_split",
+                            "children": children}
+            counts["view_split"] += 1
+            inherited = None if global_float is None else \
+                global_float["candidates"]
+            for child, child_triangle in zip(
+                    children, split_projective_triangle(triangle)):
+                stack.append((child, center, widths, root, child_triangle,
+                              view_depth+1, inherited))
+        elif widths[widest] > min_relative_half_width:
+            children = allocate(2)
+            rows[row_id] = {**common, "kind": "relative_split",
+                            "coordinate": widest+2,
+                            "children": children}
+            counts["relative_split"] += 1
+            child_widths = list(widths)
+            child_widths[widest] /= 2
+            for direction, child in zip((-1, 1), children):
+                child_center = list(center)
+                child_center[widest] += direction*child_widths[widest]
+                stack.append((child, tuple(child_center),
+                              tuple(child_widths), root, triangle, view_depth,
+                              None))
+        else:
+            failures.append({**common,
+                "edge_lower": edge_float["lower_bound"],
+                "global_lower": None if global_float is None else
+                    global_float["lower_bound"]})
+            break
+        if checkpoint_every and len(rows) % checkpoint_every < 4:
+            checkpoint(False)
+    complete = not stack and not failures and all(row is not None for row in rows)
+    checkpoint(complete)
+    return {"complete": complete, "chart": chart, "rows": rows,
+            "pending": stack, "counts": counts, "failures": failures}
 
 
 def split_projective_triangle(triangle):
@@ -2610,6 +3128,17 @@ def main():
     atlas_tree.add_argument("--max-nodes", type=int, default=10000)
     atlas_tree.add_argument("--max-view-depth", type=int, default=5)
     atlas_tree.add_argument("--min-relative-half-width", default="1/100")
+    atlas_tree.add_argument("--exact-audits", type=int, default=10)
+    generate_atlas_table = sub.add_parser("generate-atlas-projective-table")
+    generate_atlas_table.add_argument("chart", type=int)
+    generate_atlas_table.add_argument("output")
+    generate_atlas_table.add_argument("--max-nodes", type=int, default=200000)
+    generate_atlas_table.add_argument("--max-view-depth", type=int, default=12)
+    generate_atlas_table.add_argument(
+        "--min-relative-half-width", default="1/1024")
+    generate_atlas_table.add_argument("--checkpoint-every", type=int,
+                                      default=1000)
+    generate_atlas_table.add_argument("--resume", action="store_true")
     explore = sub.add_parser("explore-cover")
     explore.add_argument("--max-nodes", type=int, default=200000)
     explore.add_argument("--directions", type=int, default=24)
@@ -2730,7 +3259,22 @@ def main():
     elif args.command == "explore-atlas-projective-tree":
         print(json.dumps(explore_atlas_projective_tree(
             args.max_nodes, args.max_view_depth,
-            Q(args.min_relative_half_width)), indent=2, default=str))
+            Q(args.min_relative_half_width), args.exact_audits),
+            indent=2, default=str))
+    elif args.command == "generate-atlas-projective-table":
+        if not 0 <= args.chart < 4:
+            parser.error("chart must be in [0, 4)")
+        result = generate_atlas_projective_table(
+            args.chart, args.max_nodes, args.max_view_depth,
+            Q(args.min_relative_half_width), args.output,
+            args.checkpoint_every, args.resume)
+        print(json.dumps({"complete": result["complete"],
+                          "chart": result["chart"],
+                          "row_count": len(result["rows"]),
+                          "pending_count": len(result["pending"]),
+                          "counts": result["counts"],
+                          "failures": result["failures"]},
+                         indent=2, default=str))
     elif args.command == "explore-cover":
         print(json.dumps(explore_cover(
             args.max_nodes, args.directions, args.local_mismatch,

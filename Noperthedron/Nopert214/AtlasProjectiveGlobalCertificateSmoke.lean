@@ -50,6 +50,7 @@ def box : AtlasProjectiveGlobalCertificate.Box where
   chart := 0
   certificate := certificate
   innerIndex := ![9, 17, 3]
+  ballMultiplier := 1 / 100
 
 theorem valid_kernel : box.Valid := by decide +kernel
 
@@ -57,21 +58,23 @@ theorem valid_native : box.Valid := by native_decide
 
 theorem excludes_triangle_kernel {p : AtlasPose ℝ}
     (hp : p ∈ interval.toReal) (offset : ℝ²)
+    (hbounded : p.CayleyBounded)
     (hscale : 1 ≤ viewScale box.root p)
     (hmem : InTriangle (toReal triangle)
       (normalizedView box.root p)) :
     ¬ RupertPose (p.matrixPoseWithOffset box.chart offset)
       exactPolyhedron.hull :=
-  box.valid_imp_not_translated_rupert valid_kernel p hp hscale hmem offset
+  box.valid_imp_not_translated_rupert valid_kernel p hp hbounded hscale hmem offset
 
 theorem excludes_triangle_native {p : AtlasPose ℝ}
     (hp : p ∈ interval.toReal) (offset : ℝ²)
+    (hbounded : p.CayleyBounded)
     (hscale : 1 ≤ viewScale box.root p)
     (hmem : InTriangle (toReal triangle)
       (normalizedView box.root p)) :
     ¬ RupertPose (p.matrixPoseWithOffset box.chart offset)
       exactPolyhedron.hull :=
-  box.valid_imp_not_translated_rupert valid_native p hp hscale hmem offset
+  box.valid_imp_not_translated_rupert valid_native p hp hbounded hscale hmem offset
 
 end Noperthedron.Nopert214.AtlasProjectiveGlobalCertificateSmoke
 
