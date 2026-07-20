@@ -89,6 +89,40 @@ theorem lower_le_sum_coeff_mul_tensorBasis {n : ℕ}
       exact mul_le_mul_of_nonneg_right (hlower index hindex)
         (tensorBasis_nonnegative degrees hvalues index)
 
+structure Table (n : ℕ) where
+  degrees : Fin n → ℕ
+  coefficient : (Fin n → ℕ) → TribonacciExpr
+
+noncomputable def Table.evalReal {n : ℕ} (table : Table n)
+    (values : Fin n → ℝ) : ℝ :=
+  ∑ index ∈ indexFinset table.degrees,
+    (table.coefficient index).eval *
+      tensorBasis table.degrees values index
+
+def Table.LowerValid {n : ℕ} (table : Table n) (lower : ℚ) : Prop :=
+  ∀ index ∈ indexFinset table.degrees,
+    lower ≤ (table.coefficient index).evalBall.center -
+      (table.coefficient index).evalBall.radius
+
+instance {n : ℕ} (table : Table n) (lower : ℚ) :
+    Decidable (table.LowerValid lower) := by
+  unfold Table.LowerValid
+  infer_instance
+
+theorem Table.lower_le_evalReal {n : ℕ} (table : Table n) (lower : ℚ)
+    {values : Fin n → ℝ} (hvalues : ∀ i, 0 ≤ values i ∧ values i ≤ 1)
+    (hvalid : table.LowerValid lower) :
+    (lower : ℝ) ≤ table.evalReal values := by
+  apply lower_le_sum_coeff_mul_tensorBasis table.degrees
+    (fun index => (table.coefficient index).eval) hvalues
+  intro index hindex
+  have hlower : (lower : ℝ) ≤
+      ((table.coefficient index).evalBall.center -
+        (table.coefficient index).evalBall.radius : ℚ) := by
+    exact_mod_cast hvalid index hindex
+  exact hlower.trans (Noperthedron.Checker.RatBall.lower_le_of_holds
+    (TribonacciExpr.evalBall_holds (table.coefficient index)))
+
 end Noperthedron.SnubCube.BernsteinCertificate
 
 end

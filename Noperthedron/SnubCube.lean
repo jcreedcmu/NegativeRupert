@@ -2,6 +2,7 @@ module
 
 public import Noperthedron.SnubCube.Approx
 public import Noperthedron.SnubCube.BernsteinCertificate
+public import Noperthedron.SnubCube.BernsteinCertificateSmoke
 public import Noperthedron.SnubCube.Certificate
 public import Noperthedron.SnubCube.CertificateSmoke
 public import Noperthedron.SnubCube.CayleyPose
