@@ -423,6 +423,76 @@ def local_axis_candidates(theta, phi, cone_samples=1):
     return cycle, candidates
 
 
+def projective_local_axis_candidates(view, cone_samples=1):
+    """View-polynomial local candidates built from silhouette edge cones.
+
+    Each contact direction is a positive rational-style combination of the
+    two adjacent unnormalized edge normals.  Its lifted three-dimensional
+    vector is therefore ``cross(view, edge_combination)``.  The determinant
+    weights balance identically, while a triangle checker can certify their
+    signs and the two adjacent support inequalities at its corners.
+
+    This floating routine measures the conditioning of that prospective
+    formal certificate; it is not trusted proof data.
+    """
+    length = norm3(view)
+    unit_view = tuple(value / length for value in view)
+    axis_index = min(range(3), key=lambda i: abs(unit_view[i]))
+    axis = tuple(float(i == axis_index) for i in range(3))
+    first = cross3(unit_view, axis)
+    first = scale3(1 / norm3(first), first)
+    second = cross3(unit_view, first)
+    projected = [(dot3(vertex, first), dot3(vertex, second))
+                 for vertex in VERTICES]
+    cycle = convex_hull(projected)
+    edges = []
+    for position, start in enumerate(cycle):
+        finish = cycle[(position + 1) % len(cycle)]
+        edges.append(tuple(VERTICES[finish][i] - VERTICES[start][i]
+                           for i in range(3)))
+
+    contacts = []
+    for position, vertex in enumerate(cycle):
+        before = edges[(position - 1) % len(cycle)]
+        after = edges[position]
+        for sample in range(cone_samples):
+            lam = (sample + 1) / (cone_samples + 1)
+            edge_combination = tuple(
+                lam * before[i] + (1-lam) * after[i] for i in range(3))
+            lift = cross3(unit_view, edge_combination)
+            # Triangle inequality gives a view-independent remainder bound.
+            direction_bound = (lam * norm3(before) +
+                               (1-lam) * norm3(after))
+            contacts.append({"vertex": vertex, "lift": lift,
+                             "direction_bound": direction_bound,
+                             "lambda": lam})
+
+    candidates = []
+    for contact_indices in itertools.combinations(range(len(contacts)), 3):
+        selected = [contacts[index] for index in contact_indices]
+        lifts = [contact["lift"] for contact in selected]
+        weights = [dot3(unit_view, cross3(lifts[1], lifts[2])),
+                   dot3(unit_view, cross3(lifts[2], lifts[0])),
+                   dot3(unit_view, cross3(lifts[0], lifts[1]))]
+        if all(weight <= 1e-12 for weight in weights):
+            weights = [-weight for weight in weights]
+        if not all(weight > 1e-10 for weight in weights):
+            continue
+        a = [0.0, 0.0, 0.0]
+        b = 0.0
+        for weight, contact, lift in zip(weights, selected, lifts):
+            term = cross3(VERTICES[contact["vertex"]], lift)
+            a = [left + weight*right for left, right in zip(a, term)]
+            b += weight * contact["direction_bound"]
+        candidates.append({
+            "contacts": selected,
+            "weights": weights,
+            "normalized_a": tuple(value/b for value in a),
+            "B": b,
+        })
+    return cycle, candidates
+
+
 def best_local_tetrahedron(theta, phi, cone_samples=1,
                            max_tetrahedra=100_000):
     cycle, candidates = local_axis_candidates(theta, phi, cone_samples)
