@@ -87,7 +87,7 @@ private lemma angle_error (k : OrbitIndex) :
         exact le_of_lt pi_sub_piQ_lt
     _ ≤ κ / 42 := by norm_num [κ]
 
-private lemma cos_combined_error (k : OrbitIndex) :
+theorem cos_symmetry_combined_error (k : OrbitIndex) :
     |((RationalApprox.cosℚ
         (2 * Noperthedron.piQ * reducedOrbit k / 5) : ℚ) : ℝ) -
       Real.cos (2 * π * (k : ℝ) / 5)| ≤ κ / 6 := by
@@ -110,7 +110,7 @@ private lemma cos_combined_error (k : OrbitIndex) :
       add_le_add (by simpa [abs_sub_comm] using ht) (hm.trans hq)
     _ = κ / 6 := by ring
 
-private lemma sin_combined_error (k : OrbitIndex) :
+theorem sin_symmetry_combined_error (k : OrbitIndex) :
     |((RationalApprox.sinℚ
         (2 * Noperthedron.piQ * reducedOrbit k / 5) : ℚ) : ℝ) -
       Real.sin (2 * π * (k : ℝ) / 5)| ≤ κ / 6 := by
@@ -162,8 +162,8 @@ theorem taylorVertex_close (i : VertexIndex) :
   let a : ℝ := (seedVertex s 0 : ℚ)
   let b : ℝ := (seedVertex s 1 : ℚ)
   let d := toR3 (taylorVertex i) - exactVertex i
-  have hce : |ce| ≤ κ / 6 := cos_combined_error k
-  have hse : |se| ≤ κ / 6 := sin_combined_error k
+  have hce : |ce| ≤ κ / 6 := cos_symmetry_combined_error k
+  have hse : |se| ≤ κ / 6 := sin_symmetry_combined_error k
   have hab : a ^ 2 + b ^ 2 ≤ 1 := seed_xy_sq_le_one s
   have hd0 : d 0 = ce * a - se * b := by
     simp only [d, taylorVertex, exactVertex, k, s, q, θ, ce, se, a, b,

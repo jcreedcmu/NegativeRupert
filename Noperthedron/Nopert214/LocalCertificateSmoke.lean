@@ -33,6 +33,7 @@ def interval : PoseInterval ℚ :=
 def box : Box where
   interval := interval
   center := center
+  symmetryIndex := 0
   certificate := ![
     ⟨![
       ⟨14, ![-1, 0]⟩,
@@ -52,7 +53,7 @@ def box : Box where
       ⟨13, ![-8911 / 11089, 6600 / 11089]⟩]⟩
   ]
   c := 1 / 100
-  r := 1 / 20000
+  r := 1 / 19000
 
 theorem valid_kernel : box.Valid := by decide +kernel
 

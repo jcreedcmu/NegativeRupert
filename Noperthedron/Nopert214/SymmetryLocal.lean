@@ -41,6 +41,66 @@ noncomputable def equalityPose (outer : SO3) (g : OrbitIndex) : MatrixPose where
     relativeRotationAtSymmetry (equalityPose outer g) g = 1 := by
   simp [relativeRotationAtSymmetry, relativeRotation, equalityPose, ← mul_assoc]
 
+/-- Matrix distance to a fivefold equality stratum is bounded by the direct
+inner-versus-symmetry mismatch.  This formulation is independent of Euler
+coordinates and therefore remains well behaved at their poles. -/
+theorem norm_relativeRotationAtSymmetry_one_le_inner_mismatch
+    (p : MatrixPose) (g : OrbitIndex) :
+    ‖Noperthedron.SnubCube.so3CLM (relativeRotationAtSymmetry p g) - 1‖ ≤
+      ‖Noperthedron.SnubCube.so3CLM p.innerRot -
+        Noperthedron.SnubCube.so3CLM (p.outerRot * symmetry g)‖ := by
+  let q := equalityPose p.outerRot g
+  have hrelative := Noperthedron.SnubCube.norm_relativeRotation_sub_le p q
+  have hadjusted :
+      ‖Noperthedron.SnubCube.so3CLM (relativeRotationAtSymmetry p g) -
+          Noperthedron.SnubCube.so3CLM (relativeRotationAtSymmetry q g)‖ ≤
+        ‖Noperthedron.SnubCube.so3CLM (relativeRotation p) -
+          Noperthedron.SnubCube.so3CLM (relativeRotation q)‖ := by
+    rw [relativeRotationAtSymmetry, relativeRotationAtSymmetry,
+      Noperthedron.SnubCube.so3CLM_mul,
+      Noperthedron.SnubCube.so3CLM_mul,
+      ← ContinuousLinearMap.sub_comp]
+    calc
+      ‖(Noperthedron.SnubCube.so3CLM (relativeRotation p) -
+          Noperthedron.SnubCube.so3CLM (relativeRotation q)) ∘L
+            Noperthedron.SnubCube.so3CLM (symmetry g)⁻¹‖ ≤
+        ‖Noperthedron.SnubCube.so3CLM (relativeRotation p) -
+          Noperthedron.SnubCube.so3CLM (relativeRotation q)‖ *
+            ‖Noperthedron.SnubCube.so3CLM (symmetry g)⁻¹‖ :=
+        ContinuousLinearMap.opNorm_comp_le _ _
+      _ = _ := by rw [Noperthedron.SnubCube.so3CLM_norm, mul_one]
+  have hone : Noperthedron.SnubCube.so3CLM (1 : SO3) = 1 := by
+    ext v
+    simp [Noperthedron.SnubCube.so3CLM]
+  calc
+    ‖Noperthedron.SnubCube.so3CLM (relativeRotationAtSymmetry p g) - 1‖ =
+        ‖Noperthedron.SnubCube.so3CLM (relativeRotationAtSymmetry p g) -
+          Noperthedron.SnubCube.so3CLM (relativeRotationAtSymmetry q g)‖ := by
+      rw [relativeRotationAtSymmetry_equalityPose, hone]
+    _ ≤ ‖Noperthedron.SnubCube.so3CLM (relativeRotation p) -
+          Noperthedron.SnubCube.so3CLM (relativeRotation q)‖ := hadjusted
+    _ ≤ ‖Noperthedron.SnubCube.so3CLM p.innerRot -
+          Noperthedron.SnubCube.so3CLM q.innerRot‖ +
+        ‖Noperthedron.SnubCube.so3CLM p.outerRot -
+          Noperthedron.SnubCube.so3CLM q.outerRot‖ := hrelative
+    _ = _ := by simp [q, equalityPose]
+
+/-- Division-free local-angle test from a certified matrix mismatch to one
+of the exact fivefold equality strata. -/
+theorem AxisAngle.ratio_of_inner_mismatch_bound
+    (p : MatrixPose) (g : OrbitIndex)
+    (a : AxisAngle
+      (Noperthedron.SnubCube.so3CLM (relativeRotationAtSymmetry p g)))
+    (c r : ℝ) (hc : 0 ≤ c) (hr : 0 ≤ r)
+    (hmismatch : ‖Noperthedron.SnubCube.so3CLM p.innerRot -
+      Noperthedron.SnubCube.so3CLM (p.outerRot * symmetry g)‖ ≤ r)
+    (hsmall : r ^ 2 * (1 + c ^ 2) ≤ 4 * c ^ 2) :
+    1 - Real.cos a.angle ≤ |Real.sin a.angle| * c := by
+  apply a.ratio_of_norm_bound c r hc hr
+  · exact (norm_relativeRotationAtSymmetry_one_le_inner_mismatch p g).trans
+      hmismatch
+  · exact hsmall
+
 private lemma RzL_apply_add (α β : ℝ) (v : ℝ³) :
     RzL (α + β) v = RzL α (RzL β v) := by
   have h := RzC.map_add_eq_mul α β
