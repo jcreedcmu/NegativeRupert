@@ -33,6 +33,18 @@ theorem valid_kernel : box.Valid := by
 theorem valid_native : box.Valid := by
   native_decide
 
+theorem excludes_box_kernel :
+    ¬ ∃ p ∈ interval.toReal, ∃ offset : ℝ²,
+      RupertPose (p.matrixPoseWithOffset box.chart offset)
+        exactPolyhedron.hull :=
+  box.valid_imp_no_translated_rupert_in_interval valid_kernel
+
+theorem excludes_box_native :
+    ¬ ∃ p ∈ interval.toReal, ∃ offset : ℝ²,
+      RupertPose (p.matrixPoseWithOffset box.chart offset)
+        exactPolyhedron.hull :=
+  box.valid_imp_no_translated_rupert_in_interval valid_native
+
 end Noperthedron.Nopert214.AtlasEdgeCertificateSmoke
 
 end
