@@ -851,10 +851,10 @@ def choose_projective_local_tetrahedron(triangle, cone_samples=4,
     return best, candidates
 
 
-def atlas_projective_local_triangle(
-        chart, relative_center, relative_radii, root, triangle,
-        symmetry_index, cone_samples=4, trials=200_000):
-    """Generate and exactly audit a projective-local leaf on any atlas cell."""
+@functools.lru_cache(maxsize=256)
+def projective_local_geometry(triangle, symmetry_index,
+                              cone_samples=4, trials=200_000):
+    """Cache the view-dependent part of a projective-local certificate."""
     chosen, candidates = choose_projective_local_tetrahedron(
         triangle, cone_samples, trials)
     if chosen is None:
@@ -876,12 +876,6 @@ def atlas_projective_local_triangle(
         cover_radius-delta, PROJECTIVE_CERTIFICATE_DENOMINATOR)
     if c <= 0:
         return None
-    exact_r, _, mismatch_sq = atlas_projective_mismatch_radius(
-        chart, symmetry_index, relative_center, relative_radii)
-    r = exact_certificate.ceil_to(
-        exact_r, PROJECTIVE_CERTIFICATE_DENOMINATOR)
-    if r*r*(1+c*c) > 4*c*c:
-        return None
     target_length = Q(7, 4)*(c+delta)
     minimum_barycentric = None
     for axis in range(3):
@@ -895,6 +889,34 @@ def atlas_projective_local_triangle(
             minimum_barycentric = value if minimum_barycentric is None \
                 else min(minimum_barycentric, value)
     return {
+        "certificates": rows,
+        "delta": delta,
+        "normalized_centers": centers,
+        "axis_radius": axis_radius,
+        "c": c,
+        "minimum_barycentric": minimum_barycentric,
+        "feasible_candidates": len(candidates),
+        "chosen_indices": indices,
+    }
+
+
+def atlas_projective_local_triangle(
+        chart, relative_center, relative_radii, root, triangle,
+        symmetry_index, cone_samples=4, trials=200_000):
+    """Generate and exactly audit a projective-local leaf on any atlas cell."""
+    geometry = projective_local_geometry(
+        triangle, symmetry_index, cone_samples, trials)
+    if geometry is None:
+        return None
+    c = geometry["c"]
+    delta = geometry["delta"]
+    exact_r, _, mismatch_sq = atlas_projective_mismatch_radius(
+        chart, symmetry_index, relative_center, relative_radii)
+    r = exact_certificate.ceil_to(
+        exact_r, PROJECTIVE_CERTIFICATE_DENOMINATOR)
+    if r*r*(1+c*c) > 4*c*c:
+        return None
+    return {
         "accepted": True,
         "chart": chart,
         "relative_center": relative_center,
@@ -902,16 +924,16 @@ def atlas_projective_local_triangle(
         "root": root,
         "triangle": triangle,
         "symmetry_index": symmetry_index,
-        "certificates": rows,
+        "certificates": geometry["certificates"],
         "c": c,
         "delta": delta,
         "r": r,
         "diagnostics": {
-            "feasible_candidates": len(candidates),
-            "chosen_indices": indices,
-            "normalized_centers": centers,
-            "axis_radius": axis_radius,
-            "minimum_barycentric": minimum_barycentric,
+            "feasible_candidates": geometry["feasible_candidates"],
+            "chosen_indices": geometry["chosen_indices"],
+            "normalized_centers": geometry["normalized_centers"],
+            "axis_radius": geometry["axis_radius"],
+            "minimum_barycentric": geometry["minimum_barycentric"],
             "mismatch_frobenius_sq_upper": mismatch_sq,
         },
     }
