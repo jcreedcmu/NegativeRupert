@@ -11,6 +11,7 @@ public import Noperthedron.BalancedSupport.Rupert
 public import Noperthedron.BalancedSupport.Rodrigues
 public import Noperthedron.BalancedSupport.RotationDistance
 public import Noperthedron.BalancedSupport.TranslatedPose
+public import Noperthedron.BalancedSupport.Transition
 
 public section
 

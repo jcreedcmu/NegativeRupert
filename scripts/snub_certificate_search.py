@@ -769,8 +769,8 @@ def projective_local_axis_row(triangle, payload):
     }
 
 
-def projective_local_smoke(view, triangle_width):
-    """Generate one exact projective-local row and audit every rational gate."""
+def projective_local_triangle(triangle):
+    """Generate and exactly audit a local certificate on a given triangle."""
     try:
         from experiment_snub_axis_free import (certificate_vectors,
                                                 best_centered_tetrahedron)
@@ -779,14 +779,12 @@ def projective_local_smoke(view, triangle_width):
         from scripts.experiment_snub_axis_free import (
             certificate_vectors, best_centered_tetrahedron)
         from scripts import experiment_snub_cube as experiment_cube
-    if len(view) != 3 or sum(view, Q(0)) != 1 or min(view) <= 0:
-        raise ValueError("view must be a positive rational simplex point")
-    e = triangle_width
-    triangle = [[view[0]+e, view[1]-e, view[2]],
-                [view[0], view[1]+e, view[2]-e],
-                [view[0]-e, view[1], view[2]+e]]
-    if min(x for corner in triangle for x in corner) < 0:
-        raise ValueError("triangle leaves the positive simplex")
+    if (len(triangle) != 3 or any(len(corner) != 3 for corner in triangle) or
+            any(sum(corner, Q(0)) != 1 for corner in triangle) or
+            min(x for corner in triangle for x in corner) < 0):
+        raise ValueError("invalid rational projective triangle")
+    view = [sum((corner[i] for corner in triangle), Q(0))/3
+            for i in range(3)]
     # The older floating experiment uses the same chirality after the proper
     # rotation diag(-1,-1,1), and normalizes vertices to radius one instead
     # of the proof's conservative division by five.
@@ -843,7 +841,6 @@ def projective_local_smoke(view, triangle_width):
             bary.append(lam)
     return {
         "view": view,
-        "triangle_width": triangle_width,
         "triangle": triangle,
         "certificates": [{key: value for key, value in row.items()
                           if key not in ("normalized_center", "delta")}
@@ -859,6 +856,109 @@ def projective_local_smoke(view, triangle_width):
             "minimum_barycentric": min(x for row in bary for x in row),
         },
     }
+
+
+def projective_local_smoke(view, triangle_width):
+    """Generate one symmetric projective-local row around a rational view."""
+    if len(view) != 3 or sum(view, Q(0)) != 1 or min(view) <= 0:
+        raise ValueError("view must be a positive rational simplex point")
+    e = triangle_width
+    triangle = [[view[0]+e, view[1]-e, view[2]],
+                [view[0], view[1]+e, view[2]-e],
+                [view[0]-e, view[1], view[2]+e]]
+    if min(x for corner in triangle for x in corner) < 0:
+        raise ValueError("triangle leaves the positive simplex")
+    answer = projective_local_triangle(triangle)
+    answer["triangle_width"] = triangle_width
+    return answer
+
+
+def projective_local_cover(max_depth, exact_audit_limit=25):
+    """Adaptively audit projective-local rows over the outer chamber.
+
+    This produces profile data, not a committed certificate tree.  Cells
+    crossing a floating silhouette change are subdivided before invoking the
+    exact rational checker, which makes the remaining failures useful maps of
+    the transition strata rather than a mixture of unrelated coarse cells.
+    """
+    e0 = (Q(1), Q(0), Q(0))
+    m01 = (Q(1, 2), Q(1, 2), Q(0))
+    m02 = (Q(1, 2), Q(0), Q(1, 2))
+    center = (Q(1, 3), Q(1, 3), Q(1, 3))
+    stack = [((e0, m01, center), 0), ((e0, center, m02), 0)]
+    counts = {"nodes": 0, "splits": 0, "silhouette_splits": 0,
+              "certificate_leaves": 0, "uncovered_leaves": 0}
+    radii = []
+    failures = []
+    exact_audit = {"attempted": 0, "passed": 0, "failed": 0,
+                   "failure_reasons": {}}
+    try:
+        from experiment_snub_axis_free import (certificate_vectors,
+                                                centered_inradius)
+    except ModuleNotFoundError:
+        from scripts.experiment_snub_axis_free import (certificate_vectors,
+                                                        centered_inradius)
+    while stack:
+        triangle, depth = stack.pop()
+        counts["nodes"] += 1
+        cycles = [tuple(silhouette_cycle_for_view(
+            np.asarray([float(x) for x in corner])))
+            for corner in triangle]
+        same_silhouette = cycles[0] == cycles[1] == cycles[2]
+        if same_silhouette:
+            try:
+                centroid = np.asarray([float(sum(
+                    (corner[i] for corner in triangle), Q(0))/3)
+                    for i in range(3)])
+                points, _, _ = certificate_vectors(
+                    centroid @ np.diag([-1.0, -1.0, 1.0]))
+                point_radius, _, _ = centered_inradius(points)
+                if point_radius <= 1e-9:
+                    raise RuntimeError("pointwise axis-free radius vanishes")
+                # The floating experiment uses unit-radius vertices while
+                # the proof divides by five.  This radius is diagnostic; a
+                # bounded sample of accepted cells is rerun exactly below.
+                radii.append(Q(4, 7) * point_radius / 5)
+                if exact_audit["attempted"] < exact_audit_limit:
+                    exact_audit["attempted"] += 1
+                    try:
+                        projective_local_triangle(triangle)
+                        exact_audit["passed"] += 1
+                    except (RuntimeError, ValueError) as exc:
+                        exact_audit["failed"] += 1
+                        audit_reason = str(exc).split(":")[0]
+                        exact_audit["failure_reasons"][audit_reason] = (
+                            exact_audit["failure_reasons"].get(
+                                audit_reason, 0) + 1)
+                        raise RuntimeError(
+                            f"exact local audit failed: {exc}") from exc
+                counts["certificate_leaves"] += 1
+                continue
+            except (RuntimeError, ValueError) as exc:
+                reason = str(exc)
+        else:
+            counts["silhouette_splits"] += 1
+            reason = "silhouette changes across triangle"
+        if depth < max_depth:
+            counts["splits"] += 1
+            stack.extend((child, depth+1)
+                         for child in split_simplex_triangle(triangle))
+        else:
+            counts["uncovered_leaves"] += 1
+            if len(failures) < 40:
+                failures.append({
+                    "depth": depth,
+                    "centroid": [sum((corner[i] for corner in triangle),
+                                     Q(0))/3 for i in range(3)],
+                    "cycles": [list(cycle) for cycle in cycles],
+                    "reason": reason,
+                })
+    quantiles = ([float(x) for x in np.quantile(
+        radii, [0, .01, .1, .5, .9, .99, 1])] if radii else [])
+    return {"max_depth": max_depth, "counts": counts,
+            "exact_audit": exact_audit,
+            "radius_quantiles_min_01_10_50_90_99_max": quantiles,
+            "failure_examples": failures}
 
 
 def qpoly_eval_centered(coefficients, centers, radii):
@@ -1198,6 +1298,26 @@ def cayley_edge_contact_qpolys_float(q0, q1, inner_index):
                       dtype=float)
 
 
+@functools.lru_cache(maxsize=None)
+def cayley_edge_all_contact_qpolys_float(q0, q1):
+    """All inner-contact polynomials for one oriented edge.
+
+    Tree profiling visits the same few silhouette edges at thousands of view
+    and Cayley cells.  Cache the already-stacked dense array rather than
+    rebuilding it from 24 separately cached rows at every node.
+    """
+    return np.asarray([
+        cayley_edge_contact_qpolys_float(q0, q1, inner)
+        for inner in range(24)])
+
+
+@functools.lru_cache(maxsize=None)
+def edge_cross_all_float(q0, q1):
+    return np.asarray([
+        [float(q) for q in edge_cross_q(q0, q1, k)]
+        for k in range(24)])
+
+
 def qpoly_eval_centered_float(coefficients, centers, radii):
     """Vectorized floating version of the exact quadratic ball evaluator."""
     c = np.asarray(coefficients)
@@ -1239,9 +1359,7 @@ def simplex_edge_float_screen(relative_center, relative_half_widths,
     edge_polys = []
     for index, q0 in enumerate(cycle):
         q1 = cycle[(index+1) % len(cycle)]
-        crosses = np.asarray([
-            [float(q) for q in edge_cross_q(q0, q1, k)]
-            for k in range(24)])
+        crosses = edge_cross_all_float(q0, q1)
         support_values = views @ crosses.T
         witness_scores = np.min(support_values, axis=0)
         witness = int(np.argmax(witness_scores))
@@ -1249,9 +1367,7 @@ def simplex_edge_float_screen(relative_center, relative_half_widths,
         minimum_strict = min(minimum_strict, strict)
         total_defect += float(np.max(-support_values)) + float(SUPPORT_ERROR)
 
-        all_polys = np.asarray([
-            cayley_edge_contact_qpolys_float(q0, q1, inner)
-            for inner in range(24)])
+        all_polys = cayley_edge_all_contact_qpolys_float(q0, q1)
         value, radius = qpoly_eval_centered_float(
             all_polys, centers, radii)
         # Shape is (inner vertex, vector component).  Dot each component ball
@@ -2220,6 +2336,11 @@ def main():
         "--view", default="3/5,3/20,1/4",
         help="three positive simplex coordinates")
     projective_local_parser.add_argument("--triangle-width", default="1/100000")
+    projective_local_cover_parser = sub.add_parser("projective-local-cover")
+    projective_local_cover_parser.add_argument("--max-depth", type=int,
+                                               default=5)
+    projective_local_cover_parser.add_argument("--exact-audit-limit", type=int,
+                                               default=25)
     args = parser.parse_args()
     if args.command == "local-smoke":
         result = local_smoke(Q(args.theta), Q(args.phi),
@@ -2313,6 +2434,10 @@ def main():
         if len(view) != 3:
             parser.error("view must have three comma-separated entries")
         result = projective_local_smoke(view, Q(args.triangle_width))
+        print(json.dumps(qjson(result), indent=2))
+    elif args.command == "projective-local-cover":
+        result = projective_local_cover(args.max_depth,
+                                        args.exact_audit_limit)
         print(json.dumps(qjson(result), indent=2))
 
 
