@@ -26,6 +26,63 @@ def interval_key(row):
     return tuple(row["center"]), tuple(row["widths"])
 
 
+def kernel_interval_definitions(rows, interval_ids):
+    """Express every interval by the split path that created it.
+
+    This makes the child-interval equalities in `Row.ValidAt` definitional,
+    avoiding fresh rational normalization inside the kernel evaluator.
+    """
+    definitions = [None] * len(interval_ids)
+    root_key = interval_key(rows[0])
+    root_id = interval_ids[root_key]
+    definitions[root_id] = "AtlasPose.rootInterval ℚ"
+    for row in rows:
+        if row["kind"] != "relative_split":
+            continue
+        parent_id = interval_ids[interval_key(row)]
+        if definitions[parent_id] is None:
+            raise ValueError("interval parent was not defined before its children")
+        for half, child_row_id in zip(("lowerHalf", "upperHalf"),
+                                      row["children"]):
+            child = rows[child_row_id]
+            child_id = interval_ids[interval_key(child)]
+            candidate = f"(ivDef{parent_id}).{half} {row['coordinate']}"
+            if definitions[child_id] is None:
+                if parent_id >= child_id:
+                    raise ValueError("interval definitions are not topological")
+                definitions[child_id] = candidate
+    missing = [i for i, value in enumerate(definitions) if value is None]
+    if missing:
+        raise ValueError(f"intervals lack split derivations: {missing[:10]}")
+    return definitions
+
+
+def kernel_triangle_definitions(rows, triangle_ids):
+    """Express projective triangles by the subdivision path that created them."""
+    definitions = [None] * len(triangle_ids)
+    root_child = rows[rows[0]["child"]]
+    root_id = triangle_ids[triangle_key(root_child)]
+    definitions[root_id] = "rootTriangle 0"
+    for row in rows:
+        if row["kind"] != "view_split":
+            continue
+        parent_id = triangle_ids[triangle_key(row)]
+        if definitions[parent_id] is None:
+            raise ValueError("triangle parent was not defined before its children")
+        for child_index, child_row_id in enumerate(row["children"]):
+            child = rows[child_row_id]
+            child_id = triangle_ids[triangle_key(child)]
+            candidate = f"split triDef{parent_id} {child_index}"
+            if definitions[child_id] is None:
+                if parent_id >= child_id:
+                    raise ValueError("triangle definitions are not topological")
+                definitions[child_id] = candidate
+    missing = [i for i, value in enumerate(definitions) if value is None]
+    if missing:
+        raise ValueError(f"triangles lack subdivision derivations: {missing[:10]}")
+    return definitions
+
+
 def triangle_key(row):
     return tuple(tuple(corner) for corner in row["triangle"])
 
@@ -81,12 +138,16 @@ def axis_certificate(axis):
 
 
 def emit_row(row, chart, interval_ids, triangle_ids, edge_template_ids,
-             edge_inner_ids, axis_ids, global_inner_ids, local_template_ids):
+             edge_inner_ids, axis_ids, global_inner_ids, local_template_ids,
+             kernel_friendly=False):
     kind = row["kind"]
     row_id = row["id"]
-    iv = f"iv {interval_ids[interval_key(row)]}"
+    interval_id = interval_ids[interval_key(row)]
+    iv = (f"ivDef{interval_id}" if kernel_friendly else
+          f"iv {interval_id}")
     tri = None if kind == "view_root" else \
-        f"tri {triangle_ids[triangle_key(row)]}"
+        ((f"triDef{triangle_ids[triangle_key(row)]}" if kernel_friendly else
+          f"tri {triangle_ids[triangle_key(row)]}"))
     if kind == "view_root":
         return f".viewRoot {row_id} {row['child']} ({iv})"
     if kind == "view_split":
@@ -209,6 +270,122 @@ end
 """
 
 
+def emit_function_lookup(output, name, type_name, rendered_values,
+                         chunk_size, default):
+    """Emit a kernel-reducible chunked `Nat → type_name` lookup.
+
+    Array `get!` is excellent for `native_decide`, but large nested arrays are
+    expensive for kernel reduction.  Literal equation functions let a small
+    `decide +kernel` range proof unfold only the entries it checks.
+    """
+    chunk_names = []
+    chunk_count = (len(rendered_values) + chunk_size - 1) // chunk_size
+    for start in range(0, len(rendered_values), chunk_size):
+        chunk_id = start // chunk_size
+        chunk_name = name if chunk_count == 1 else f"{name}Chunk{chunk_id}"
+        chunk_names.append(chunk_name)
+        output.write(f"def {chunk_name} : ℕ → {type_name}\n")
+        for local_id, value in enumerate(
+                rendered_values[start:start+chunk_size]):
+            output.write(f"  | {local_id} => {value}\n")
+        output.write(f"  | _ => {default}\n\n")
+    if len(chunk_names) == 1:
+        return
+    output.write(f"def {name}Chunks : ℕ → ℕ → {type_name}\n")
+    for chunk_id, chunk_name in enumerate(chunk_names):
+        output.write(f"  | {chunk_id} => {chunk_name}\n")
+    output.write(f"  | _ => fun _ => {default}\n\n")
+    output.write(f"def {name} (i : ℕ) : {type_name} :=\n")
+    output.write(
+        f"  {name}Chunks (i / {chunk_size}) (i % {chunk_size})\n\n")
+
+
+def kernel_internal_range_proof(kind):
+    """Proof of a singleton internal-node range using definitional links."""
+    if kind == "view_root":
+        valid = "exact ⟨by norm_num, by norm_num, rfl, rfl⟩"
+    elif kind == "relative_split":
+        valid = ("exact ⟨by norm_num, by norm_num, by norm_num, by norm_num, "
+                 "rfl, rfl, rfl, rfl⟩")
+    elif kind == "view_split":
+        valid = """intro child
+      fin_cases child <;>
+        exact ⟨by norm_num, by norm_num, rfl, rfl⟩"""
+    else:
+        raise ValueError(f"not an internal row kind: {kind}")
+    return f"""by
+  constructor
+  · norm_num
+  · intro j
+    fin_cases j
+    constructor
+    · rfl
+    · {valid}"""
+
+
+def kernel_range_validity(chart, rows, range_size):
+    """Emit local kernel checks and a balanced proof joining their ranges.
+
+    Leaf runs are decided in chunks.  Internal rows are singleton ranges with
+    explicit definitional proofs, since deciding structural interval equality
+    would unnecessarily normalize equal rational endpoints.
+    """
+    size = len(rows)
+    internal_kinds = {"view_root", "relative_split", "view_split"}
+    declarations = []
+    nodes = []
+    block_id = 0
+    start = 0
+    while start < size:
+        kind = rows[start]["kind"]
+        if kind in internal_kinds:
+            count = 1
+            proof = kernel_internal_range_proof(kind)
+        else:
+            finish = start
+            while (finish < size and
+                   rows[finish]["kind"] not in internal_kinds and
+                   finish-start < range_size):
+                finish += 1
+            count = finish-start
+            proof = "by\n  decide +kernel"
+        name = f"rowsValidRange0_{block_id}"
+        declarations.append(f"""private theorem {name} :
+    RowsValidRangeAt {chart} getRow {size} {start} {count} := {proof}
+""")
+        nodes.append((name, start, count))
+        start += count
+        block_id += 1
+    level = 1
+    while len(nodes) > 1:
+        next_nodes = []
+        for pair_id in range(0, len(nodes), 2):
+            left = nodes[pair_id]
+            if pair_id+1 == len(nodes):
+                next_nodes.append(left)
+                continue
+            right = nodes[pair_id+1]
+            if left[1] + left[2] != right[1]:
+                raise ValueError("nonadjacent kernel validity ranges")
+            name = f"rowsValidRange{level}_{pair_id // 2}"
+            count = left[2] + right[2]
+            declarations.append(f"""private theorem {name} :
+    RowsValidRangeAt {chart} getRow {size} {left[1]} {count} :=
+  rowsValidRange_append {left[0]} {right[0]}
+""")
+            next_nodes.append((name, left[1], count))
+        nodes = next_nodes
+        level += 1
+    if len(nodes) != 1 or nodes[0][1:] != (0, size):
+        raise ValueError("kernel validity ranges do not cover the table")
+    declarations.append(f"""theorem table_valid_kernel : table.Valid := by
+  refine ⟨by decide, rowsValidAt_of_range {nodes[0][0]}, ?_, ?_⟩
+  · decide +kernel
+  · decide +kernel
+""")
+    return "\n".join(declarations)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("input")
@@ -219,6 +396,10 @@ def main():
                         help="number of interned intervals per Lean definition")
     parser.add_argument("--unchecked-prefix", type=int)
     parser.add_argument("--audit-first-local", action="store_true")
+    parser.add_argument("--kernel-friendly", action="store_true",
+                        help="emit equation-function data and chunked kernel proofs")
+    parser.add_argument("--kernel-range-size", type=int, default=32,
+                        help="rows checked by each kernel proof")
     args = parser.parse_args()
 
     with open(args.input, "r", encoding="utf-8") as source:
@@ -289,29 +470,54 @@ def main():
     destination = Path(args.output)
     with destination.open("w", encoding="utf-8") as output:
         output.write(HEADER.format(chart=chart))
-        interval_chunk_names = []
-        for start in range(0, len(interval_values), args.interval_chunk_size):
-            name = f"intervalDataChunk{start // args.interval_chunk_size}"
-            interval_chunk_names.append(name)
-            output.write(f"def {name} : Array ((Fin 3 → ℚ) × (Fin 3 → ℚ)) := #[\n")
+        if args.kernel_friendly:
+            interval_definitions = kernel_interval_definitions(
+                rows, interval_ids)
+            for interval_id, value in enumerate(interval_definitions):
+                output.write(
+                    f"def ivDef{interval_id} : "
+                    "AtlasProjectiveSolutionTree.Interval :=\n")
+                output.write(f"  {value}\n\n")
+            emit_function_lookup(
+                output, "iv", "AtlasProjectiveSolutionTree.Interval",
+                [f"ivDef{i}" for i in range(len(interval_values))],
+                args.interval_chunk_size, "AtlasPose.rootInterval ℚ")
+            triangle_definitions = kernel_triangle_definitions(
+                rows, triangle_ids)
+            for triangle_id, value in enumerate(triangle_definitions):
+                output.write(
+                    f"def triDef{triangle_id} : "
+                    "AtlasProjectiveSolutionTree.Triangle :=\n")
+                output.write(f"  {value}\n\n")
+            emit_function_lookup(
+                output, "tri", "AtlasProjectiveSolutionTree.Triangle",
+                [f"triDef{i}" for i in range(len(triangle_values))],
+                args.interval_chunk_size, "rootTriangle 0")
+        else:
+            interval_chunk_names = []
+            for start in range(0, len(interval_values),
+                               args.interval_chunk_size):
+                name = f"intervalDataChunk{start // args.interval_chunk_size}"
+                interval_chunk_names.append(name)
+                output.write(f"def {name} : Array ((Fin 3 → ℚ) × (Fin 3 → ℚ)) := #[\n")
+                output.write(",\n".join(
+                    f"  ({vector(center)}, {vector(widths)})"
+                    for center, widths in
+                    interval_values[start:start+args.interval_chunk_size]))
+                output.write("\n]\n\n")
+            output.write("def intervalDataChunks : "
+                         "Array (Array ((Fin 3 → ℚ) × (Fin 3 → ℚ))) := #[")
+            output.write(", ".join(interval_chunk_names))
+            output.write("]\n")
+            output.write("def iv (i : ℕ) : AtlasProjectiveSolutionTree.Interval :=\n")
+            output.write(f"  let data := (intervalDataChunks[i / {args.interval_chunk_size}]!)"
+                         f"[i % {args.interval_chunk_size}]!\n")
+            output.write("  relativeInterval data.1 data.2\n\n")
+            output.write("def triangles : Array AtlasProjectiveSolutionTree.Triangle := #[\n")
             output.write(",\n".join(
-                f"  ({vector(center)}, {vector(widths)})"
-                for center, widths in
-                interval_values[start:start+args.interval_chunk_size]))
+                f"  {triangle(value)}" for value in triangle_values))
             output.write("\n]\n\n")
-        output.write("def intervalDataChunks : "
-                     "Array (Array ((Fin 3 → ℚ) × (Fin 3 → ℚ))) := #[")
-        output.write(", ".join(interval_chunk_names))
-        output.write("]\n")
-        output.write("def iv (i : ℕ) : AtlasProjectiveSolutionTree.Interval :=\n")
-        output.write(f"  let data := (intervalDataChunks[i / {args.interval_chunk_size}]!)"
-                     f"[i % {args.interval_chunk_size}]!\n")
-        output.write("  relativeInterval data.1 data.2\n\n")
-        output.write("def triangles : Array AtlasProjectiveSolutionTree.Triangle := #[\n")
-        output.write(",\n".join(
-            f"  {triangle(value)}" for value in triangle_values))
-        output.write("\n]\n\n")
-        output.write("def tri (i : ℕ) : AtlasProjectiveSolutionTree.Triangle := triangles[i]!\n\n")
+            output.write("def tri (i : ℕ) : AtlasProjectiveSolutionTree.Triangle := triangles[i]!\n\n")
         for template_id, (cycle, witnesses) in enumerate(edge_template_values):
             output.write(f"def edgePred{template_id} : ℕ := {len(cycle)-1}\n")
             output.write(f"def edgeOuter{template_id} : Fin (edgePred{template_id} + 1) → VertexIndex := {vector(cycle)}\n")
@@ -329,20 +535,29 @@ def main():
             output.write(f"def localCert{template_id} : Fin 4 → AxisCertificate := "
                          f"{vector([f'axis{index}' for index in selected])}\n")
         output.write("\n")
-        chunk_names = []
-        for start in range(0, len(rows), args.chunk_size):
-            name = f"chunk{start // args.chunk_size}"
-            chunk_names.append(name)
-            output.write(f"def {name} : Array AtlasProjectiveSolutionTree.Row := #[\n")
-            terms = [emit_row(row, chart, interval_ids, triangle_ids,
-                              edge_template_ids, edge_inner_ids, axis_ids,
-                              global_inner_ids, local_template_ids)
-                     for row in rows[start:start+args.chunk_size]]
-            output.write(",\n".join("  " + term for term in terms))
-            output.write("\n]\n\n")
-        output.write("def chunks : Array (Array AtlasProjectiveSolutionTree.Row) := #[")
-        output.write(", ".join(chunk_names))
-        output.write("]\n")
+        terms = [emit_row(row, chart, interval_ids, triangle_ids,
+                          edge_template_ids, edge_inner_ids, axis_ids,
+                          global_inner_ids, local_template_ids,
+                          args.kernel_friendly)
+                 for row in rows]
+        if args.kernel_friendly:
+            emit_function_lookup(
+                output, "getRow", "AtlasProjectiveSolutionTree.Row",
+                terms, args.chunk_size, "default")
+        else:
+            chunk_names = []
+            for start in range(0, len(rows), args.chunk_size):
+                name = f"chunk{start // args.chunk_size}"
+                chunk_names.append(name)
+                output.write(
+                    f"def {name} : Array AtlasProjectiveSolutionTree.Row := #[\n")
+                output.write(",\n".join(
+                    "  " + term for term in terms[start:start+args.chunk_size]))
+                output.write("\n]\n\n")
+            output.write("def chunks : Array "
+                         "(Array AtlasProjectiveSolutionTree.Row) := #[")
+            output.write(", ".join(chunk_names))
+            output.write("]\n")
         validity = ("theorem table_valid_native : table.Valid := by "
                     "native_decide" if args.unchecked_prefix is None else "")
         audit = ""
@@ -359,9 +574,25 @@ def main():
 theorem first_local_valid_kernel :
     (getRow {first_local}).ValidAt {chart} getRow {len(rows)} := by
   decide +kernel"""
-        output.write(FOOTER.format(
-            chart=chart, validity=validity, audit=audit,
-            chunk_size=args.chunk_size, size=len(rows)))
+        if args.kernel_friendly:
+            output.write(f"""def table : AtlasProjectiveSolutionTree.Table where
+  chart := {chart}
+  get := getRow
+  size := {len(rows)}
+
+theorem table_valid_native : table.Valid := by native_decide
+
+{kernel_range_validity(chart, rows, args.kernel_range_size)}
+{audit}
+
+end Noperthedron.Nopert214.GeneratedChart{chart}
+
+end
+""")
+        else:
+            output.write(FOOTER.format(
+                chart=chart, validity=validity, audit=audit,
+                chunk_size=args.chunk_size, size=len(rows)))
 
 
 if __name__ == "__main__":
