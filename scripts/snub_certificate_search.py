@@ -30,6 +30,7 @@ from scipy.spatial import ConvexHull
 KAPPA = Q(1, 10**10)
 SUPPORT_ERROR = 10 * KAPPA
 PROJECTIVE_VARIATION_ERROR = 150 * KAPPA
+PROJECTIVE_CERTIFICATE_DENOMINATOR = 10**9
 TRIBONACCI_Q = Q(1839286755214161, 10**15)
 ROTATION_ERROR = 3 * KAPPA + KAPPA * KAPPA
 CENTER_VECTOR_ERROR = 2 * KAPPA + KAPPA * KAPPA
@@ -735,12 +736,18 @@ def projective_local_axis_row(triangle, payload):
     radii = [x[1] for x in variable_balls]
     variation_balls = [qpoly_eval_centered(poly, centers, radii)
                        for poly in polynomials]
-    B = 2*sum(weight_upper, Q(0))
+    # The exact expression below inherits several powers of the denominator
+    # used for the rounded snub-cube coordinates.  Lean only needs an upper
+    # bound, so round it outward before storing it in the certificate.  This
+    # keeps generated terms small without weakening the checked inequality.
+    exact_B = 2*sum(weight_upper, Q(0))
+    B = ceil_to(exact_B, PROJECTIVE_CERTIFICATE_DENOMINATOR)
     if B <= 0:
         raise RuntimeError("nonpositive projective remainder budget")
     normalized_center = [ball[0]/B for ball in variation_balls]
-    delta = (sum((ball[1] for ball in variation_balls), Q(0)) +
-             3*PROJECTIVE_VARIATION_ERROR) / B
+    exact_delta = (sum((ball[1] for ball in variation_balls), Q(0)) +
+                   3*PROJECTIVE_VARIATION_ERROR) / B
+    delta = ceil_to(exact_delta, PROJECTIVE_CERTIFICATE_DENOMINATOR)
     return {
         "edge_start": starts,
         "edge_finish": finishes,
@@ -753,6 +760,8 @@ def projective_local_axis_row(triangle, payload):
             "weight_lower": weight_lower,
             "weight_upper": weight_upper,
             "variation_balls": variation_balls,
+            "exact_weight_budget": exact_B,
+            "exact_delta": exact_delta,
             "maximum_support_upper": max(max(row) for row in support_upper),
             "strict_witness_upper": [row[k] for row, k in
                                      zip(support_upper, witnesses)],
@@ -814,7 +823,10 @@ def projective_local_smoke(view, triangle_width):
     centers = [row["normalized_center"] for row in rows]
     axis_radius = exact_tetrahedron_axis_radius(centers)
     cover_radius = Q(19, 20) * Q(4, 7) * axis_radius
-    c = cover_radius-delta
+    # `c` occurs on the hard side of both the barycentric and radius gates,
+    # so round inward.  The exact audit below is performed after rounding.
+    c = floor_to(cover_radius-delta,
+                 PROJECTIVE_CERTIFICATE_DENOMINATOR)
     if c <= 0:
         raise RuntimeError(
             f"axis perturbation consumes cover: radius={float(axis_radius):.6g} "

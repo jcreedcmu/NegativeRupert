@@ -28,6 +28,7 @@ public import Noperthedron.SnubCube.ProjectiveEdgeCertificate
 public import Noperthedron.SnubCube.ProjectiveEdgeCertificateSmoke
 public import Noperthedron.SnubCube.ProjectiveLocalRigidity
 public import Noperthedron.SnubCube.ProjectiveLocalCertificate
+public import Noperthedron.SnubCube.ProjectiveLocalCertificateSmoke
 public import Noperthedron.SnubCube.ProjectiveSolutionTree
 public import Noperthedron.SnubCube.ProjectiveSolutionTreeSmoke
 public import Noperthedron.SnubCube.ProjectiveView

@@ -2,10 +2,12 @@ module
 
 public import Noperthedron.SnubCube.ProjectiveSolutionTree
 public import Noperthedron.SnubCube.ProjectiveEdgeCertificateSmoke
+public import Noperthedron.SnubCube.ProjectiveLocalCertificateSmoke
 public import Noperthedron.SnubCube.CayleyLocalCertificateSmoke
 public import Noperthedron.SnubCube.CayleyFundamentalPruneSmoke
 public meta import Noperthedron.SnubCube.ProjectiveSolutionTree
 public meta import Noperthedron.SnubCube.ProjectiveEdgeCertificateSmoke
+public meta import Noperthedron.SnubCube.ProjectiveLocalCertificateSmoke
 public meta import Noperthedron.SnubCube.CayleyLocalCertificateSmoke
 public meta import Noperthedron.SnubCube.CayleyFundamentalPruneSmoke
 
@@ -57,18 +59,19 @@ def smokeGet : ℕ → Row
   | 10 => .prune 10 .chamber upperPruneBox
   | 11 => .projective 11 ProjectiveEdgeCertificateSmoke.smokeBox
   | 12 => .localLeaf 12 .chamber CayleyLocalCertificateSmoke.smokeBox
+  | 13 => .projectiveLocal 13 ProjectiveLocalCertificateSmoke.smokeBox
   | _ => default
 
-theorem smoke_rows_valid_kernel : RowsValidAt smokeGet 13 := by
+theorem smoke_rows_valid_kernel : RowsValidAt smokeGet 14 := by
   decide +kernel
 
-theorem smoke_rows_valid_native : RowsValidAt smokeGet 13 := by
+theorem smoke_rows_valid_native : RowsValidAt smokeGet 14 := by
   native_decide
 
 theorem smoke_excludes_chamber_pose :
     NoRupert CayleyFundamentalPruneSmoke.smokeInterval .chamber := by
   simpa [smokeGet, Row.interval, Row.region] using
-    valid_imp_noRupert_ix smokeGet 13 smoke_rows_valid_kernel 0 (by norm_num)
+    valid_imp_noRupert_ix smokeGet 14 smoke_rows_valid_kernel 0 (by norm_num)
 
 end Noperthedron.SnubCube.ProjectiveSolutionTreeSmoke
 
