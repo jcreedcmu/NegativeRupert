@@ -2239,6 +2239,12 @@ SIGNED_PROJECTIVE_ROOTS = tuple(
     for sign_pattern in itertools.product((Q(1), Q(-1)), repeat=3)
 )
 
+UPPER_WEDGE_PROJECTIVE_ROOT = (
+    (Q(1), Q(0), Q(0)),
+    (Q(10, 41), Q(31, 41), Q(0)),
+    (Q(0), Q(0), Q(1)),
+)
+
 
 @functools.lru_cache(maxsize=None)
 def atlas_edge_all_contact_qpolys_float(chart, q0, q1):
@@ -2763,7 +2769,7 @@ def generate_atlas_projective_table(
         # preserves containment.  Together with the fivefold wedge this
         # leaves only the upper signed root +++.
         root = 0
-        triangle = SIGNED_PROJECTIVE_ROOTS[root]
+        triangle = UPPER_WEDGE_PROJECTIVE_ROOT
         child = len(rows)
         rows.append(None)
         stack.append((child, root_center, root_widths, root, triangle,

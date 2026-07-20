@@ -62,7 +62,7 @@ def kernel_triangle_definitions(rows, triangle_ids):
     definitions = [None] * len(triangle_ids)
     root_child = rows[rows[0]["child"]]
     root_id = triangle_ids[triangle_key(root_child)]
-    definitions[root_id] = "rootTriangle 0"
+    definitions[root_id] = "upperWedgeTriangle"
     for row in rows:
         if row["kind"] != "view_split":
             continue

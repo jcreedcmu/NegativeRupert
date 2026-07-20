@@ -82,7 +82,7 @@ instance (box : Box) : Decidable box.Valid := by
   unfold Box.Valid
   infer_instance
 
-private theorem cos_two_pi_div_five_bounds :
+theorem cos_two_pi_div_five_bounds :
     |Real.cos (2 * Real.pi / 5) - (309 / 1000 : ℝ)| ≤ 1 / 1000 := by
   have hsqrt0 : 0 ≤ Real.sqrt 5 := Real.sqrt_nonneg _
   have hsqrtSq : (Real.sqrt 5) ^ 2 = 5 := by norm_num
@@ -95,7 +95,7 @@ private theorem cos_two_pi_div_five_bounds :
   rw [abs_le]
   constructor <;> nlinarith
 
-private theorem sin_two_pi_div_five_bounds :
+theorem sin_two_pi_div_five_bounds :
     |Real.sin (2 * Real.pi / 5) - (951 / 1000 : ℝ)| ≤ 1 / 1000 := by
   have hangle0 : 0 < 2 * Real.pi / 5 := by positivity
   have hanglePi : 2 * Real.pi / 5 < Real.pi := by

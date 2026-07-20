@@ -187,7 +187,7 @@ def Row.ValidAt (chart : ChartIndex) (get : ℕ → Row)
   | .viewRoot id child interval =>
       id < child ∧ child < size ∧
       (get child).interval = interval ∧
-      (get child).region = .triangle 0 (rootTriangle 0)
+      (get child).region = .triangle 0 upperWedgeTriangle
   | .viewSplit id children interval root triangle => ∀ child,
       id < children child ∧ children child < size ∧
       (get (children child)).interval = interval ∧
@@ -296,7 +296,7 @@ theorem valid_imp_noRupert_ix (chart : ChartIndex) (get : ℕ → Row)
   | viewRoot id child interval =>
       unfold NoRupert
       rintro ⟨p, hp, hbounded, hfund, hview, hupper, offset, -, hrupert⟩
-      obtain ⟨hscale, hmem⟩ := upperView_mem_root p hview hupper
+      obtain ⟨hscale, hmem⟩ := upperView_mem_wedgeTriangle p hview hupper
       obtain ⟨hforward, hchildSize, hchildInterval, hchildRegion⟩ := hvalid
       have hchild := valid_imp_noRupert_ix chart get size rowsValid
         child hchildSize

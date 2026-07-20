@@ -24,7 +24,7 @@ def lower : AtlasProjectiveSolutionTree.Interval := root.lowerHalf 4
 def upper : AtlasProjectiveSolutionTree.Interval := root.upperHalf 4
 
 def region : AtlasProjectiveSolutionTree.Region :=
-  .triangle 0 (rootTriangle 0)
+  .triangle 0 upperWedgeTriangle
 
 def getRowKernel : ℕ → AtlasProjectiveSolutionTree.Row
   | 0 => .viewRoot 0 1 root
