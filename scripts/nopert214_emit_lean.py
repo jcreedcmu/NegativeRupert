@@ -186,12 +186,13 @@ def relativeInterval (center radius : Fin 3 → ℚ) :
 
 
 FOOTER = """
-def rows : Array AtlasProjectiveSolutionTree.Row := chunks.flatten
+def getRow (i : ℕ) : AtlasProjectiveSolutionTree.Row :=
+  (chunks[i / {chunk_size}]!)[i % {chunk_size}]!
 
 def table : AtlasProjectiveSolutionTree.Table where
   chart := {chart}
-  get := fun i => rows[i]!
-  size := rows.size
+  get := getRow
+  size := {size}
 
 {validity}
 
@@ -294,10 +295,9 @@ def main():
                      "Array (Array ((Fin 3 → ℚ) × (Fin 3 → ℚ))) := #[")
         output.write(", ".join(interval_chunk_names))
         output.write("]\n")
-        output.write("def intervalData : Array ((Fin 3 → ℚ) × (Fin 3 → ℚ)) :=\n")
-        output.write("  intervalDataChunks.flatten\n\n")
         output.write("def iv (i : ℕ) : AtlasProjectiveSolutionTree.Interval :=\n")
-        output.write("  let data := intervalData[i]!\n")
+        output.write(f"  let data := (intervalDataChunks[i / {args.interval_chunk_size}]!)"
+                     f"[i % {args.interval_chunk_size}]!\n")
         output.write("  relativeInterval data.1 data.2\n\n")
         output.write("def triangles : Array AtlasProjectiveSolutionTree.Triangle := #[\n")
         output.write(",\n".join(
@@ -337,7 +337,9 @@ def main():
         output.write("]\n")
         validity = ("theorem table_valid_native : table.Valid := by "
                     "native_decide" if args.unchecked_prefix is None else "")
-        output.write(FOOTER.format(chart=chart, validity=validity))
+        output.write(FOOTER.format(
+            chart=chart, validity=validity,
+            chunk_size=args.chunk_size, size=len(rows)))
 
 
 if __name__ == "__main__":
