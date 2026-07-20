@@ -2599,9 +2599,16 @@ def generate_atlas_projective_table(
                           root, tuple(tuple(map(Q, corner))
                                       for corner in triangle),
                           view_depth, None))
+        for failure in saved["failures"]:
+            stack.append((failure["id"], tuple(map(Q, failure["center"])),
+                          tuple(map(Q, failure["widths"])),
+                          failure["root"],
+                          tuple(tuple(map(Q, corner))
+                                for corner in failure["triangle"]),
+                          failure["view_depth"], None))
         counts = saved["counts"]
         counts.setdefault("local", 0)
-        failures = saved["failures"]
+        failures = []
     else:
         rows = [None]
         root_children = []
@@ -2805,6 +2812,19 @@ def generate_atlas_projective_table(
                                   tuple(child_widths), root, triangle,
                                   view_depth, None))
                 continue
+            if mismatch_radius < Q(1, 20):
+                local = atlas_projective_local_triangle(
+                    chart, center, widths, root, triangle, symmetry_index,
+                    cone_samples=5, trials=500_000)
+                if local is not None and local["accepted"]:
+                    rows[row_id] = {**common, "kind": "local",
+                        "certificate": {
+                            "symmetry_index": symmetry_index,
+                            "certificates": local["certificates"],
+                            "c": local["c"], "delta": local["delta"],
+                            "r": local["r"]}}
+                    counts["local"] += 1
+                    continue
             failures.append({**common,
                 "edge_lower": edge_float["lower_bound"],
                 "global_lower": None if global_float is None else
