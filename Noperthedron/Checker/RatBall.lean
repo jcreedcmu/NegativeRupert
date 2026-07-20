@@ -46,6 +46,58 @@ def mul (a b : RatBall) : RatBall :=
 def ofEndpoints (lo hi : ℚ) : RatBall :=
   ⟨(lo + hi) / 2, (hi - lo) / 2⟩
 
+/-! The enclosure operations form additive and multiplicative commutative
+monoids (but deliberately not a semiring: interval multiplication does not
+distribute over the widened addition operation).  These instances let
+finite polynomial supports use the canonical `Finset` folds. -/
+
+instance instZero : Zero RatBall := ⟨const 0⟩
+instance instOne : One RatBall := ⟨const 1⟩
+instance instAdd : Add RatBall := ⟨add⟩
+instance instMul : Mul RatBall := ⟨mul⟩
+
+theorem ext {a b : RatBall} (hc : a.center = b.center)
+    (hr : a.radius = b.radius) : a = b := by
+  cases a
+  cases b
+  simp_all
+
+@[simp] theorem zero_center : (0 : RatBall).center = 0 := rfl
+@[simp] theorem zero_radius : (0 : RatBall).radius = 0 := rfl
+@[simp] theorem one_center : (1 : RatBall).center = 1 := rfl
+@[simp] theorem one_radius : (1 : RatBall).radius = 0 := rfl
+@[simp] theorem add_center (a b : RatBall) :
+    (a + b).center = a.center + b.center := rfl
+@[simp] theorem add_radius (a b : RatBall) :
+    (a + b).radius = a.radius + b.radius := rfl
+@[simp] theorem mul_center (a b : RatBall) :
+    (a * b).center = a.center * b.center := rfl
+@[simp] theorem mul_radius (a b : RatBall) :
+    (a * b).radius = |a.center| * b.radius +
+      a.radius * |b.center| + a.radius * b.radius := rfl
+
+instance instAddCommMonoid : AddCommMonoid RatBall where
+  add := add
+  add_assoc := by intro a b c; apply ext <;> simp <;> ring
+  zero := const 0
+  zero_add := by intro a; apply ext <;> simp
+  add_zero := by intro a; apply ext <;> simp
+  nsmul := nsmulRec
+  nsmul_zero := by intro; rfl
+  nsmul_succ := by intro n a; rfl
+  add_comm := by intro a b; apply ext <;> simp <;> ring
+
+instance instCommMonoid : CommMonoid RatBall where
+  mul := mul
+  mul_assoc := by intro a b c; apply ext <;> simp [abs_mul] <;> ring
+  one := const 1
+  one_mul := by intro a; apply ext <;> simp
+  mul_one := by intro a; apply ext <;> simp
+  npow := npowRec
+  npow_zero := by intro; rfl
+  npow_succ := by intro n a; rfl
+  mul_comm := by intro a b; apply ext <;> simp <;> ring
+
 @[simp] theorem const_center (q : ℚ) : (const q).center = q := rfl
 @[simp] theorem const_radius (q : ℚ) : (const q).radius = 0 := rfl
 
@@ -114,6 +166,37 @@ theorem holds_mul {a b : RatBall} {x y : ℝ}
       have hra : 0 ≤ (a.radius : ℝ) := (abs_nonneg dx).trans hx
       have hrb : 0 ≤ (b.radius : ℝ) := (abs_nonneg dy).trans hy
       gcongr
+
+theorem holds_pow {a : RatBall} {x : ℝ} (h : a.Holds x) :
+    ∀ n : ℕ, (a ^ n).Holds (x ^ n)
+  | 0 => by simp [Holds]
+  | n + 1 => by
+      rw [pow_succ, pow_succ]
+      exact holds_mul (holds_pow h n) h
+
+theorem holds_finset_sum {ι : Type} {s : Finset ι}
+    {a : ι → RatBall} {x : ι → ℝ}
+    (h : ∀ i ∈ s, (a i).Holds (x i)) :
+    (∑ i ∈ s, a i).Holds (∑ i ∈ s, x i) := by
+  classical
+  induction s using Finset.induction_on with
+  | empty => simp [Holds]
+  | @insert i s hi ih =>
+      simp only [Finset.mem_insert, forall_eq_or_imp] at h
+      simp only [Finset.sum_insert hi]
+      exact holds_add h.1 (ih h.2)
+
+theorem holds_finset_prod {ι : Type} {s : Finset ι}
+    {a : ι → RatBall} {x : ι → ℝ}
+    (h : ∀ i ∈ s, (a i).Holds (x i)) :
+    (∏ i ∈ s, a i).Holds (∏ i ∈ s, x i) := by
+  classical
+  induction s using Finset.induction_on with
+  | empty => simp [Holds]
+  | @insert i s hi ih =>
+      simp only [Finset.mem_insert, forall_eq_or_imp] at h
+      simp only [Finset.prod_insert hi]
+      exact holds_mul h.1 (ih h.2)
 
 theorem holds_of_mem_Icc {lo hi : ℚ} {x : ℝ}
     (hx : x ∈ Set.Icc (lo : ℝ) (hi : ℝ)) :

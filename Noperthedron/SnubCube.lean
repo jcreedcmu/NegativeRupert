@@ -37,6 +37,8 @@ public import Noperthedron.SnubCube.SolutionTree
 public import Noperthedron.SnubCube.Symmetry
 public import Noperthedron.SnubCube.Tightening
 public import Noperthedron.SnubCube.Tribonacci
+public import Noperthedron.SnubCube.TribonacciPolynomial
+public import Noperthedron.SnubCube.TribonacciPolynomialSmoke
 public import Noperthedron.SnubCube.Vertices
 
 public section
