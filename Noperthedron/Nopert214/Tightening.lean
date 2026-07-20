@@ -20,9 +20,15 @@ open Noperthedron.BalancedSupport
 
 noncomputable def tightPoseInterval : PoseInterval ℝ :=
   PoseInterval.mk
-    { θ₁ := 0, θ₂ := 0, φ₁ := 0, φ₂ := 0, α := -4 }
-    { θ₁ := 8 / 5, θ₂ := 8 / 5, φ₁ := 4, φ₂ := 4, α := 4 }
+    { θ₁ := -4 / 5, θ₂ := 0, φ₁ := 0, φ₂ := 0, α := -4 }
+    { θ₁ := 12 / 5, θ₂ := 8 / 5, φ₁ := 4, φ₂ := 4, α := 4 }
     (by rw [Pose.le_iff]; norm_num)
+
+/-- The rational superset of the closest-representative condition.  Its
+width is strictly smaller than one fivefold period, so no symmetry seam is
+present inside the domain that the certificate tree must cover. -/
+def InTightPoseRegion (q : Pose ℝ) : Prop :=
+  q ∈ tightPoseInterval ∧ q.θ₁ - q.θ₂ ∈ Set.Icc (-(2 / 3)) (2 / 3)
 
 private theorem translated_innerShadow_eq (p : Pose ℝ) (offset : ℝ²)
     (S : Set ℝ³) :
@@ -64,24 +70,38 @@ private theorem translated_rupert_iff_of_images {p q : Pose ℝ}
     translated_outerShadow_eq, translated_outerShadow_eq,
     hinner, houter]
 
-/-- Reduce both azimuths modulo the exact fivefold symmetry. -/
+/-- Reduce the outer azimuth modulo the exact fivefold symmetry, then choose
+the inner representative closest to it.  Thus the only coincident-rotation
+stratum in the reduced domain is `θ₁ = θ₂` (rather than an additional seam
+at opposite ends of a fundamental interval). -/
 theorem tighten_theta (p : Pose ℝ) :
     ∃ q : Pose ℝ,
-      q.θ₁ ∈ Set.Ico 0 (2 * π / 5) ∧
       q.θ₂ ∈ Set.Ico 0 (2 * π / 5) ∧
+      q.θ₁ - q.θ₂ ∈ Set.Ico (-(π / 5)) (π / 5) ∧
       q.φ₁ = p.φ₁ ∧ q.φ₂ = p.φ₂ ∧ q.α = p.α ∧
       p.inner '' exactPolyhedron.hull = q.inner '' exactPolyhedron.hull ∧
       p.outer '' exactPolyhedron.hull = q.outer '' exactPolyhedron.hull := by
   have hperiod : 0 < 2 * π / 5 := div_pos two_pi_pos (by norm_num)
-  let θ₁ := Real.emod p.θ₁ (2 * π / 5)
   let θ₂ := Real.emod p.θ₂ (2 * π / 5)
-  obtain ⟨k₁, hk₁⟩ :=
-    Real.emod_exists_multiple p.θ₁ (2 * π / 5) hperiod
   obtain ⟨k₂, hk₂⟩ :=
     Real.emod_exists_multiple p.θ₂ (2 * π / 5) hperiod
+  let d := Real.emod (p.θ₁ - p.θ₂ + π / 5) (2 * π / 5) - π / 5
+  let θ₁ := θ₂ + d
+  obtain ⟨kd, hkd⟩ := Real.emod_exists_multiple
+    (p.θ₁ - p.θ₂ + π / 5) (2 * π / 5) hperiod
+  have hd : d ∈ Set.Ico (-(π / 5)) (π / 5) := by
+    have h := Real.emod_in_interval
+      (a := p.θ₁ - p.θ₂ + π / 5) hperiod
+    dsimp [d]
+    rcases h with ⟨hl, hu⟩
+    constructor <;> linarith
+  have hθ₁ : θ₁ = p.θ₁ + (k₂ + kd) * (2 * π / 5) := by
+    dsimp [θ₁, θ₂, d]
+    rw [hk₂, hkd]
+    ring
   let q : Pose ℝ := {p with θ₁ := θ₁, θ₂ := θ₂}
-  refine ⟨q, Real.emod_in_interval hperiod,
-    Real.emod_in_interval hperiod, rfl, rfl, rfl, ?_, ?_⟩
+  refine ⟨q, Real.emod_in_interval hperiod, ?_, rfl, rfl, rfl, ?_, ?_⟩
+  · simpa [q, θ₁] using hd
   · calc
       p.inner '' exactPolyhedron.hull =
           (p.rotR ∘ p.rotM₁) '' exactPolyhedron.hull := by
@@ -89,10 +109,13 @@ theorem tighten_theta (p : Pose ℝ) :
       _ = p.rotR '' (p.rotM₁ '' exactPolyhedron.hull) := by
             rw [Set.image_comp]
       _ = p.rotR '' (rotM p.θ₁ p.φ₁ '' exactPolyhedron.hull) := rfl
-      _ = p.rotR '' (rotM (p.θ₁ + k₁ * (2 * π / 5)) p.φ₁ ''
+      _ = p.rotR '' (rotM (p.θ₁ + (k₂ + kd) * (2 * π / 5)) p.φ₁ ''
           exactPolyhedron.hull) := by
-            rw [rotM_add_fifth_iterated k₁]
-      _ = p.rotR '' (rotM θ₁ p.φ₁ '' exactPolyhedron.hull) := by rw [← hk₁]
+            have hs := rotM_add_fifth_iterated
+              (θ := p.θ₁) (φ := p.φ₁) (k₂ + kd)
+            push_cast at hs
+            rw [hs]
+      _ = p.rotR '' (rotM θ₁ p.φ₁ '' exactPolyhedron.hull) := by rw [hθ₁]
       _ = (q.rotR ∘ q.rotM₁) '' exactPolyhedron.hull := by
             rw [Set.image_comp]
             rfl
@@ -114,31 +137,34 @@ private theorem period_lt_root_upper : 2 * π / 5 < (8 / 5 : ℝ) := by
 the symmetry-reduced rational root box. -/
 theorem exists_tight_translated_pose (p : MatrixPose) :
     ∃ δ : ℝ, ∃ q : Pose ℝ, ∃ offset : ℝ²,
-      q ∈ tightPoseInterval ∧
+      InTightPoseRegion q ∧
       (RupertPose (q.matrixPoseWithOffset offset) exactPolyhedron.hull ↔
         RupertPose (p.rotateBy δ) exactPolyhedron.hull) := by
   obtain ⟨δ, p0, offset, hp0, heq⟩ :=
     Noperthedron.BalancedSupport.exists_universal_translated_pose p
-  obtain ⟨q, hθ₁, hθ₂, hφ₁, hφ₂, hα, hinner, houter⟩ := tighten_theta p0
+  obtain ⟨q, hθ₂, hdiff, hφ₁, hφ₂, hα, hinner, houter⟩ := tighten_theta p0
   have hq : q ∈ tightPoseInterval := by
     rw [NonemptyInterval.mem_def, Pose.le_iff, Pose.le_iff]
     rw [NonemptyInterval.mem_def, Pose.le_iff, Pose.le_iff] at hp0
     dsimp [tightPoseInterval, universalPoseInterval] at hp0 ⊢
     rcases hp0 with ⟨hlo, hhi⟩
     exact ⟨
-      ⟨hθ₁.1, hθ₂.1, hφ₁.symm ▸ hlo.2.2.1,
+      ⟨by nlinarith [hθ₂.1, hdiff.1, Real.pi_lt_four],
+        hθ₂.1, hφ₁.symm ▸ hlo.2.2.1,
         hφ₂.symm ▸ hlo.2.2.2.1, hα.symm ▸ hlo.2.2.2.2⟩,
-      ⟨hθ₁.2.le.trans period_lt_root_upper.le,
+      ⟨by nlinarith [hθ₂.2, hdiff.2, Real.pi_lt_four],
         hθ₂.2.le.trans period_lt_root_upper.le,
         hφ₁.symm ▸ hhi.2.2.1, hφ₂.symm ▸ hhi.2.2.2.1,
         hα.symm ▸ hhi.2.2.2.2⟩⟩
-  refine ⟨δ, q, offset, hq, ?_⟩
+  have hrelative : q.θ₁ - q.θ₂ ∈ Set.Icc (-(2 / 3)) (2 / 3) := by
+    constructor <;> nlinarith [hdiff.1, hdiff.2, Real.pi_lt_d20]
+  refine ⟨δ, q, offset, ⟨hq, hrelative⟩, ?_⟩
   rw [← heq]
   exact (translated_rupert_iff_of_images offset hinner houter).symm
 
 /-- Excluding the reduced rational root box excludes every matrix pose. -/
 theorem no_matrixPose_of_no_tight_translated_pose
-    (h : ¬ ∃ q ∈ tightPoseInterval, ∃ offset : ℝ²,
+    (h : ¬ ∃ q, InTightPoseRegion q ∧ ∃ offset : ℝ²,
       RupertPose (q.matrixPoseWithOffset offset) exactPolyhedron.hull) :
     ¬ ∃ p : MatrixPose, RupertPose p exactPolyhedron.hull := by
   rintro ⟨p, hp⟩
