@@ -64,6 +64,56 @@ theorem excludes_translated_pose :
       RupertPose (q.matrixPoseWithOffset offset) exactGoodPoly.hull :=
   box.valid_imp_no_translated_rupert_in_interval valid_kernel
 
+/-! A nontrivial-symmetry row at the Euler-pole box that defeated the old
+identity-coordinate local checker. -/
+
+def poleCenter : Pose ℚ := {
+  θ₁ := -287 / 1280, φ₁ := 3 / 2048
+  θ₂ := 1 / 1280, φ₂ := 5 / 2048, α := -4093 / 1024
+}
+
+def poleInterval : PoseInterval ℚ :=
+  PoseInterval.mk
+    { θ₁ := -9 / 40, φ₁ := 1 / 1024
+      θ₂ := 0, φ₂ := 1 / 512, α := -2047 / 512 }
+    { θ₁ := -143 / 640, φ₁ := 1 / 512
+      θ₂ := 1 / 640, φ₂ := 3 / 1024, α := -1023 / 256 }
+    (by rw [Pose.le_iff]; norm_num)
+
+def poleBox : Box where
+  interval := poleInterval
+  center := poleCenter
+  symmetryIndex := 2
+  certificate := ![
+    ⟨![
+      ⟨6, ![-998631 / 1001369, -74000 / 1001369]⟩,
+      ⟨17, ![62211 / 62789, -8500 / 62789]⟩,
+      ⟨2, ![-1223081 / 3223081, 2982000 / 3223081]⟩]⟩,
+    ⟨![
+      ⟨9, ![-15 / 17, -8 / 17]⟩,
+      ⟨13, ![299431 / 1700569, -1674000 / 1700569]⟩,
+      ⟨18, ![230119 / 269881, 141000 / 269881]⟩]⟩,
+    ⟨![
+      ⟨10, ![-317009 / 817009, -753000 / 817009]⟩,
+      ⟨17, ![62211 / 62789, -8500 / 62789]⟩,
+      ⟨5, ![-209599 / 290401, 201000 / 290401]⟩]⟩,
+    ⟨![
+      ⟨14, ![229551 / 270449, -143000 / 270449]⟩,
+      ⟨17, ![62211 / 62789, -8500 / 62789]⟩,
+      ⟨5, ![-37399 / 42601, 20400 / 42601]⟩]⟩
+  ]
+  c := 13233 / 500000
+  r := 4712886957 / 500000000000
+
+theorem pole_valid_kernel : poleBox.Valid := by decide +kernel
+
+theorem pole_valid_native : poleBox.Valid := by native_decide
+
+theorem pole_excludes_translated_pose :
+    ¬ ∃ q ∈ poleBox.realInterval, ∃ offset : ℝ²,
+      RupertPose (q.matrixPoseWithOffset offset) exactGoodPoly.hull :=
+  poleBox.valid_imp_no_translated_rupert_in_interval pole_valid_kernel
+
 end Noperthedron.Nopert214.LocalCertificateSmoke
 
 end

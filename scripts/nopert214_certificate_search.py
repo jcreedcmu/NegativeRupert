@@ -17,11 +17,16 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import heapq
 import itertools
 import json
 import math
 import random
+import sys
 from fractions import Fraction as Q
+
+sys.path.insert(0, __file__.rsplit("/", 1)[0])
+import snub_certificate_search as exact_certificate
 
 
 SEEDS_Q = (
@@ -36,11 +41,10 @@ SEEDS_Q = (
 )
 
 
-# The exact target: the twenty distinct decimal vertices in the linked STL,
-# ordered as five near-72-degree copies of the four seeds above.  Keeping the
-# published decimals themselves makes the theorem's object unambiguous; the
-# fivefold description is provenance and a useful numerical near-symmetry,
-# not an equality silently imposed on the data.
+# The rational checker model: the twenty distinct decimal vertices in the
+# linked STL.  The formal target itself is the exact fivefold orbit of the
+# four seeds; Approximation.lean proves these published decimals are within
+# kappa of it, so exact rational support evaluation uses this table.
 VERTICES_Q = (
     SEEDS_Q[0], SEEDS_Q[1], SEEDS_Q[2], SEEDS_Q[3],
     (Q("0.04289919136693016"), Q("0.5688415234175154"), Q("0.5670539264866502")),
@@ -67,6 +71,50 @@ def vertices_float():
 
 
 VERTICES = vertices_float()
+
+PI_Q = Q("3.14159265358979323846")
+SYMMETRY_ERROR = exact_certificate.KAPPA / 2
+
+
+def symmetry_action(index, vertex):
+    """Mirror ``Nopert214.symmetryAction`` for the orbit-major ordering."""
+    orbit, seed = divmod(vertex, 4)
+    return ((orbit + index) % 5) * 4 + seed
+
+
+def inverse_symmetry_action(index, vertex):
+    orbit, seed = divmod(vertex, 4)
+    return ((orbit - index) % 5) * 4 + seed
+
+
+def symmetry_matrix_q(index):
+    reduced = index if index <= 2 else index - 5
+    angle = 2 * PI_Q * reduced / 5
+    sine = exact_certificate.sin_q(angle)
+    cosine = exact_certificate.cos_q(angle)
+    return [[cosine, -sine, Q(0)],
+            [sine, cosine, Q(0)],
+            [Q(0), Q(0), Q(1)]]
+
+
+def exact_mismatch_radius(center, eps, symmetry_index):
+    inner = exact_certificate.rot_rm_q(center[0], center[1], center[4])
+    outer = exact_certificate.rot_rm_q(center[2], center[3], Q(0))
+    target = exact_certificate.matmul(
+        outer, symmetry_matrix_q(symmetry_index))
+    mismatch = exact_certificate.matsub(inner, target)
+    frobenius_sq = sum((value * value for row in mismatch for value in row),
+                       Q(0))
+    radius = (exact_certificate.sqrt_q_up16(frobenius_sq)
+              + 2 * exact_certificate.ROTATION_ERROR
+              + (1 + exact_certificate.ROTATION_ERROR) * SYMMETRY_ERROR
+              + sum(eps, Q(0)))
+    return radius, frobenius_sq
+
+# Reuse the exact rational Taylor evaluator.  Its functions read these
+# globals dynamically; replacing the snub-cube table makes them a convenient
+# independent mirror of the Lean Nopert #214 checker.
+exact_certificate.VERTICES_Q = [list(vertex) for vertex in VERTICES_Q]
 
 PUBLISHED_STL_SHA256 = (
     "847f2f999075f114030306631eff192d7350475fcce66a4e9fa0a77fc5ad7bb9"
@@ -505,6 +553,412 @@ def rational_local_zero_certificate(denominator=10_000):
     }
 
 
+def exact_local_row(center, eps, symmetry_index=0,
+                    direction_denominator=1000, cone_samples=2,
+                    trial_limit=20_000):
+    """Discover and exactly audit one complete symmetry-local row."""
+    pose = list(center)
+    theta, phi = center[2], center[3]
+    _, float_candidates = local_axis_candidates(
+        float(theta), float(phi), cone_samples)
+    candidates = []
+    support_cache = {}
+    for candidate in float_candidates:
+        directions = [rational_unit_direction(
+            contact["direction"], direction_denominator)
+            for contact in candidate["contacts"]]
+        weights = exact_certificate.determinant_weights(directions)
+        if min(weights) <= 0:
+            continue
+        vertices = [contact["vertex"] for contact in candidate["contacts"]]
+        def supported(direction, vertex):
+            key = (direction, vertex)
+            if key not in support_cache:
+                support_cache[key] = exact_certificate.local_supports(
+                    pose, eps, direction, vertex)
+            return support_cache[key]
+        if not all(supported(direction, vertex)
+                   for direction, vertex in zip(directions, vertices)):
+            continue
+        point, checked_weights = exact_certificate.normalized_a(
+            pose, directions, vertices)
+        if weights != checked_weights:
+            raise AssertionError("determinant weight disagreement")
+        candidates.append({
+            "directions": directions,
+            "vertices": vertices,
+            "weights": weights,
+            "point": point,
+        })
+    if len(candidates) < 4:
+        raise RuntimeError(f"only {len(candidates)} exact local candidates")
+
+    # The exact candidate count is modest for normal-cone sampling.  Sample
+    # only when the four-subset family becomes large; Lean later checks the
+    # selected tetrahedron without trusting this search.
+    total = math.comb(len(candidates), 4)
+    if total <= trial_limit:
+        tetrahedra = itertools.combinations(range(len(candidates)), 4)
+        searched = total
+    else:
+        rng = random.Random(repr((theta, phi, tuple(eps), symmetry_index,
+                                  direction_denominator, cone_samples)))
+        sampled = set()
+        while len(sampled) < trial_limit:
+            sampled.add(tuple(sorted(rng.sample(range(len(candidates)), 4))))
+        tetrahedra = sampled
+        searched = len(sampled)
+    floating_best = []
+    serial = 0
+    for indices in tetrahedra:
+        points = [[float(value) for value in candidates[index]["point"]]
+                  for index in indices]
+        result = tetrahedron_origin_margin(points)
+        if result is None:
+            continue
+        radius = result[0]
+        item = (radius, serial, indices)
+        serial += 1
+        if len(floating_best) < 32:
+            heapq.heappush(floating_best, item)
+        elif radius > floating_best[0][0]:
+            heapq.heapreplace(floating_best, item)
+    best = None
+    for _, _, indices in sorted(floating_best, reverse=True):
+        points = [candidates[index]["point"] for index in indices]
+        try:
+            radius = exact_certificate.exact_tetrahedron_axis_radius(points)
+        except ValueError:
+            continue
+        if best is None or radius > best[0]:
+            best = (radius, indices)
+    if best is None or best[0] <= 0:
+        raise RuntimeError("no exact local tetrahedron containing the origin")
+    axis_radius, indices = best
+    chosen = [candidates[index] for index in indices]
+    perturbation = (eps[2] + eps[3] +
+                    exact_certificate.CENTER_VECTOR_ERROR)
+    cover_radius = Q(19, 20) * Q(4, 7) * axis_radius
+    c = exact_certificate.floor_to(cover_radius - perturbation, 10**6)
+    if c <= 0:
+        raise RuntimeError(
+            f"outer box consumes axis margin: c={float(c):.6g}")
+    exact_r, frobenius_sq = exact_mismatch_radius(
+        center, eps, symmetry_index)
+    r = exact_certificate.ceil_to(exact_r, 10**12)
+    angle_slack = 4 * c * c - r * r * (1 + c * c)
+    if angle_slack < 0:
+        raise RuntimeError(
+            f"local angular budget failed c={float(c):.6g} r={float(r):.6g}")
+    target_length = Q(7, 4) * (c + perturbation)
+    minimum_barycentric = None
+    for axis in range(3):
+        for sign in (-1, 1):
+            target = [Q(0)] * 3
+            target[axis] = sign * target_length
+            coordinates = exact_certificate.barycentric(
+                [row["point"] for row in chosen], target)
+            if min(coordinates) < 0:
+                raise AssertionError("negative exact barycentric coordinate")
+            value = min(coordinates)
+            minimum_barycentric = (value if minimum_barycentric is None
+                                   else min(minimum_barycentric, value))
+    return {
+        "center": list(center),
+        "half_widths": list(eps),
+        "symmetry_index": symmetry_index,
+        "certificates": [{
+            "contacts": [{"index": inverse_symmetry_action(
+                                symmetry_index, vertex),
+                            "selected_index": vertex,
+                            "direction": direction}
+                         for vertex, direction in
+                         zip(row["vertices"], row["directions"])],
+            "weights": row["weights"],
+            "normalized_a": row["point"],
+        } for row in chosen],
+        "c": c,
+        "diagnostics": {
+            "exact_candidates": len(candidates),
+            "total_tetrahedra": total,
+            "searched_tetrahedra": searched,
+            "axis_radius": axis_radius,
+            "axis_perturbation": perturbation,
+            "minimum_barycentric": minimum_barycentric,
+            "mismatch_frobenius_sq": frobenius_sq,
+            "exact_mismatch_radius": exact_r,
+            "angle_bound_slack": angle_slack,
+        },
+        "r": r,
+    }
+
+
+def exact_local_view(theta, phi, outer_half_width=Q(1, 1000),
+                     direction_denominator=1000, cone_samples=2,
+                     trial_limit=20_000, symmetry_index=0):
+    """Convenience wrapper for an equality-stratum outer-view smoke row."""
+    center = [theta, phi, theta, phi, Q(0)]
+    eps = [Q(0), Q(0), outer_half_width, outer_half_width, Q(0)]
+    return exact_local_row(center, eps, symmetry_index,
+                           direction_denominator, cone_samples, trial_limit)
+
+
+def exact_global_box(center, half_widths, direction_count=48,
+                     direction_denominator=1000):
+    """Find an exact determinant-balanced global certificate for a box."""
+    rows = []
+    for k in range(direction_count):
+        angle = -math.pi + 2 * math.pi * (k + 0.37) / direction_count
+        direction = exact_certificate.direction_q(
+            angle, direction_denominator)
+        outer = max(exact_certificate.fast_h(
+            center, half_widths[2], half_widths[3], direction, vertex)
+            for vertex in exact_certificate.VERTICES_Q)
+        inner_values = [exact_certificate.fast_g(
+            center, half_widths[4], half_widths[0], half_widths[1],
+            direction, vertex)
+            for vertex in exact_certificate.VERTICES_Q]
+        inner_index = max(range(len(inner_values)), key=inner_values.__getitem__)
+        rows.append({
+            "direction": direction,
+            "inner_index": inner_index,
+            "margin": inner_values[inner_index] - outer,
+        })
+    best = None
+    for indices in itertools.combinations(range(direction_count), 3):
+        chosen = [rows[index] for index in indices]
+        weights = exact_certificate.determinant_weights(
+            [row["direction"] for row in chosen])
+        if min(weights) <= 0:
+            continue
+        margin = sum((weight * row["margin"]
+                      for weight, row in zip(weights, chosen)), Q(0))
+        normalized = margin / sum(weights, Q(0))
+        if best is None or normalized > best[0]:
+            best = (normalized, margin, weights, chosen)
+    if best is None or best[1] < 0:
+        return None
+    normalized, margin, weights, chosen = best
+    return {
+        "center": center,
+        "half_widths": half_widths,
+        "contacts": [{
+            "inner_index": row["inner_index"],
+            "outer_index": 0,
+            "direction": row["direction"],
+            "weight": weight,
+        } for weight, row in zip(weights, chosen)],
+        "normalized_margin": normalized,
+        "weighted_margin": margin,
+    }
+
+
+def float_h_entries(pose, direction):
+    _, _, theta, phi, _ = pose
+    st, ct, sp, cp = math.sin(theta), math.cos(theta), math.sin(phi), math.cos(phi)
+    u, v = direction
+    return [
+        (-st*u - ct*cp*v, ct*u - st*cp*v, sp*v),
+        (-ct*u + st*cp*v, -st*u - ct*cp*v, 0.0),
+        (ct*sp*v, st*sp*v, cp*v),
+        (st*u + ct*cp*v, -ct*u + st*cp*v, 0.0),
+        (-st*sp*v, ct*sp*v, 0.0),
+        (ct*cp*v, st*cp*v, -sp*v),
+    ]
+
+
+def float_g_entries(pose, direction):
+    theta, phi, _, _, alpha = pose
+    st, ct, sp, cp = math.sin(theta), math.cos(theta), math.sin(phi), math.cos(phi)
+    sa, ca = math.sin(alpha), math.cos(alpha)
+    w0, w1 = direction
+    u0, u1 = ca*w0 + sa*w1, -sa*w0 + ca*w1
+    up0, up1 = -sa*w0 + ca*w1, -ca*w0 - sa*w1
+    return [
+        (-st*u0 - ct*cp*u1, ct*u0 - st*cp*u1, sp*u1),
+        (-st*up0 - ct*cp*up1, ct*up0 - st*cp*up1, sp*up1),
+        (-ct*u0 + st*cp*u1, -st*u0 - ct*cp*u1, 0.0),
+        (ct*sp*u1, st*sp*u1, cp*u1),
+        (-ct*up0 + st*cp*up1, -st*up0 - ct*cp*up1, 0.0),
+        (ct*sp*up1, st*sp*up1, cp*up1),
+        (st*u0 + ct*cp*u1, -ct*u0 + st*cp*u1, 0.0),
+        (-st*sp*u1, ct*sp*u1, 0.0),
+        (ct*cp*u1, st*cp*u1, -sp*u1),
+    ]
+
+
+def float_fast_h(pose, etheta, ephi, direction, vertex):
+    entries = float_h_entries(pose, direction)
+    values = [dot3(row, vertex) for row in entries]
+    kappa = 1e-10
+    return (values[0] + etheta*abs(values[1]) + ephi*abs(values[2])
+            + 0.5*(etheta*etheta*abs(values[3])
+                   + 2*etheta*ephi*abs(values[4])
+                   + ephi*ephi*abs(values[5]))
+            + (etheta + ephi)**3/6
+            + 3*kappa*(1 + etheta + ephi + (etheta + ephi)**2/2))
+
+
+def float_fast_g(pose, ealpha, etheta, ephi, direction, vertex):
+    entries = float_g_entries(pose, direction)
+    values = [dot3(row, vertex) for row in entries]
+    total = ealpha + etheta + ephi
+    kappa = 1e-10
+    penalty = (ealpha*abs(values[1]) + etheta*abs(values[2])
+               + ephi*abs(values[3])
+               + 0.5*(ealpha*ealpha*abs(values[0])
+                       + 2*ealpha*etheta*abs(values[4])
+                       + 2*ealpha*ephi*abs(values[5])
+                       + etheta*etheta*abs(values[6])
+                       + 2*etheta*ephi*abs(values[7])
+                       + ephi*ephi*abs(values[8]))
+               + total**3/6 + 4*kappa*(1 + total + total*total/2))
+    return values[0] - penalty
+
+
+def float_global_margin(center, half_widths, direction_count=32):
+    outer = [rot_m(center[2], center[3], vertex) for vertex in VERTICES]
+    cycle = convex_hull(outer)
+    directions = []
+    rows = []
+    for k in range(direction_count):
+        angle = -math.pi + 2*math.pi*(k + 0.37)/direction_count
+        directions.append((math.cos(angle), math.sin(angle)))
+    for position, start in enumerate(cycle):
+        finish = cycle[(position + 1) % len(cycle)]
+        edge = (outer[finish][0] - outer[start][0],
+                outer[finish][1] - outer[start][1])
+        length = math.hypot(*edge)
+        directions.append((edge[1] / length, -edge[0] / length))
+    for direction in directions:
+        outer = max(float_fast_h(center, half_widths[2], half_widths[3],
+                                 direction, vertex)
+                    for vertex in VERTICES)
+        inner = max(float_fast_g(center, half_widths[4], half_widths[0],
+                                 half_widths[1], direction, vertex)
+                    for vertex in VERTICES)
+        rows.append((direction, inner - outer))
+    best = -math.inf
+    for indices in itertools.combinations(range(len(rows)), 3):
+        directions = [rows[index][0] for index in indices]
+        weights = [cross(directions[1], directions[2]),
+                   cross(directions[2], directions[0]),
+                   cross(directions[0], directions[1])]
+        if min(weights) <= 1e-12:
+            continue
+        margin = sum(weight * rows[index][1]
+                     for weight, index in zip(weights, indices)) / sum(weights)
+        best = max(best, margin)
+    return best
+
+
+def matmul3(left, right):
+    return tuple(tuple(sum(left[i][k] * right[k][j] for k in range(3))
+                       for j in range(3)) for i in range(3))
+
+
+def rot_rm(theta, phi, alpha):
+    """The full 3-by-3 rotation whose first two rows are ``rot_r * rot_m``."""
+    st, ct = math.sin(theta), math.cos(theta)
+    sp, cp = math.sin(phi), math.cos(phi)
+    sa, ca = math.sin(alpha), math.cos(alpha)
+    frame = ((-st, ct, 0.0),
+             (-ct * cp, -st * cp, sp),
+             (ct * sp, st * sp, cp))
+    rz = ((ca, -sa, 0.0), (sa, ca, 0.0), (0.0, 0.0, 1.0))
+    return matmul3(rz, frame)
+
+
+def symmetry_matrix(index):
+    angle = 2.0 * math.pi * index / 5.0
+    sine, cosine = math.sin(angle), math.cos(angle)
+    return ((cosine, -sine, 0.0),
+            (sine, cosine, 0.0),
+            (0.0, 0.0, 1.0))
+
+
+def nearest_symmetry_mismatch(center):
+    """Smallest Frobenius mismatch to one of the five equality strata."""
+    inner = rot_rm(center[0], center[1], center[4])
+    outer = rot_rm(center[2], center[3], 0.0)
+    choices = []
+    for index in range(5):
+        target = matmul3(outer, symmetry_matrix(index))
+        distance = math.sqrt(sum((inner[i][j] - target[i][j]) ** 2
+                                 for i in range(3) for j in range(3)))
+        choices.append((distance, index))
+    return min(choices)
+
+
+def explore_cover(max_nodes=200_000, global_directions=24,
+                  local_mismatch=0.01, local_outer_radius=0.005,
+                  global_margin_cutoff=1e-9):
+    """Fast floating feasibility estimate for the eventual mixed tree."""
+    # Symmetry-reduced domain from Nopert214/Tightening.lean.  Coordinates
+    # are (theta1, phi1, theta2, phi2, alpha).  Only the rational relative
+    # strip |theta1-theta2| <= 2/3 needs to be covered.
+    root = ((Q(-4, 5), Q(12, 5)), (Q(0), Q(4)),
+            (Q(0), Q(8, 5)), (Q(0), Q(4)), (Q(-4), Q(4)))
+    stack = [(root, 0)]
+    counts = {"nodes": 0, "global": 0, "local": 0,
+              "outside_relative_strip": 0, "unresolved": 0,
+              "local_symmetry_histogram": {str(index): 0
+                                           for index in range(5)}}
+    max_depth = 0
+    minimum_global_margin = math.inf
+    deepest = None
+    while stack and counts["nodes"] < max_nodes:
+        bounds, depth = stack.pop()
+        counts["nodes"] += 1
+        max_depth = max(max_depth, depth)
+        if deepest is None or depth > deepest[0]:
+            deepest = (depth, bounds)
+        min_relative = bounds[0][0] - bounds[2][1]
+        max_relative = bounds[0][1] - bounds[2][0]
+        if min_relative > Q(2, 3) or max_relative < Q(-2, 3):
+            counts["outside_relative_strip"] += 1
+            continue
+        center = tuple(float((lo + hi) / 2) for lo, hi in bounds)
+        widths = tuple(float((hi - lo) / 2) for lo, hi in bounds)
+        margin = float_global_margin(center, widths, global_directions)
+        if margin > global_margin_cutoff:
+            counts["global"] += 1
+            minimum_global_margin = min(minimum_global_margin, margin)
+            continue
+        center_mismatch, symmetry_index = nearest_symmetry_mismatch(center)
+        mismatch = center_mismatch + sum(widths)
+        outer_radius = widths[2] + widths[3]
+        if mismatch <= local_mismatch and outer_radius <= local_outer_radius:
+            counts["local"] += 1
+            counts["local_symmetry_histogram"][str(symmetry_index)] += 1
+            continue
+        split = max(range(5), key=lambda i: bounds[i][1] - bounds[i][0])
+        lo, hi = bounds[split]
+        middle = (lo + hi) / 2
+        if middle == lo or middle == hi:
+            counts["unresolved"] += 1
+            continue
+        left = list(bounds)
+        right = list(bounds)
+        left[split] = (lo, middle)
+        right[split] = (middle, hi)
+        stack.append((tuple(right), depth + 1))
+        stack.append((tuple(left), depth + 1))
+    counts["queued"] = len(stack)
+    counts["max_depth"] = max_depth
+    counts["minimum_global_margin"] = minimum_global_margin
+    if deepest is not None:
+        deep_center = tuple(float((lo + hi) / 2) for lo, hi in deepest[1])
+        deep_widths = tuple(float((hi - lo) / 2) for lo, hi in deepest[1])
+        deep_mismatch, deep_symmetry = nearest_symmetry_mismatch(deep_center)
+        counts["deepest_center"] = list(deep_center)
+        counts["deepest_half_widths"] = list(deep_widths)
+        counts["deepest_symmetry_index"] = deep_symmetry
+        counts["deepest_center_mismatch"] = deep_mismatch
+        counts["deepest_local_radius"] = deep_mismatch + sum(deep_widths)
+    return counts
+
+
 def random_profile(samples, seed):
     rng = random.Random(seed)
     minimum = None
@@ -555,6 +1009,28 @@ def main():
     local_profile.add_argument("--cone-samples", type=int, default=1)
     local_zero = sub.add_parser("local-rational-zero")
     local_zero.add_argument("--denominator", type=int, default=10_000)
+    exact_local = sub.add_parser("exact-local-view")
+    exact_local.add_argument("values", help="rational theta2,phi2")
+    exact_local.add_argument("--outer-half-width", default="1/1000")
+    exact_local.add_argument("--direction-denominator", type=int, default=1000)
+    exact_local.add_argument("--cone-samples", type=int, default=2)
+    exact_local.add_argument("--symmetry-index", type=int, default=0)
+    exact_local_box = sub.add_parser("exact-local-box")
+    exact_local_box.add_argument("center", help="five rational center values")
+    exact_local_box.add_argument("half_widths", help="five rational half-widths")
+    exact_local_box.add_argument("symmetry_index", type=int)
+    exact_local_box.add_argument("--direction-denominator", type=int, default=1000)
+    exact_local_box.add_argument("--cone-samples", type=int, default=2)
+    exact_global = sub.add_parser("exact-global-box")
+    exact_global.add_argument("center", help="theta1,phi1,theta2,phi2,alpha")
+    exact_global.add_argument("half_widths", help="five rational half-widths")
+    exact_global.add_argument("--directions", type=int, default=48)
+    explore = sub.add_parser("explore-cover")
+    explore.add_argument("--max-nodes", type=int, default=200000)
+    explore.add_argument("--directions", type=int, default=24)
+    explore.add_argument("--local-mismatch", type=float, default=0.01)
+    explore.add_argument("--local-outer-radius", type=float, default=0.005)
+    explore.add_argument("--global-margin-cutoff", type=float, default=1e-9)
     args = parser.parse_args()
     if args.command == "profile":
         print(json.dumps(random_profile(args.samples, args.seed), indent=2))
@@ -577,6 +1053,36 @@ def main():
     elif args.command == "local-rational-zero":
         print(json.dumps(rational_local_zero_certificate(
             args.denominator), indent=2, default=str))
+    elif args.command == "exact-local-view":
+        values = tuple(Q(value) for value in args.values.split(","))
+        if len(values) != 2:
+            parser.error("exact-local-view requires theta2,phi2")
+        print(json.dumps(exact_local_view(
+            *values, Q(args.outer_half_width), args.direction_denominator,
+            args.cone_samples, symmetry_index=args.symmetry_index),
+            indent=2, default=str))
+    elif args.command == "exact-local-box":
+        center = tuple(Q(value) for value in args.center.split(","))
+        half_widths = tuple(Q(value) for value in args.half_widths.split(","))
+        if len(center) != 5 or len(half_widths) != 5:
+            parser.error("exact-local-box requires two five-tuples")
+        if not 0 <= args.symmetry_index < 5:
+            parser.error("symmetry index must be in [0, 5)")
+        print(json.dumps(exact_local_row(
+            center, half_widths, args.symmetry_index,
+            args.direction_denominator, args.cone_samples),
+            indent=2, default=str))
+    elif args.command == "exact-global-box":
+        center = tuple(Q(value) for value in args.center.split(","))
+        half_widths = tuple(Q(value) for value in args.half_widths.split(","))
+        if len(center) != 5 or len(half_widths) != 5:
+            parser.error("exact-global-box requires two five-tuples")
+        print(json.dumps(exact_global_box(
+            center, half_widths, args.directions), indent=2, default=str))
+    elif args.command == "explore-cover":
+        print(json.dumps(explore_cover(
+            args.max_nodes, args.directions, args.local_mismatch,
+            args.local_outer_radius, args.global_margin_cutoff), indent=2))
     else:
         values = tuple(Q(value) for value in args.values.split(","))
         if len(values) != 5:
