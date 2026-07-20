@@ -117,6 +117,44 @@ def dot(left, right):
     return left[0] * right[0] + left[1] * right[1]
 
 
+def rational_unit_direction(direction, denominator=10**6):
+    """Nearby exact rational point on the unit circle."""
+    x, y = direction
+    if x > -0.5:
+        tangent = y / (1.0 + x)
+        p, q = round(tangent * denominator), denominator
+        divisor = q * q + p * p
+        return (Q(q * q - p * p, divisor), Q(2 * p * q, divisor))
+    # Cotangent chart avoids an enormous half-angle parameter near (-1, 0).
+    cotangent = (1.0 + x) / y
+    p, q = round(cotangent * denominator), denominator
+    divisor = q * q + p * p
+    return (Q(p * p - q * q, divisor), Q(2 * p * q, divisor))
+
+
+def rationalized_certificate(pose, denominator=10**6):
+    certificate = balanced_certificate(tuple(map(float, pose)))
+    directions = [rational_unit_direction(row["normal"], denominator)
+                  for row in certificate["contacts"]]
+    weights = [cross(directions[1], directions[2]),
+               cross(directions[2], directions[0]),
+               cross(directions[0], directions[1])]
+    if all(weight <= 0 for weight in weights):
+        weights = [-weight for weight in weights]
+    if not all(weight >= 0 for weight in weights):
+        raise RuntimeError("rationalization destroyed positive balance")
+    return {
+        "pose": list(pose),
+        "contacts": [{
+            "inner": row["inner"],
+            "outer": row["outer_start"],
+            "direction": list(direction),
+            "weight": weight,
+        } for row, direction, weight in
+            zip(certificate["contacts"], directions, weights)],
+    }
+
+
 def convex_hull(points):
     """Indices of the counterclockwise strict convex hull."""
     ordered = sorted(range(len(points)), key=lambda i: points[i])
@@ -232,6 +270,9 @@ def main():
     pose.add_argument("values", help="theta1,phi1,theta2,phi2,alpha")
     audit = sub.add_parser("audit-stl")
     audit.add_argument("path")
+    rational = sub.add_parser("rational-certificate")
+    rational.add_argument("values", help="theta1,phi1,theta2,phi2,alpha")
+    rational.add_argument("--denominator", type=int, default=10**6)
     args = parser.parse_args()
     if args.command == "profile":
         print(json.dumps(random_profile(args.samples, args.seed), indent=2))
@@ -240,8 +281,14 @@ def main():
         if len(values) != 5:
             parser.error("pose requires five comma-separated values")
         print(json.dumps(balanced_certificate(values), indent=2))
-    else:
+    elif args.command == "audit-stl":
         print(json.dumps(audit_stl(args.path), indent=2))
+    else:
+        values = tuple(Q(value) for value in args.values.split(","))
+        if len(values) != 5:
+            parser.error("pose requires five comma-separated values")
+        result = rationalized_certificate(values, args.denominator)
+        print(json.dumps(result, indent=2, default=str))
 
 
 if __name__ == "__main__":
