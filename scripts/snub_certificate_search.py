@@ -1159,6 +1159,7 @@ def projective_transition_profile():
     probe_d = float(probe_view @ transition_coefficient)
     family_points = []
     family_D = []
+    family_records = []
     for payload in source_payloads:
         if len(payload["support_pairs"]) != 3:
             continue
@@ -1193,6 +1194,7 @@ def projective_transition_profile():
             total_defect += weight*max(0.0, support)
         family_points.append(avec/B)
         family_D.append(total_defect/(B*probe_d))
+        family_records.append((starts, finishes, supports))
     family_points = np.asarray(family_points)
     family_D = np.asarray(family_D)
     rng = np.random.default_rng(20260719)
@@ -1252,6 +1254,48 @@ def projective_transition_profile():
         "defect_slope_quantiles": np.quantile(
             family_D, [0, .1, .5, .9, 1]).tolist(),
     }
+
+    quadratic_rows = []
+    chart_offset = 1e-5
+    chart_view = np.asarray([1-u0-chart_offset, u0+chart_offset, 0.0])
+    chart_d = float(chart_view @ transition_coefficient)
+    for t in (.5, 1., 2., 3., 4., 5., 6., 7., 8.):
+        cayley = np.asarray([0., 0., t*chart_d])
+        cross_matrix = np.asarray([
+            [0., -cayley[2], cayley[1]],
+            [cayley[2], 0., -cayley[0]],
+            [-cayley[1], cayley[0], 0.]])
+        rotation = (((1-cayley@cayley)*np.eye(3) +
+                     2*np.outer(cayley, cayley) + 2*cross_matrix) /
+                    (1+cayley@cayley))
+        best_score = -math.inf
+        best_index = None
+        for index, (starts, finishes, supports) in enumerate(family_records):
+            edges = [VERTICES_EXACT[a]-VERTICES_EXACT[b]
+                     for a, b in zip(starts, finishes)]
+            weights = np.asarray([
+                chart_view @ np.cross(edges[1], edges[2]),
+                chart_view @ np.cross(edges[2], edges[0]),
+                chart_view @ np.cross(edges[0], edges[1])])
+            if weights.min() < -1e-10:
+                continue
+            displacement = 0.0
+            defect = 0.0
+            for weight, edge, selected in zip(weights, edges, supports):
+                displacement += weight * float(chart_view @ np.cross(
+                    edge, rotation@VERTICES_EXACT[selected]-
+                    VERTICES_EXACT[selected]))
+                support = max(float(chart_view @ np.cross(
+                    edge, VERTICES_EXACT[q]-VERTICES_EXACT[selected]))
+                              for q in range(24))
+                defect += weight*max(0.0, support)
+            score = displacement-defect
+            if score > best_score:
+                best_score, best_index = score, index
+        quadratic_rows.append({
+            "t": t, "best_score_over_d_sq": best_score/(chart_d*chart_d),
+            "best_certificate": best_index,
+        })
     return {
         "transition_u": u0,
         "transition_coefficient": transition_coefficient.tolist(),
@@ -1260,6 +1304,7 @@ def projective_transition_profile():
                                    "maximum_overlap_radius":
                                        max(allowed) if allowed else 0.0},
         "heterogeneous_limit": heterogeneous,
+        "axis_z_exact_quadratic": quadratic_rows,
         "samples": samples,
     }
 
