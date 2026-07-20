@@ -1005,12 +1005,18 @@ def atlas_projective_global_triangle(
         # The lower bound is a concave piecewise-linear function of the
         # nonnegative S-procedure multiplier.  Its only breakpoints occur
         # when one of the four adjusted coefficient centers crosses zero.
-        multiplier_candidates = [Q(0)]
+        raw_multiplier_candidates = [Q(0)]
         if coefficient_balls[0][0] > 0:
-            multiplier_candidates.append(coefficient_balls[0][0] / 3)
+            raw_multiplier_candidates.append(coefficient_balls[0][0] / 3)
         for index in (4, 7, 9):
             if coefficient_balls[index][0] < 0:
-                multiplier_candidates.append(-coefficient_balls[index][0])
+                raw_multiplier_candidates.append(-coefficient_balls[index][0])
+        multiplier_candidates = {Q(0)}
+        for multiplier in raw_multiplier_candidates:
+            multiplier_candidates.add(exact_certificate.floor_to(
+                multiplier, PROJECTIVE_CERTIFICATE_DENOMINATOR))
+            multiplier_candidates.add(exact_certificate.ceil_to(
+                multiplier, PROJECTIVE_CERTIFICATE_DENOMINATOR))
 
         def adjusted_ball(multiplier):
             adjusted = list(coefficient_balls)
@@ -2038,12 +2044,18 @@ def atlas_simplex_edge_smoke(chart, relative_center, relative_half_widths,
             view_polynomial = exact_certificate.qpoly_add(
                 view_polynomial,
                 exact_certificate.qpoly_scale(coefficient, polynomial))
-        candidates = [Q(0)]
+        raw_candidates = [Q(0)]
         if view_polynomial[0] > 0:
-            candidates.append(view_polynomial[0] / 3)
+            raw_candidates.append(view_polynomial[0] / 3)
         for index in (4, 7, 9):
             if view_polynomial[index] < 0:
-                candidates.append(-view_polynomial[index])
+                raw_candidates.append(-view_polynomial[index])
+        candidates = {Q(0)}
+        for multiplier in raw_candidates:
+            candidates.add(exact_certificate.floor_to(
+                multiplier, PROJECTIVE_CERTIFICATE_DENOMINATOR))
+            candidates.add(exact_certificate.ceil_to(
+                multiplier, PROJECTIVE_CERTIFICATE_DENOMINATOR))
 
         def adjusted_lower(multiplier):
             adjusted = list(view_polynomial)
