@@ -2758,18 +2758,18 @@ def generate_atlas_projective_table(
         failures = []
     else:
         rows = [None]
-        root_children = []
         stack = []
-        # The formal root theorem restricts the exact symmetry-reduced view
-        # to signed roots +++ and ++-.
-        for root, triangle in enumerate(SIGNED_PROJECTIVE_ROOTS[:2]):
-            child = len(rows)
-            rows.append(None)
-            root_children.append(child)
-            stack.append((child, root_center, root_widths, root, triangle,
-                          0, None))
+        # Reversing the oriented viewing normal reflects both shadows and
+        # preserves containment.  Together with the fivefold wedge this
+        # leaves only the upper signed root +++.
+        root = 0
+        triangle = SIGNED_PROJECTIVE_ROOTS[root]
+        child = len(rows)
+        rows.append(None)
+        stack.append((child, root_center, root_widths, root, triangle,
+                      0, None))
         rows[0] = {"kind": "view_root", "id": 0,
-                   "children": root_children,
+                   "child": child,
                    "center": root_center, "widths": root_widths}
         counts = {"view_root": 1, "view_split": 0, "relative_split": 0,
                   "edge": 0, "global": 0, "local": 0, "radius": 0,

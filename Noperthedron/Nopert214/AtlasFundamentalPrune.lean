@@ -360,14 +360,14 @@ theorem matrixPoseWithOffset_ofPose_eq_rightSymmetry
 /-- Every matrix pose has an equivalent bounded atlas representative in the
 fivefold relative-rotation Dirichlet cell. -/
 theorem exists_fundamental_atlas_translated_pose (p : MatrixPose) :
-    ∃ δ : ℝ, ∃ chart : ChartIndex, ∃ q : AtlasPose ℝ, ∃ offset : ℝ²,
+    ∃ chart : ChartIndex, ∃ q : AtlasPose ℝ, ∃ offset : ℝ²,
       q ∈ AtlasPose.rootInterval ℝ ∧ q.CayleyBounded ∧ q.InViewWedge ∧
-      q.InFivefoldFundamentalDomain chart ∧
+      q.InUpperView ∧ q.InFivefoldFundamentalDomain chart ∧
       (RupertPose (q.matrixPoseWithOffset chart offset)
           exactPolyhedron.hull ↔
-        RupertPose (p.rotateBy δ) exactPolyhedron.hull) := by
-  obtain ⟨δ, euler, offset, heuler, hview, heq⟩ :=
-    exists_tight_translated_pose p
+        RupertPose p exactPolyhedron.hull) := by
+  obtain ⟨euler, offset, heuler, hview, hupper, heq⟩ :=
+    exists_upper_tight_translated_pose p
   let oldPose := euler.matrixPoseWithOffset offset
   obtain ⟨k, hkfund⟩ :=
     Noperthedron.Nopert214.MatrixPose.exists_rightNopert214Symmetry_inFundamentalDomain
@@ -387,9 +387,10 @@ theorem exists_fundamental_atlas_translated_pose (p : MatrixPose) :
     rw [← AtlasPose.matrixPoseWithOffset_inFundamentalDomain_iff
       q chart offset, hmatrix]
     exact hkfund
-  refine ⟨δ, chart, q, offset, hq, hradius, ?_, hqfund, ?_⟩
+  refine ⟨chart, q, offset, hq, hradius, ?_, ?_, hqfund, ?_⟩
   · simpa [q, AtlasPose.InViewWedge, AtlasPose.ofPose, InViewWedge]
       using hview
+  · simpa [q, AtlasPose.InUpperView, AtlasPose.ofPose] using hupper
   · rw [hmatrix, RupertPose_rightNopert214Symmetry_iff]
     exact heq
 

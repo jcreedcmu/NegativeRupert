@@ -159,6 +159,11 @@ representative. -/
 def AtlasPose.InViewWedge (p : AtlasPose ℝ) : Prop :=
   p.θ ∈ Set.Icc 0 (2 * Real.pi / 5) ∧ p.φ ∈ Set.Icc 0 Real.pi
 
+/-- The unoriented viewing line is represented by its upper-hemisphere
+normal. -/
+def AtlasPose.InUpperView (p : AtlasPose ℝ) : Prop :=
+  p.φ ≤ Real.pi / 2
+
 theorem AtlasPose.ofPose_mem_root (euler : Pose ℝ) (x y z : ℝ)
     (heuler : euler ∈ tightPoseInterval)
     (hx : x ∈ Set.Icc (-2 : ℝ) 2)

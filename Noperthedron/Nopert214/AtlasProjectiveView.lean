@@ -124,6 +124,31 @@ theorem viewVector_first_two_nonneg {p : AtlasPose ℝ}
     Real.sin_nonneg_of_mem_Icc hview.2
   constructor <;> simp [viewVector, mul_nonneg, hcos, hsinTheta, hsinPhi]
 
+theorem viewVector_third_nonneg {p : AtlasPose ℝ}
+    (hview : p.InViewWedge) (hupper : p.InUpperView) :
+    0 ≤ viewVector p 2 := by
+  have hlower : -(Real.pi / 2) ≤ p.φ :=
+    (neg_nonpos.mpr (div_nonneg Real.pi_pos.le (by norm_num))).trans
+      hview.2.1
+  have hcos : 0 ≤ Real.cos p.φ :=
+    Real.cos_nonneg_of_mem_Icc ⟨hlower, hupper⟩
+  simpa [viewVector] using hcos
+
+/-- In the upper representative of the exact fivefold wedge, the single
+signed root `+++` contains the viewing direction. -/
+theorem upperView_mem_root (p : AtlasPose ℝ)
+    (hview : p.InViewWedge) (hupper : p.InUpperView) :
+    1 ≤ viewScale 0 p ∧
+      InTriangle (toReal (rootTriangle 0)) (normalizedView 0 p) := by
+  obtain ⟨hx, hy⟩ := viewVector_first_two_nonneg hview
+  have hz := viewVector_third_nonneg hview hupper
+  have hsign : ∀ c,
+      0 ≤ (rootSign 0 c : ℝ) * viewVector p c := by
+    intro c
+    fin_cases c <;> simp [rootSign, hx, hy, hz]
+  exact ⟨one_le_viewScale_of_sign hsign,
+    normalizedView_mem_root_of_sign hsign⟩
+
 /-- Every view in the exact fivefold-reduced wedge belongs to one of the
 two projective roots `+++` and `++-`. -/
 theorem exists_wedgeRoot (p : AtlasPose ℝ) (hview : p.InViewWedge) :

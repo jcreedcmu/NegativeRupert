@@ -2,6 +2,7 @@ module
 
 public import Noperthedron.Nopert214.Symmetry
 public import Noperthedron.BalancedSupport.UniversalDomain
+public import Noperthedron.BalancedSupport.ViewAntipode
 
 @[expose] public section
 
@@ -173,6 +174,69 @@ theorem exists_tight_translated_pose (p : MatrixPose) :
   refine ⟨δ, q, offset, ⟨hq, hrelative⟩, hview, ?_⟩
   rw [← heq]
   exact (translated_rupert_iff_of_images offset hinner houter).symm
+
+/-- The oriented viewing normal may be chosen in the upper hemisphere.  The
+extra choice is shape-independent: reversing the normal reflects both planar
+shadows and hence preserves Rupert containment. -/
+theorem exists_upper_tight_translated_pose (p : MatrixPose) :
+    ∃ q : Pose ℝ, ∃ offset : ℝ²,
+      InTightPoseRegion q ∧
+      InViewWedge q ∧ q.φ₂ ≤ Real.pi / 2 ∧
+      (RupertPose (q.matrixPoseWithOffset offset) exactPolyhedron.hull ↔
+        RupertPose p exactPolyhedron.hull) := by
+  let p' := p.upperViewRepresentative
+  have hp' : 0 ≤ p'.outerRot.val 2 2 :=
+    MatrixPose.upperViewRepresentative_outer_22_nonneg p
+  obtain ⟨δ, p0, offset, hp0, _hθ0, hφ0, heq⟩ :=
+    Noperthedron.BalancedSupport.exists_universal_translated_pose p'
+  have hcos : 0 ≤ Real.cos p0.φ₂ := by
+    have hout22 := congrArg
+      (fun pose : MatrixPose ↦ pose.outerRot.val 2 2) heq
+    simp only [Pose.matrixPoseWithOffset, Pose.matrixPoseOfPose,
+      MatrixPose.rotateBy] at hout22
+    simp [rotRM_mat, Matrix.mul_apply, Rz_mat, Ry_mat,
+      Fin.sum_univ_three] at hout22
+    linarith
+  have hφ0Upper : p0.φ₂ ≤ Real.pi / 2 := by
+    by_contra h
+    have hneg := Real.cos_neg_of_pi_div_two_lt_of_lt
+      (lt_of_not_ge h) (hφ0.2.trans_lt (by linarith [Real.pi_pos]))
+    linarith
+  obtain ⟨q, hθ₂, hdiff, hφ₁, hφ₂, hα, hinner, houter⟩ := tighten_theta p0
+  have hq : q ∈ tightPoseInterval := by
+    rw [NonemptyInterval.mem_def, Pose.le_iff, Pose.le_iff]
+    rw [NonemptyInterval.mem_def, Pose.le_iff, Pose.le_iff] at hp0
+    dsimp [tightPoseInterval, universalPoseInterval] at hp0 ⊢
+    rcases hp0 with ⟨hlo, hhi⟩
+    exact ⟨
+      ⟨by nlinarith [hθ₂.1, hdiff.1, Real.pi_lt_four],
+        hθ₂.1, hφ₁.symm ▸ hlo.2.2.1,
+        hφ₂.symm ▸ hlo.2.2.2.1, hα.symm ▸ hlo.2.2.2.2⟩,
+      ⟨by nlinarith [hθ₂.2, hdiff.2, Real.pi_lt_four],
+        hθ₂.2.le.trans period_lt_root_upper.le,
+        hφ₁.symm ▸ hhi.2.2.1, hφ₂.symm ▸ hhi.2.2.2.1,
+        hα.symm ▸ hhi.2.2.2.2⟩⟩
+  have hrelative : q.θ₁ - q.θ₂ ∈ Set.Icc (-(2 / 3)) (2 / 3) := by
+    constructor <;> nlinarith [hdiff.1, hdiff.2, Real.pi_lt_d20]
+  have hview : InViewWedge q := by
+    constructor
+    · exact ⟨hθ₂.1, hθ₂.2.le⟩
+    · rw [hφ₂]
+      exact hφ0
+  have hrupert :
+      RupertPose (q.matrixPoseWithOffset offset) exactPolyhedron.hull ↔
+        RupertPose p exactPolyhedron.hull := by
+    calc
+      _ ↔ RupertPose (p0.matrixPoseWithOffset offset)
+          exactPolyhedron.hull :=
+        (translated_rupert_iff_of_images offset hinner houter).symm
+      _ ↔ RupertPose (p'.rotateBy δ) exactPolyhedron.hull := by rw [heq]
+      _ ↔ RupertPose p' exactPolyhedron.hull :=
+        MatrixPose.RupertPose_rotateBy_iff p' δ _
+      _ ↔ RupertPose p exactPolyhedron.hull :=
+        MatrixPose.RupertPose_upperViewRepresentative_iff p _
+  refine ⟨q, offset, ⟨hq, hrelative⟩, hview, ?_, hrupert⟩
+  simpa [hφ₂] using hφ0Upper
 
 /-- Excluding the reduced rational root box excludes every matrix pose. -/
 theorem no_matrixPose_of_no_tight_translated_pose

@@ -88,7 +88,7 @@ def emit_row(row, chart, interval_ids, triangle_ids, edge_template_ids,
     tri = None if kind == "view_root" else \
         f"tri {triangle_ids[triangle_key(row)]}"
     if kind == "view_root":
-        return f".viewRoot {row_id} {vector(row['children'])} ({iv})"
+        return f".viewRoot {row_id} {row['child']} ({iv})"
     if kind == "view_split":
         return (f".viewSplit {row_id} {vector(row['children'])} "
                 f"({iv}) {row['root']} ({tri})")
