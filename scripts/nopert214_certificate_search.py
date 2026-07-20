@@ -1154,6 +1154,118 @@ PROJECTIVE_ROOTS = (
     ((Q(-1), Q(0), Q(0)), (Q(0), Q(1), Q(0)), (Q(0), Q(0), Q(1))),
 )
 
+# Full signed projective atlas used by the Nopert #214 formal tree.  The
+# earlier four roots cover RP^2 only after identifying antipodes; keeping all
+# eight makes the projective scale positive and avoids a reversal convention
+# in the Lean soundness theorem.
+SIGNED_PROJECTIVE_ROOTS = tuple(
+    tuple(tuple(sign_pattern[axis] if coordinate == axis else Q(0)
+                for coordinate in range(3))
+          for axis in range(3))
+    for sign_pattern in itertools.product((Q(1), Q(-1)), repeat=3)
+)
+
+
+def atlas_simplex_best(chart, relative_center, relative_half_widths,
+                       triangle):
+    """Try the centroid silhouette and transition alternatives."""
+    result = atlas_simplex_edge_smoke(
+        chart, relative_center, relative_half_widths, triangle)
+    if result is not None and result["accepted"]:
+        return result
+    cycles = []
+    sample_views = list(triangle)
+    sample_views.extend(tuple((a+b)/2 for a, b in zip(left, right))
+                        for left, right in ((triangle[0], triangle[1]),
+                                            (triangle[1], triangle[2]),
+                                            (triangle[2], triangle[0])))
+    best = result
+    for view in sample_views:
+        cycle = nopert214_silhouette_cycle(view)
+        if cycle in cycles:
+            continue
+        cycles.append(cycle)
+        alternative = atlas_simplex_edge_smoke(
+            chart, relative_center, relative_half_widths, triangle, cycle)
+        if alternative is not None and alternative["accepted"]:
+            return alternative
+        if alternative is not None and (best is None or
+                alternative["diagnostics"]["lower_bound"] >
+                best["diagnostics"]["lower_bound"]):
+            best = alternative
+    return best
+
+
+def interval_outside_cayley_ball(center, half_widths):
+    minimum_sq = Q(0)
+    for value, width in zip(center, half_widths):
+        lo, hi = value-width, value+width
+        minimum = Q(0) if lo <= 0 <= hi else min(abs(lo), abs(hi))
+        minimum_sq += minimum*minimum
+    return minimum_sq > 3
+
+
+def explore_atlas_projective_tree(max_nodes=10_000, max_view_depth=5,
+                                  min_relative_half_width=Q(1, 100)):
+    """Bounded exact experiment for the joint relative/projective tree.
+
+    This deliberately produces only counts and small pending diagnostics;
+    it does not write the potentially large proof artifact.
+    """
+    stack = []
+    for chart in range(4):
+        for root, triangle in enumerate(SIGNED_PROJECTIVE_ROOTS):
+            stack.append((chart, (Q(0), Q(0), Q(0)),
+                          (Q(2), Q(2), Q(2)), root, triangle, 0))
+    counts = {"nodes": 0, "accepted": 0, "radius_pruned": 0,
+              "view_splits": 0, "relative_splits": 0}
+    pending = []
+    while stack and counts["nodes"] < max_nodes:
+        chart, center, widths, root, triangle, view_depth = stack.pop()
+        counts["nodes"] += 1
+        if interval_outside_cayley_ball(center, widths):
+            counts["radius_pruned"] += 1
+            continue
+        result = atlas_simplex_best(chart, center, widths, triangle)
+        if result is not None and result["accepted"]:
+            counts["accepted"] += 1
+            continue
+        # A missing result is a silhouette/support transition, which only a
+        # view split can resolve.  Once support is stable, split the widest
+        # relative coordinate before spending more projective triangles.
+        if result is None and view_depth < max_view_depth:
+            counts["view_splits"] += 1
+            stack.extend((chart, center, widths, root, child, view_depth+1)
+                         for child in split_projective_triangle(triangle))
+            continue
+        widest = max(range(3), key=lambda i: widths[i])
+        if widths[widest] > min_relative_half_width:
+            counts["relative_splits"] += 1
+            child_widths = list(widths)
+            child_widths[widest] /= 2
+            for direction in (-1, 1):
+                child_center = list(center)
+                child_center[widest] += direction*child_widths[widest]
+                stack.append((chart, tuple(child_center), tuple(child_widths),
+                              root, triangle, view_depth))
+            continue
+        if view_depth < max_view_depth:
+            counts["view_splits"] += 1
+            stack.extend((chart, center, widths, root, child, view_depth+1)
+                         for child in split_projective_triangle(triangle))
+            continue
+        if len(pending) < 20:
+            pending.append({"chart": chart, "center": center,
+                            "half_widths": widths, "root": root,
+                            "view_depth": view_depth,
+                            "reason": "support" if result is None
+                                      else "displacement",
+                            "lower_bound": None if result is None else
+                                result["diagnostics"]["lower_bound"]})
+    counts["queued"] = len(stack)
+    counts["pending_sample"] = pending
+    return counts
+
 
 def split_projective_triangle(triangle):
     a, b, c = triangle
@@ -1696,6 +1808,10 @@ def main():
     atlas_cover.add_argument("relative_center", help="x,y,z")
     atlas_cover.add_argument("relative_half_widths", help="ex,ey,ez")
     atlas_cover.add_argument("--max-depth", type=int, default=5)
+    atlas_tree = sub.add_parser("explore-atlas-projective-tree")
+    atlas_tree.add_argument("--max-nodes", type=int, default=10000)
+    atlas_tree.add_argument("--max-view-depth", type=int, default=5)
+    atlas_tree.add_argument("--min-relative-half-width", default="1/100")
     explore = sub.add_parser("explore-cover")
     explore.add_argument("--max-nodes", type=int, default=200000)
     explore.add_argument("--directions", type=int, default=24)
@@ -1813,6 +1929,10 @@ def main():
         print(json.dumps(atlas_simplex_cover(
             args.chart, center, widths, args.max_depth),
             indent=2, default=str))
+    elif args.command == "explore-atlas-projective-tree":
+        print(json.dumps(explore_atlas_projective_tree(
+            args.max_nodes, args.max_view_depth,
+            Q(args.min_relative_half_width)), indent=2, default=str))
     elif args.command == "explore-cover":
         print(json.dumps(explore_cover(
             args.max_nodes, args.directions, args.local_mismatch,

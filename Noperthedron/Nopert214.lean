@@ -12,6 +12,10 @@ public import Noperthedron.Nopert214.AtlasInterval
 public import Noperthedron.Nopert214.AtlasQuadratic
 public import Noperthedron.Nopert214.AtlasEdgeCertificate
 public import Noperthedron.Nopert214.AtlasEdgeCertificateSmoke
+public import Noperthedron.Nopert214.AtlasProjectiveView
+public import Noperthedron.Nopert214.AtlasProjectiveEdgeCertificate
+public import Noperthedron.Nopert214.AtlasProjectiveEdgeCertificateSmoke
+public import Noperthedron.Nopert214.AtlasProjectiveSolutionTree
 public import Noperthedron.BalancedSupport.UniversalDomain
 
 public section
