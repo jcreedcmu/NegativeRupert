@@ -16,6 +16,7 @@ balanced-support obstruction.
 from __future__ import annotations
 
 import argparse
+import functools
 import hashlib
 import heapq
 import itertools
@@ -767,6 +768,455 @@ def exact_global_box(center, half_widths, direction_count=48,
     }
 
 
+ATLAS_CHART_SIGNS = (
+    (Q(1), Q(1), Q(1)),
+    (Q(1), Q(-1), Q(-1)),
+    (Q(-1), Q(1), Q(-1)),
+    (Q(-1), Q(-1), Q(1)),
+)
+
+
+def atlas_global_contact_ball(chart, theta, phi, variables, direction,
+                              inner_index, outer_index):
+    """Quadratic balanced-support contact for ``C * cayley(x,y,z)``."""
+    numerator = exact_certificate.cayley_numerator_balls(*variables)
+    denom = exact_certificate.cayley_denom_ball(*variables)
+    inner = VERTICES_Q[inner_index]
+    outer = VERTICES_Q[outer_index]
+    signs = ATLAS_CHART_SIGNS[chart]
+    vector = []
+    for i in range(3):
+        ni = exact_certificate.ball_sum3([
+            exact_certificate.ball_scale(inner[j], numerator[i][j])
+            for j in range(3)])
+        ni = exact_certificate.ball_scale(signs[i], ni)
+        vector.append(exact_certificate.ball_sub(
+            ni, exact_certificate.ball_scale(outer[i], denom)))
+    lift = exact_certificate.matvec(
+        exact_certificate.transpose(
+            exact_certificate.frame_q(theta, phi)[:2]), direction)
+    return exact_certificate.ball_sum3([
+        exact_certificate.ball_scale(lift[i], vector[i])
+        for i in range(3)])
+
+
+def atlas_global_smoke(chart, center, half_widths, direction_count=24,
+                       direction_denominator=10_000):
+    """Run the exact rational polynomial global checker for one atlas box."""
+    theta, phi, x, y, z = center
+    etheta, ephi, ex, ey, ez = half_widths
+    variables = [(x, ex), (y, ey), (z, ez)]
+    euler_pose = [theta, phi, theta, phi, Q(0)]
+    euler_eps = [Q(0), Q(0), etheta, ephi, Q(0)]
+    rows = []
+    for k in range(direction_count):
+        angle = -math.pi + 2 * math.pi * (k + 0.37) / direction_count
+        direction = exact_certificate.direction_q(
+            angle, direction_denominator)
+        outer_values = [exact_certificate.fast_h(
+            euler_pose, etheta, ephi, direction, vertex)
+            for vertex in VERTICES_Q]
+        candidates = sorted(range(len(VERTICES_Q)),
+                            key=outer_values.__getitem__, reverse=True)[:4]
+        outer_index = next((index for index in candidates
+                            if exact_certificate.local_supports(
+                                euler_pose, euler_eps, direction, index)), None)
+        if outer_index is None:
+            continue
+        balls = [atlas_global_contact_ball(
+            chart, theta, phi, variables, direction,
+            inner_index, outer_index)
+            for inner_index in range(len(VERTICES_Q))]
+        inner_index = max(range(len(balls)),
+                          key=lambda index: balls[index][0] - balls[index][1])
+        rows.append({"direction": direction,
+                     "inner_index": inner_index,
+                     "outer_index": outer_index,
+                     "ball": balls[inner_index]})
+    d_bound = 1 + sum(max(abs(c-r), abs(c+r))**2
+                      for c, r in zip((x, y, z), (ex, ey, ez)))
+    view_error = etheta + ephi + exact_certificate.KAPPA
+    contact_error = 2*d_bound*(exact_certificate.KAPPA +
+                               (1+exact_certificate.KAPPA)*view_error)
+    best = None
+    for indices in itertools.combinations(range(len(rows)), 3):
+        chosen = [rows[index] for index in indices]
+        weights = exact_certificate.determinant_weights(
+            [row["direction"] for row in chosen])
+        if min(weights) <= 0:
+            continue
+        total = exact_certificate.ball_const(0)
+        for weight, row in zip(weights, chosen):
+            total = exact_certificate.ball_add(
+                total, exact_certificate.ball_scale(weight, row["ball"]))
+        error = sum(weights, Q(0))*contact_error
+        lower = total[0] - total[1] - error
+        normalized = lower / sum(weights, Q(0))
+        if best is None or normalized > best[0]:
+            best = (normalized, lower, total, error, weights, chosen)
+    if best is None:
+        return None
+    normalized, lower, total, error, weights, chosen = best
+    return {
+        "accepted": lower > 0,
+        "chart": chart,
+        "center": center,
+        "half_widths": half_widths,
+        "contacts": [{"inner_index": row["inner_index"],
+                      "outer_index": row["outer_index"],
+                      "direction": row["direction"]}
+                     for row in chosen],
+        "diagnostics": {"supported_directions": len(rows),
+                        "displacement_ball": total,
+                        "error": error,
+                        "lower_bound": lower,
+                        "normalized_lower_bound": normalized,
+                        "d_bound": d_bound,
+                        "contact_error": contact_error},
+    }
+
+
+def atlas_global_profile(samples, seed, half_widths, direction_count=24):
+    """Sample all four chart roots at a fixed proposed leaf size."""
+    rng = random.Random(seed)
+    accepted = 0
+    minimum = None
+    worst = None
+    by_chart = [{"samples": 0, "accepted": 0} for _ in range(4)]
+    for _ in range(samples):
+        chart = rng.randrange(4)
+        center = tuple(Q(str(value)) for value in (
+            rng.uniform(0, 1.6), rng.uniform(0, 4),
+            rng.uniform(-2, 2), rng.uniform(-2, 2), rng.uniform(-2, 2)))
+        result = atlas_global_smoke(
+            chart, center, half_widths, direction_count)
+        by_chart[chart]["samples"] += 1
+        if result is None:
+            continue
+        margin = result["diagnostics"]["normalized_lower_bound"]
+        if minimum is None or margin < minimum:
+            minimum = margin
+            worst = result
+        if result["accepted"]:
+            accepted += 1
+            by_chart[chart]["accepted"] += 1
+    return {"samples": samples, "accepted": accepted,
+            "acceptance_rate": accepted / samples,
+            "half_widths": half_widths, "by_chart": by_chart,
+            "minimum_margin": minimum, "worst": worst}
+
+
+@functools.lru_cache(maxsize=None)
+def atlas_edge_contact_qpolys(chart, q0, q1, inner_index):
+    """Vector polynomial for one moving silhouette-edge contact."""
+    edge = [a-b for a, b in zip(VERTICES_Q[q1], VERTICES_Q[q0])]
+    inner = VERTICES_Q[inner_index]
+    outer = VERTICES_Q[q0]
+    signs = ATLAS_CHART_SIGNS[chart]
+    displacement = []
+    for i in range(3):
+        value = exact_certificate.qpoly_zero()
+        for j in range(3):
+            value = exact_certificate.qpoly_add(
+                value, exact_certificate.qpoly_scale(
+                    signs[i] * inner[j],
+                    exact_certificate.CAYLEY_NUMERATOR_QPOLYS[i][j]))
+        displacement.append(exact_certificate.qpoly_add(
+            value, exact_certificate.qpoly_scale(
+                -outer[i], exact_certificate.CAYLEY_DENOM_QPOLY)))
+    cross_poly = [
+        exact_certificate.qpoly_add(
+            exact_certificate.qpoly_scale(edge[1], displacement[2]),
+            exact_certificate.qpoly_scale(-edge[2], displacement[1])),
+        exact_certificate.qpoly_add(
+            exact_certificate.qpoly_scale(edge[2], displacement[0]),
+            exact_certificate.qpoly_scale(-edge[0], displacement[2])),
+        exact_certificate.qpoly_add(
+            exact_certificate.qpoly_scale(edge[0], displacement[1]),
+            exact_certificate.qpoly_scale(-edge[1], displacement[0])),
+    ]
+    return tuple(tuple(exact_certificate.qpoly_scale(-1, value))
+                 for value in cross_poly)
+
+
+def atlas_edge_contact_ball(chart, view, variables, q0, q1, inner_index):
+    polynomials = atlas_edge_contact_qpolys(chart, q0, q1, inner_index)
+    centers = tuple(ball[0] for ball in variables)
+    radii = tuple(ball[1] for ball in variables)
+    components = [exact_certificate.qpoly_eval_centered(
+        polynomial, centers, radii) for polynomial in polynomials]
+    return exact_certificate.ball_dot(view, components)
+
+
+def atlas_edge_smoke(chart, center, half_widths):
+    """Exact moving-edge certificate over one angular/Cayley atlas box."""
+    theta, phi, x, y, z = center
+    etheta, ephi, ex, ey, ez = half_widths
+    view = exact_certificate.cayley_view_balls(
+        theta, phi, etheta, ephi)
+    projected = [rot_m(float(theta), float(phi), vertex)
+                 for vertex in VERTICES]
+    cycle = convex_hull(projected)
+    variables = ((x, ex), (y, ey), (z, ez))
+    total_polys = [exact_certificate.qpoly_zero() for _ in range(3)]
+    contacts = []
+    total_defect = Q(0)
+    minimum_strict = None
+    for position, q0 in enumerate(cycle):
+        q1 = cycle[(position + 1) % len(cycle)]
+        supports = [exact_certificate.edge_orientation_ball(
+            view, q0, q1, vertex) for vertex in range(len(VERTICES_Q))]
+        witness = max(range(len(supports)),
+                      key=lambda index: supports[index][0]-supports[index][1])
+        strict = (supports[witness][0] - supports[witness][1] -
+                  exact_certificate.SUPPORT_ERROR)
+        minimum_strict = strict if minimum_strict is None else min(
+            minimum_strict, strict)
+        if strict <= 0:
+            return None
+        total_defect += max(-(ball[0]-ball[1]) for ball in supports) + \
+            exact_certificate.SUPPORT_ERROR
+        balls = [atlas_edge_contact_ball(
+            chart, view, variables, q0, q1, inner)
+            for inner in range(len(VERTICES_Q))]
+        inner = max(range(len(balls)),
+                    key=lambda index: balls[index][0]-balls[index][1])
+        polynomials = atlas_edge_contact_qpolys(chart, q0, q1, inner)
+        total_polys = [exact_certificate.qpoly_add(a, b)
+                       for a, b in zip(total_polys, polynomials)]
+        contacts.append({"outer_index": q0, "next_outer_index": q1,
+                         "inner_index": inner, "nonzero_witness": witness})
+    components = [exact_certificate.qpoly_eval_centered(
+        polynomial, (x, y, z), (ex, ey, ez))
+        for polynomial in total_polys]
+    total = exact_certificate.ball_dot(view, components)
+    endpoints = ((x-ex, x+ex), (y-ey, y+ey), (z-ez, z+ez))
+    d_bound = 1 + sum(max(abs(lo), abs(hi))**2 for lo, hi in endpoints)
+    error = len(cycle) * 10 * d_bound * exact_certificate.KAPPA
+    lower = total[0]-total[1]-d_bound*total_defect-error
+    return {"accepted": lower > 0, "chart": chart, "center": center,
+            "half_widths": half_widths, "cycle": cycle,
+            "contacts": contacts,
+            "diagnostics": {"edge_count": len(cycle),
+                            "minimum_strict_support_lower": minimum_strict,
+                            "total_support_defect": total_defect,
+                            "cayley_d_bound": d_bound,
+                            "displacement_ball": total,
+                            "error": error, "lower_bound": lower}}
+
+
+def atlas_edge_profile(samples, seed, half_widths):
+    rng = random.Random(seed)
+    accepted = 0
+    valid_cycles = 0
+    minimum = None
+    by_chart = [{"samples": 0, "accepted": 0} for _ in range(4)]
+    for _ in range(samples):
+        chart = rng.randrange(4)
+        center = tuple(Q(str(value)) for value in (
+            rng.uniform(0, 1.6), rng.uniform(0, 4),
+            rng.uniform(-2, 2), rng.uniform(-2, 2), rng.uniform(-2, 2)))
+        result = atlas_edge_smoke(chart, center, half_widths)
+        by_chart[chart]["samples"] += 1
+        if result is None:
+            continue
+        valid_cycles += 1
+        lower = result["diagnostics"]["lower_bound"]
+        minimum = lower if minimum is None else min(minimum, lower)
+        if result["accepted"]:
+            accepted += 1
+            by_chart[chart]["accepted"] += 1
+    return {"samples": samples, "valid_cycles": valid_cycles,
+            "accepted": accepted, "acceptance_rate": accepted/samples,
+            "half_widths": half_widths, "by_chart": by_chart,
+            "minimum_lower_bound": minimum}
+
+
+def nopert214_silhouette_cycle(view):
+    """Projected hull cycle for a nonzero rational projective view."""
+    view_float = tuple(float(value) for value in view)
+    view_length = norm3(view_float)
+    view_float = scale3(1/view_length, view_float)
+    axis_index = min(range(3), key=lambda i: abs(view_float[i]))
+    axis = tuple(float(i == axis_index) for i in range(3))
+    first = cross3(view_float, axis)
+    first = scale3(1/norm3(first), first)
+    second = cross3(view_float, first)
+    projected = [(dot3(vertex, first), dot3(vertex, second))
+                 for vertex in VERTICES]
+    return convex_hull(projected)
+
+
+def atlas_simplex_edge_smoke(chart, relative_center, relative_half_widths,
+                              triangle, cycle=None):
+    """Exact edge certificate uniform over one signed projective triangle."""
+    centroid = [sum((view[i] for view in triangle), Q(0))/3
+                for i in range(3)]
+    if cycle is None:
+        cycle = nopert214_silhouette_cycle(centroid)
+    x, y, z = relative_center
+    ex, ey, ez = relative_half_widths
+    total_polys = [exact_certificate.qpoly_zero() for _ in range(3)]
+    total_defect = Q(0)
+    minimum_strict = None
+    contacts = []
+    edge_polynomial_choices = []
+    for position, q0 in enumerate(cycle):
+        q1 = cycle[(position+1) % len(cycle)]
+        support_values = [[exact_certificate.edge_orientation_q(
+            view, q0, q1, vertex) for vertex in range(len(VERTICES_Q))]
+            for view in triangle]
+        witness_scores = [min(row[vertex] for row in support_values)
+                          for vertex in range(len(VERTICES_Q))]
+        witness = max(range(len(VERTICES_Q)),
+                      key=witness_scores.__getitem__)
+        strict = witness_scores[witness] - exact_certificate.SUPPORT_ERROR
+        minimum_strict = strict if minimum_strict is None else min(
+            minimum_strict, strict)
+        if strict <= 0:
+            return None
+        total_defect += max(-value for row in support_values for value in row) \
+            + exact_certificate.SUPPORT_ERROR
+        best = None
+        all_polynomials = []
+        for inner in range(len(VERTICES_Q)):
+            polynomials = atlas_edge_contact_qpolys(
+                chart, q0, q1, inner)
+            all_polynomials.append(polynomials)
+            components = [exact_certificate.qpoly_eval_centered(
+                polynomial, relative_center, relative_half_widths)
+                for polynomial in polynomials]
+            lower = min(sum(view[i]*(components[i][0]-components[i][1])
+                            for i in range(3)) for view in triangle)
+            if best is None or lower > best[0]:
+                best = (lower, inner, polynomials)
+        _, inner, polynomials = best
+        total_polys = [exact_certificate.qpoly_add(a, b)
+                       for a, b in zip(total_polys, polynomials)]
+        edge_polynomial_choices.append(all_polynomials)
+        contacts.append({"outer_index": q0, "next_outer_index": q1,
+                         "inner_index": inner, "nonzero_witness": witness})
+    # Optimize contacts for the interval radius of the summed polynomial.
+    # This retains cancellations that choosing each edge independently loses.
+    for _ in range(2):
+        changed = False
+        for edge_index, all_polynomials in enumerate(edge_polynomial_choices):
+            old = all_polynomials[contacts[edge_index]["inner_index"]]
+            base = [exact_certificate.qpoly_add(
+                total, exact_certificate.qpoly_scale(-1, prior))
+                for total, prior in zip(total_polys, old)]
+            best = None
+            for inner, polynomials in enumerate(all_polynomials):
+                candidate = [exact_certificate.qpoly_add(a, b)
+                             for a, b in zip(base, polynomials)]
+                components = [exact_certificate.qpoly_eval_centered(
+                    polynomial, relative_center, relative_half_widths)
+                    for polynomial in candidate]
+                lower = min(sum(
+                    view[i]*(components[i][0]-components[i][1])
+                    for i in range(3)) for view in triangle)
+                if best is None or lower > best[0]:
+                    best = (lower, inner, candidate)
+            _, inner, candidate = best
+            if inner != contacts[edge_index]["inner_index"]:
+                changed = True
+                contacts[edge_index]["inner_index"] = inner
+            total_polys = candidate
+        if not changed:
+            break
+    components = [exact_certificate.qpoly_eval_centered(
+        polynomial, relative_center, relative_half_widths)
+        for polynomial in total_polys]
+    displacement_lowers = [sum(
+        view[i]*(components[i][0]-components[i][1]) for i in range(3))
+        for view in triangle]
+    endpoints = [(c-e, c+e)
+                 for c, e in zip(relative_center, relative_half_widths)]
+    d_bound = 1 + sum(max(abs(lo), abs(hi))**2 for lo, hi in endpoints)
+    error = len(cycle)*10*d_bound*exact_certificate.KAPPA
+    lower = min(displacement_lowers)-d_bound*total_defect-error
+    return {"accepted": lower > 0, "chart": chart,
+            "relative_center": relative_center,
+            "relative_half_widths": relative_half_widths,
+            "triangle": triangle, "cycle": cycle, "contacts": contacts,
+            "diagnostics": {"edge_count": len(cycle),
+                            "minimum_strict_support_lower": minimum_strict,
+                            "total_support_defect": total_defect,
+                            "cayley_d_bound": d_bound,
+                            "displacement_lowers": displacement_lowers,
+                            "error": error, "lower_bound": lower}}
+
+
+PROJECTIVE_ROOTS = (
+    ((Q(1), Q(0), Q(0)), (Q(0), Q(1), Q(0)), (Q(0), Q(0), Q(1))),
+    ((Q(1), Q(0), Q(0)), (Q(0), Q(1), Q(0)), (Q(0), Q(0), Q(-1))),
+    ((Q(1), Q(0), Q(0)), (Q(0), Q(-1), Q(0)), (Q(0), Q(0), Q(1))),
+    ((Q(-1), Q(0), Q(0)), (Q(0), Q(1), Q(0)), (Q(0), Q(0), Q(1))),
+)
+
+
+def split_projective_triangle(triangle):
+    a, b, c = triangle
+    ab = tuple((x+y)/2 for x, y in zip(a, b))
+    bc = tuple((x+y)/2 for x, y in zip(b, c))
+    ca = tuple((x+y)/2 for x, y in zip(c, a))
+    return ((a, ab, ca), (ab, b, bc), (ca, bc, c), (ab, bc, ca))
+
+
+def atlas_simplex_cover(chart, relative_center, relative_half_widths,
+                         max_depth):
+    """Cover projective viewing space for one relative Cayley box."""
+    stack = [(triangle, 0) for triangle in PROJECTIVE_ROOTS]
+    leaves = 0
+    failures = 0
+    strict_failures = 0
+    displacement_failures = 0
+    alternate_cycle_leaves = 0
+    nodes = 0
+    while stack:
+        triangle, depth = stack.pop()
+        nodes += 1
+        result = atlas_simplex_edge_smoke(
+            chart, relative_center, relative_half_widths, triangle)
+        if result is None or not result["accepted"]:
+            candidates = []
+            sample_views = list(triangle)
+            sample_views.extend(tuple((a+b)/2 for a, b in zip(left, right))
+                                for left, right in ((triangle[0], triangle[1]),
+                                                    (triangle[1], triangle[2]),
+                                                    (triangle[2], triangle[0])))
+            for view in sample_views:
+                cycle = nopert214_silhouette_cycle(view)
+                if cycle in candidates:
+                    continue
+                candidates.append(cycle)
+                alternative = atlas_simplex_edge_smoke(
+                    chart, relative_center, relative_half_widths,
+                    triangle, cycle)
+                if alternative is not None and alternative["accepted"]:
+                    result = alternative
+                    alternate_cycle_leaves += 1
+                    break
+        if result is not None and result["accepted"]:
+            leaves += 1
+        elif depth == max_depth:
+            failures += 1
+            if result is None:
+                strict_failures += 1
+            else:
+                displacement_failures += 1
+        else:
+            stack.extend((child, depth+1)
+                         for child in split_projective_triangle(triangle))
+    return {"chart": chart, "relative_center": relative_center,
+            "relative_half_widths": relative_half_widths,
+            "max_depth": max_depth, "nodes": nodes,
+            "leaves": leaves, "failures": failures,
+            "strict_failures": strict_failures,
+            "displacement_failures": displacement_failures,
+            "alternate_cycle_leaves": alternate_cycle_leaves}
+
+
 def float_h_entries(pose, direction):
     _, _, theta, phi, _ = pose
     st, ct, sp, cp = math.sin(theta), math.cos(theta), math.sin(phi), math.cos(phi)
@@ -1217,6 +1667,35 @@ def main():
     exact_global.add_argument("center", help="theta1,phi1,theta2,phi2,alpha")
     exact_global.add_argument("half_widths", help="five rational half-widths")
     exact_global.add_argument("--directions", type=int, default=48)
+    atlas_global = sub.add_parser("atlas-global-box")
+    atlas_global.add_argument("chart", type=int)
+    atlas_global.add_argument("center", help="theta,phi,x,y,z")
+    atlas_global.add_argument("half_widths", help="five rational half-widths")
+    atlas_global.add_argument("--directions", type=int, default=24)
+    atlas_profile = sub.add_parser("atlas-global-profile")
+    atlas_profile.add_argument("--samples", type=int, default=100)
+    atlas_profile.add_argument("--seed", type=int, default=1)
+    atlas_profile.add_argument("--half-widths", default="1/100,1/100,1/10,1/10,1/10")
+    atlas_profile.add_argument("--directions", type=int, default=24)
+    atlas_edge = sub.add_parser("atlas-edge-box")
+    atlas_edge.add_argument("chart", type=int)
+    atlas_edge.add_argument("center", help="theta,phi,x,y,z")
+    atlas_edge.add_argument("half_widths", help="five rational half-widths")
+    atlas_edge_profile_parser = sub.add_parser("atlas-edge-profile")
+    atlas_edge_profile_parser.add_argument("--samples", type=int, default=100)
+    atlas_edge_profile_parser.add_argument("--seed", type=int, default=1)
+    atlas_edge_profile_parser.add_argument(
+        "--half-widths", default="1/20,1/20,1/10,1/10,1/10")
+    atlas_simplex = sub.add_parser("atlas-simplex-box")
+    atlas_simplex.add_argument("chart", type=int)
+    atlas_simplex.add_argument("relative_center", help="x,y,z")
+    atlas_simplex.add_argument("relative_half_widths", help="ex,ey,ez")
+    atlas_simplex.add_argument("root", type=int)
+    atlas_cover = sub.add_parser("atlas-simplex-cover")
+    atlas_cover.add_argument("chart", type=int)
+    atlas_cover.add_argument("relative_center", help="x,y,z")
+    atlas_cover.add_argument("relative_half_widths", help="ex,ey,ez")
+    atlas_cover.add_argument("--max-depth", type=int, default=5)
     explore = sub.add_parser("explore-cover")
     explore.add_argument("--max-nodes", type=int, default=200000)
     explore.add_argument("--directions", type=int, default=24)
@@ -1280,6 +1759,60 @@ def main():
             parser.error("exact-global-box requires two five-tuples")
         print(json.dumps(exact_global_box(
             center, half_widths, args.directions), indent=2, default=str))
+    elif args.command == "atlas-global-box":
+        center = tuple(Q(value) for value in args.center.split(","))
+        half_widths = tuple(Q(value) for value in args.half_widths.split(","))
+        if not 0 <= args.chart < 4:
+            parser.error("chart must be in [0, 4)")
+        if len(center) != 5 or len(half_widths) != 5:
+            parser.error("atlas-global-box requires two five-tuples")
+        print(json.dumps(atlas_global_smoke(
+            args.chart, center, half_widths, args.directions),
+            indent=2, default=str))
+    elif args.command == "atlas-global-profile":
+        half_widths = tuple(Q(value) for value in args.half_widths.split(","))
+        if len(half_widths) != 5:
+            parser.error("--half-widths requires five values")
+        print(json.dumps(atlas_global_profile(
+            args.samples, args.seed, half_widths, args.directions),
+            indent=2, default=str))
+    elif args.command == "atlas-edge-box":
+        center = tuple(Q(value) for value in args.center.split(","))
+        half_widths = tuple(Q(value) for value in args.half_widths.split(","))
+        if not 0 <= args.chart < 4:
+            parser.error("chart must be in [0, 4)")
+        if len(center) != 5 or len(half_widths) != 5:
+            parser.error("atlas-edge-box requires two five-tuples")
+        print(json.dumps(atlas_edge_smoke(
+            args.chart, center, half_widths), indent=2, default=str))
+    elif args.command == "atlas-edge-profile":
+        half_widths = tuple(Q(value) for value in args.half_widths.split(","))
+        if len(half_widths) != 5:
+            parser.error("--half-widths requires five values")
+        print(json.dumps(atlas_edge_profile(
+            args.samples, args.seed, half_widths), indent=2, default=str))
+    elif args.command == "atlas-simplex-box":
+        center = tuple(Q(value) for value in args.relative_center.split(","))
+        widths = tuple(Q(value) for value in
+                       args.relative_half_widths.split(","))
+        if not 0 <= args.chart < 4 or not 0 <= args.root < 4:
+            parser.error("chart and root must be in [0, 4)")
+        if len(center) != 3 or len(widths) != 3:
+            parser.error("atlas-simplex-box requires two three-tuples")
+        print(json.dumps(atlas_simplex_edge_smoke(
+            args.chart, center, widths, PROJECTIVE_ROOTS[args.root]),
+            indent=2, default=str))
+    elif args.command == "atlas-simplex-cover":
+        center = tuple(Q(value) for value in args.relative_center.split(","))
+        widths = tuple(Q(value) for value in
+                       args.relative_half_widths.split(","))
+        if not 0 <= args.chart < 4:
+            parser.error("chart must be in [0, 4)")
+        if len(center) != 3 or len(widths) != 3:
+            parser.error("atlas-simplex-cover requires two three-tuples")
+        print(json.dumps(atlas_simplex_cover(
+            args.chart, center, widths, args.max_depth),
+            indent=2, default=str))
     elif args.command == "explore-cover":
         print(json.dumps(explore_cover(
             args.max_nodes, args.directions, args.local_mismatch,
