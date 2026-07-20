@@ -2824,12 +2824,12 @@ def generate_atlas_projective_table(
         fundamental_coordinates = (2,) if chart in (0, 3) else (0, 1)
         fundamental_widest = max(
             fundamental_coordinates, key=lambda i: widths[i])
-        # Resolve the Dirichlet-cell boundary before duplicating it under
-        # projective view splits.  Chart 0 has only two one-dimensional
-        # boundary slabs, so taking those even finer is almost free.
-        fundamental_cutoff = (min(min_relative_half_width, Q(1, 16384))
+        # Resolve the boundary enough to avoid gross duplication, while
+        # leaving boxes large enough for one view certificate to cover a
+        # useful portion of the boundary surface.
+        fundamental_cutoff = (min_relative_half_width
                               if chart in (0, 3) else
-                              min_relative_half_width)
+                              Q(1, 128) if chart == 1 else Q(1, 64))
         if (fundamental_status == "boundary" and
                 widths[fundamental_widest] > fundamental_cutoff):
             children = allocate(2)
