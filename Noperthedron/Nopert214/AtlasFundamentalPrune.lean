@@ -45,15 +45,15 @@ def bQuadratic (chart : ChartIndex) : RatQuadratic3 :=
   AtlasQuadratic.numeratorQuadratic chart 0 1 -
     AtlasQuadratic.numeratorQuadratic chart 1 0
 
-/-- Rational trace-advantage approximation using `cos(2π/5) ≈ 309/1000`
-and `sin(2π/5) ≈ 951/1000`. -/
+/-- Rational trace-advantage approximation using six-decimal bounds for the
+exact fivefold trigonometric coefficients. -/
 def advantageQuadratic (chart : ChartIndex)
     (direction : Direction) : RatQuadratic3 :=
-  RatQuadratic3.scale (-691 / 1000) (aQuadratic chart) +
-    RatQuadratic3.scale (direction.signQ * (951 / 1000))
+  RatQuadratic3.scale (-690983 / 1000000) (aQuadratic chart) +
+    RatQuadratic3.scale (direction.signQ * (951057 / 1000000))
       (bQuadratic chart)
 
-def approximationError : ℚ := 2 / 125
+def approximationError : ℚ := 2 / 125000
 
 structure Box where
   interval : AtlasInterval ℚ
@@ -83,20 +83,22 @@ instance (box : Box) : Decidable box.Valid := by
   infer_instance
 
 theorem cos_two_pi_div_five_bounds :
-    |Real.cos (2 * Real.pi / 5) - (309 / 1000 : ℝ)| ≤ 1 / 1000 := by
+    |Real.cos (2 * Real.pi / 5) - (309017 / 1000000 : ℝ)| ≤
+      1 / 1000000 := by
   have hsqrt0 : 0 ≤ Real.sqrt 5 := Real.sqrt_nonneg _
   have hsqrtSq : (Real.sqrt 5) ^ 2 = 5 := by norm_num
-  have hsqrtLower : (2236 / 1000 : ℝ) ≤ Real.sqrt 5 := by
-    nlinarith [sq_nonneg (Real.sqrt 5 - 2236 / 1000)]
-  have hsqrtUpper : Real.sqrt 5 ≤ (22361 / 10000 : ℝ) := by
-    nlinarith [sq_nonneg (Real.sqrt 5 - 22361 / 10000)]
+  have hsqrtLower : (2236067 / 1000000 : ℝ) ≤ Real.sqrt 5 := by
+    nlinarith [sq_nonneg (Real.sqrt 5 - 2236067 / 1000000)]
+  have hsqrtUpper : Real.sqrt 5 ≤ (2236069 / 1000000 : ℝ) := by
+    nlinarith [sq_nonneg (Real.sqrt 5 - 2236069 / 1000000)]
   rw [show 2 * Real.pi / 5 = 2 * (Real.pi / 5) by ring,
     Real.cos_two_mul, Real.cos_pi_div_five]
   rw [abs_le]
   constructor <;> nlinarith
 
 theorem sin_two_pi_div_five_bounds :
-    |Real.sin (2 * Real.pi / 5) - (951 / 1000 : ℝ)| ≤ 1 / 1000 := by
+    |Real.sin (2 * Real.pi / 5) - (951057 / 1000000 : ℝ)| ≤
+      1 / 1000000 := by
   have hangle0 : 0 < 2 * Real.pi / 5 := by positivity
   have hanglePi : 2 * Real.pi / 5 < Real.pi := by
     nlinarith [Real.pi_pos]
@@ -106,8 +108,8 @@ theorem sin_two_pi_div_five_bounds :
   rw [abs_le] at hcosBounds ⊢
   have htrig := Real.sin_sq_add_cos_sq (2 * Real.pi / 5)
   constructor <;> nlinarith [sq_nonneg
-    (Real.sin (2 * Real.pi / 5) - 951 / 1000),
-    sq_nonneg (Real.sin (2 * Real.pi / 5) - 952 / 1000)]
+    (Real.sin (2 * Real.pi / 5) - 951056 / 1000000),
+    sq_nonneg (Real.sin (2 * Real.pi / 5) - 951058 / 1000000)]
 
 theorem eval_a_abs_le_eight (chart : ChartIndex) (x y z : ℝ)
     (hbounded : x ^ 2 + y ^ 2 + z ^ 2 ≤ 3) :
@@ -157,36 +159,37 @@ theorem advantage_approximation_error (chart : ChartIndex)
           (aQuadratic chart).evalReal x y z +
         (direction.signQ : ℝ) * Real.sin (2 * Real.pi / 5) *
           (bQuadratic chart).evalReal x y z -
-        ((-691 / 1000 : ℝ) * (aQuadratic chart).evalReal x y z +
-          ((direction.signQ : ℝ) * (951 / 1000 : ℝ)) *
+        ((-690983 / 1000000 : ℝ) *
+            (aQuadratic chart).evalReal x y z +
+          ((direction.signQ : ℝ) * (951057 / 1000000 : ℝ)) *
             (bQuadratic chart).evalReal x y z) =
-      (Real.cos (2 * Real.pi / 5) - 309 / 1000) *
+      (Real.cos (2 * Real.pi / 5) - 309017 / 1000000) *
           (aQuadratic chart).evalReal x y z +
         (direction.signQ : ℝ) *
-          (Real.sin (2 * Real.pi / 5) - 951 / 1000) *
+          (Real.sin (2 * Real.pi / 5) - 951057 / 1000000) *
             (bQuadratic chart).evalReal x y z by ring]
   calc
-    _ ≤ |(Real.cos (2 * Real.pi / 5) - 309 / 1000) *
+    _ ≤ |(Real.cos (2 * Real.pi / 5) - 309017 / 1000000) *
           (aQuadratic chart).evalReal x y z| +
         |(direction.signQ : ℝ) *
-          (Real.sin (2 * Real.pi / 5) - 951 / 1000) *
+          (Real.sin (2 * Real.pi / 5) - 951057 / 1000000) *
             (bQuadratic chart).evalReal x y z| := abs_add_le _ _
-    _ = |Real.cos (2 * Real.pi / 5) - 309 / 1000| *
+    _ = |Real.cos (2 * Real.pi / 5) - 309017 / 1000000| *
           |(aQuadratic chart).evalReal x y z| +
         |(direction.signQ : ℝ)| *
-          |Real.sin (2 * Real.pi / 5) - 951 / 1000| *
+          |Real.sin (2 * Real.pi / 5) - 951057 / 1000000| *
             |(bQuadratic chart).evalReal x y z| := by
       rw [abs_mul, abs_mul, abs_mul]
     _ ≤ (approximationError : ℝ) := by
       have hca :
-          |Real.cos (2 * Real.pi / 5) - 309 / 1000| *
+          |Real.cos (2 * Real.pi / 5) - 309017 / 1000000| *
               |(aQuadratic chart).evalReal x y z| ≤
-            (1 / 1000 : ℝ) * 8 :=
+            (1 / 1000000 : ℝ) * 8 :=
         mul_le_mul hc ha (abs_nonneg _) (by norm_num)
       have hsb :
-          |Real.sin (2 * Real.pi / 5) - 951 / 1000| *
+          |Real.sin (2 * Real.pi / 5) - 951057 / 1000000| *
               |(bQuadratic chart).evalReal x y z| ≤
-            (1 / 1000 : ℝ) * 8 :=
+            (1 / 1000000 : ℝ) * 8 :=
         mul_le_mul hs hb (abs_nonneg _) (by norm_num)
       rw [hsign]
       norm_num [approximationError]
@@ -298,9 +301,9 @@ theorem Box.valid_imp_not_inFundamentalDomain
   have herr := advantage_approximation_error box.chart box.direction
     p.x p.y p.z hbounded
   have hpositive : 0 < exactAdvantage box.chart box.direction p.x p.y p.z := by
-    have hvalidQ : (2 / 125 : ℚ) < box.lower := by
+    have hvalidQ : (2 / 125000 : ℚ) < box.lower := by
       simpa [Box.Valid, approximationError] using hvalid
-    have hvalidReal : (2 / 125 : ℝ) < (box.lower : ℝ) := by
+    have hvalidReal : (2 / 125000 : ℝ) < (box.lower : ℝ) := by
       have hcast := (Rat.cast_lt (K := ℝ)).2 hvalidQ
       norm_num at hcast ⊢
       exact hcast

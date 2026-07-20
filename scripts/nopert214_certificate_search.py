@@ -1941,9 +1941,9 @@ def atlas_fundamental_advantage_qpoly(chart, direction):
 
         (cos(2*pi/5)-1) * (R00+R11) + direction*sin(2*pi/5)*(R01-R10).
 
-    Here ``R`` is the charted Cayley numerator.  The approximations 0.309 and
-    0.951 are each within 0.001 of the exact trigonometric value.  On the
-    Cayley ball, the resulting total numerator error is at most 16/1000.
+    Here ``R`` is the charted Cayley numerator.  The six-decimal rational
+    approximations are each within 1e-6 of the exact trigonometric value.  On
+    the Cayley ball, the resulting total numerator error is at most 16e-6.
     """
     if direction not in (-1, 1):
         raise ValueError("fivefold direction must be -1 or 1")
@@ -1956,11 +1956,11 @@ def atlas_fundamental_advantage_qpoly(chart, direction):
         exact_certificate.qpoly_scale(signs[0], numerator[0][1]),
         exact_certificate.qpoly_scale(-signs[1], numerator[1][0]))
     return tuple(exact_certificate.qpoly_add(
-        exact_certificate.qpoly_scale(Q(-691, 1000), a),
-        exact_certificate.qpoly_scale(Q(direction*951, 1000), b)))
+        exact_certificate.qpoly_scale(Q(-690983, 1000000), a),
+        exact_certificate.qpoly_scale(Q(direction*951057, 1000000), b)))
 
 
-FUNDAMENTAL_APPROXIMATION_ERROR = Q(2, 125)
+FUNDAMENTAL_APPROXIMATION_ERROR = Q(2, 125000)
 
 
 def atlas_fundamental_status(chart, centers, radii):
@@ -2827,9 +2827,11 @@ def generate_atlas_projective_table(
         # Resolve chart 0's one-dimensional Dirichlet-cell boundary before
         # duplicating it under projective view splits.  Its two-dimensional
         # analogues in charts 1 and 2 have quadratically many boundary boxes,
-        # so the coarser cutoff remains preferable there.
+        # so they keep coarser cutoffs.  Chart 1 benefits from one extra level
+        # because otherwise its outside boxes recur under many view regions.
         fundamental_cutoff = (min_relative_half_width
-                              if chart in (0, 3) else Q(1, 64))
+                              if chart in (0, 3) else
+                              Q(1, 128) if chart == 1 else Q(1, 64))
         if (fundamental_status == "boundary" and
                 widths[fundamental_widest] > fundamental_cutoff):
             children = allocate(2)

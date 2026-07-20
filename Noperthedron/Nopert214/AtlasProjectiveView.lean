@@ -167,8 +167,10 @@ theorem viewVector_second_le_slope_first {p : AtlasPose ℝ}
   rw [Real.sin_sub] at hdiff
   have hc := AtlasFundamentalPrune.cos_two_pi_div_five_bounds
   have hs := AtlasFundamentalPrune.sin_two_pi_div_five_bounds
-  change |Real.cos angle - (309 / 1000 : ℝ)| ≤ 1 / 1000 at hc
-  change |Real.sin angle - (951 / 1000 : ℝ)| ≤ 1 / 1000 at hs
+  change |Real.cos angle - (309017 / 1000000 : ℝ)| ≤
+    1 / 1000000 at hc
+  change |Real.sin angle - (951057 / 1000000 : ℝ)| ≤
+    1 / 1000000 at hs
   rw [abs_le] at hc hs
   have htrig : Real.sin p.θ ≤ (31 / 10 : ℝ) * Real.cos p.θ := by
     have hlo : (308 / 1000 : ℝ) * Real.sin p.θ ≤
