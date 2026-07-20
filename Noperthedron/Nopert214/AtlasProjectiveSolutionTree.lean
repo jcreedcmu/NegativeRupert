@@ -218,8 +218,9 @@ slices independently and join them with `rowsValidRange_append`, avoiding one
 enormous reduction in the kernel evaluator. -/
 def RowsValidRangeAt (chart : ChartIndex) (get : ℕ → Row) (size start count : ℕ) :
     Prop :=
-  ∀ i : Fin size, start ≤ i.val → i.val < start + count →
-    (get i).id = i ∧ (get i).ValidAt chart get size
+  start + count ≤ size ∧ ∀ j : Fin count,
+    (get (start + j.val)).id = start + j.val ∧
+      (get (start + j.val)).ValidAt chart get size
 
 instance (chart : ChartIndex) (get : ℕ → Row) (size start count : ℕ) :
     Decidable (RowsValidRangeAt chart get size start count) := by
@@ -231,18 +232,22 @@ theorem rowsValidRange_append {chart : ChartIndex} {get : ℕ → Row}
     (hleft : RowsValidRangeAt chart get size start left)
     (hright : RowsValidRangeAt chart get size (start + left) right) :
     RowsValidRangeAt chart get size start (left + right) := by
-  intro i hlo hhi
-  by_cases hmid : i.val < start + left
-  · exact hleft i hlo hmid
-  · apply hright i
-    · omega
-    · omega
+  unfold RowsValidRangeAt at hleft hright ⊢
+  constructor
+  · omega
+  · intro j
+    by_cases hmid : j.val < left
+    · simpa using hleft.2 ⟨j.val, hmid⟩
+    · have hjright : j.val - left < right := by omega
+      have hr := hright.2 ⟨j.val - left, hjright⟩
+      have hi : start + left + (j.val - left) = start + j.val := by omega
+      simpa [hi] using hr
 
 theorem rowsValidAt_of_range {chart : ChartIndex} {get : ℕ → Row} {size : ℕ}
     (h : RowsValidRangeAt chart get size 0 size) :
     RowsValidAt chart get size := by
   intro i
-  exact h i (by omega) (by simpa using i.isLt)
+  simpa using h.2 ⟨i.val, i.isLt⟩
 
 theorem valid_imp_noRupert_ix (chart : ChartIndex) (get : ℕ → Row)
     (size : ℕ) (rowsValid : RowsValidAt chart get size)

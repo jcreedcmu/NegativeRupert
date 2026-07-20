@@ -42,7 +42,14 @@ def table : AtlasProjectiveSolutionTree.Table where
 
 theorem table_valid_native : table.Valid := by native_decide
 
-theorem table_valid_kernel : table.Valid := by decide +kernel
+private theorem rows_valid_range_kernel :
+    RowsValidRangeAt 3 getRowKernel 4 0 4 := by
+  decide +kernel
+
+theorem table_valid_kernel : table.Valid := by
+  refine ⟨by decide, rowsValidAt_of_range rows_valid_range_kernel, ?_, ?_⟩
+  · decide +kernel
+  · decide +kernel
 
 end Noperthedron.Nopert214.FundamentalChart3
 
