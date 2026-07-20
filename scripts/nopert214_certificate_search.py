@@ -706,11 +706,25 @@ def exact_local_view(theta, phi, outer_half_width=Q(1, 1000),
 def exact_global_box(center, half_widths, direction_count=48,
                      direction_denominator=1000):
     """Find an exact determinant-balanced global certificate for a box."""
-    rows = []
+    direction_candidates = []
     for k in range(direction_count):
         angle = -math.pi + 2 * math.pi * (k + 0.37) / direction_count
-        direction = exact_certificate.direction_q(
-            angle, direction_denominator)
+        direction_candidates.append(exact_certificate.direction_q(
+            angle, direction_denominator))
+    outer_points = [rot_m(float(center[2]), float(center[3]), vertex)
+                    for vertex in VERTICES]
+    cycle = convex_hull(outer_points)
+    for position, start in enumerate(cycle):
+        finish = cycle[(position + 1) % len(cycle)]
+        edge = (outer_points[finish][0] - outer_points[start][0],
+                outer_points[finish][1] - outer_points[start][1])
+        angle = math.atan2(-edge[0], edge[1])
+        direction_candidates.append(exact_certificate.direction_q(
+            angle, direction_denominator))
+    # Preserve order while eliminating rational duplicates.
+    direction_candidates = list(dict.fromkeys(direction_candidates))
+    rows = []
+    for direction in direction_candidates:
         outer = max(exact_certificate.fast_h(
             center, half_widths[2], half_widths[3], direction, vertex)
             for vertex in exact_certificate.VERTICES_Q)
@@ -725,7 +739,7 @@ def exact_global_box(center, half_widths, direction_count=48,
             "margin": inner_values[inner_index] - outer,
         })
     best = None
-    for indices in itertools.combinations(range(direction_count), 3):
+    for indices in itertools.combinations(range(len(rows)), 3):
         chosen = [rows[index] for index in indices]
         weights = exact_certificate.determinant_weights(
             [row["direction"] for row in chosen])
@@ -816,7 +830,8 @@ def float_fast_g(pose, ealpha, etheta, ephi, direction, vertex):
     return values[0] - penalty
 
 
-def float_global_margin(center, half_widths, direction_count=32):
+def float_global_margin(center, half_widths, direction_count=32,
+                        include_hull_directions=False):
     outer = [rot_m(center[2], center[3], vertex) for vertex in VERTICES]
     cycle = convex_hull(outer)
     directions = []
@@ -824,12 +839,13 @@ def float_global_margin(center, half_widths, direction_count=32):
     for k in range(direction_count):
         angle = -math.pi + 2*math.pi*(k + 0.37)/direction_count
         directions.append((math.cos(angle), math.sin(angle)))
-    for position, start in enumerate(cycle):
-        finish = cycle[(position + 1) % len(cycle)]
-        edge = (outer[finish][0] - outer[start][0],
-                outer[finish][1] - outer[start][1])
-        length = math.hypot(*edge)
-        directions.append((edge[1] / length, -edge[0] / length))
+    if include_hull_directions:
+        for position, start in enumerate(cycle):
+            finish = cycle[(position + 1) % len(cycle)]
+            edge = (outer[finish][0] - outer[start][0],
+                    outer[finish][1] - outer[start][1])
+            length = math.hypot(*edge)
+            directions.append((edge[1] / length, -edge[0] / length))
     for direction in directions:
         outer = max(float_fast_h(center, half_widths[2], half_widths[3],
                                  direction, vertex)
@@ -907,6 +923,7 @@ def explore_cover(max_nodes=200_000, global_directions=24,
     max_depth = 0
     minimum_global_margin = math.inf
     deepest = None
+    local_outer_ranges = None
     while stack and counts["nodes"] < max_nodes:
         bounds, depth = stack.pop()
         counts["nodes"] += 1
@@ -920,7 +937,8 @@ def explore_cover(max_nodes=200_000, global_directions=24,
             continue
         center = tuple(float((lo + hi) / 2) for lo, hi in bounds)
         widths = tuple(float((hi - lo) / 2) for lo, hi in bounds)
-        margin = float_global_margin(center, widths, global_directions)
+        margin = float_global_margin(
+            center, widths, global_directions, include_hull_directions=True)
         if margin > global_margin_cutoff:
             counts["global"] += 1
             minimum_global_margin = min(minimum_global_margin, margin)
@@ -931,8 +949,20 @@ def explore_cover(max_nodes=200_000, global_directions=24,
         if mismatch <= local_mismatch and outer_radius <= local_outer_radius:
             counts["local"] += 1
             counts["local_symmetry_histogram"][str(symmetry_index)] += 1
+            if local_outer_ranges is None:
+                local_outer_ranges = [[center[2], center[2]],
+                                      [center[3], center[3]]]
+            else:
+                for output_index, coordinate in enumerate((2, 3)):
+                    local_outer_ranges[output_index][0] = min(
+                        local_outer_ranges[output_index][0], center[coordinate])
+                    local_outer_ranges[output_index][1] = max(
+                        local_outer_ranges[output_index][1], center[coordinate])
             continue
-        split = max(range(5), key=lambda i: bounds[i][1] - bounds[i][0])
+        if outer_radius > local_outer_radius:
+            split = max((2, 3), key=lambda i: bounds[i][1] - bounds[i][0])
+        else:
+            split = max((0, 1, 4), key=lambda i: bounds[i][1] - bounds[i][0])
         lo, hi = bounds[split]
         middle = (lo + hi) / 2
         if middle == lo or middle == hi:
@@ -947,6 +977,7 @@ def explore_cover(max_nodes=200_000, global_directions=24,
     counts["queued"] = len(stack)
     counts["max_depth"] = max_depth
     counts["minimum_global_margin"] = minimum_global_margin
+    counts["local_outer_ranges"] = local_outer_ranges
     if deepest is not None:
         deep_center = tuple(float((lo + hi) / 2) for lo, hi in deepest[1])
         deep_widths = tuple(float((hi - lo) / 2) for lo, hi in deepest[1])
@@ -957,6 +988,167 @@ def explore_cover(max_nodes=200_000, global_directions=24,
         counts["deepest_center_mismatch"] = deep_mismatch
         counts["deepest_local_radius"] = deep_mismatch + sum(deep_widths)
     return counts
+
+
+def root_bounds():
+    return ((Q(-4, 5), Q(12, 5)), (Q(0), Q(4)),
+            (Q(0), Q(8, 5)), (Q(0), Q(4)), (Q(-4), Q(4)))
+
+
+def bounds_center_widths(bounds):
+    center = tuple((lo + hi) / 2 for lo, hi in bounds)
+    widths = tuple((hi - lo) / 2 for lo, hi in bounds)
+    return center, widths
+
+
+def bounds_outside_relative_strip(bounds):
+    return (bounds[0][0] - bounds[2][1] > Q(2, 3) or
+            bounds[0][1] - bounds[2][0] < Q(-2, 3))
+
+
+def split_bounds(bounds, coordinate):
+    lo, hi = bounds[coordinate]
+    middle = (lo + hi) / 2
+    lower, upper = list(bounds), list(bounds)
+    lower[coordinate] = (lo, middle)
+    upper[coordinate] = (middle, hi)
+    return tuple(lower), tuple(upper)
+
+
+def generate_exact_cover(max_nodes=200_000, global_directions=8,
+                         local_mismatch=0.02, local_outer_radius=0.005,
+                         global_margin_cutoff=1e-8,
+                         local_trial_limit=2000, checkpoint_path=None,
+                         checkpoint_every=1000):
+    """Generate a proof-shaped mixed tree, validating every accepted leaf.
+
+    The returned JSON is discovery data, not a trusted proof artifact.  Its
+    rational rows are subsequently emitted as Lean and checked by
+    ``SolutionTree.RowsValidAt``.
+    """
+    rows = [None]
+    stack = [(0, root_bounds(), 0)]
+    counts = {"split": 0, "global": 0, "local": 0, "outside": 0,
+              "exact_global_rejections": 0, "exact_local_rejections": 0}
+    local_cache = {}
+    maximum_depth = 0
+
+    def save_checkpoint(complete=False):
+        if checkpoint_path is None:
+            return
+        payload = {
+            "complete": complete,
+            "rows": rows,
+            "pending": stack,
+            "counts": counts,
+            "maximum_depth": maximum_depth,
+        }
+        with open(checkpoint_path, "w", encoding="utf-8") as output:
+            json.dump(payload, output, default=str)
+
+    while stack and len(rows) < max_nodes:
+        row_id, bounds, depth = stack.pop()
+        maximum_depth = max(maximum_depth, depth)
+        if bounds_outside_relative_strip(bounds):
+            rows[row_id] = {"kind": "outside", "id": row_id,
+                            "bounds": bounds}
+            counts["outside"] += 1
+            continue
+
+        center_q, widths_q = bounds_center_widths(bounds)
+        center = tuple(map(float, center_q))
+        widths = tuple(map(float, widths_q))
+        margin = float_global_margin(
+            center, widths, global_directions, include_hull_directions=True)
+        if margin > global_margin_cutoff:
+            certificate = exact_global_box(
+                center_q, widths_q, global_directions)
+            if certificate is not None:
+                rows[row_id] = {"kind": "global", "id": row_id,
+                                "bounds": bounds,
+                                "certificate": certificate}
+                counts["global"] += 1
+                continue
+            counts["exact_global_rejections"] += 1
+
+        center_mismatch, symmetry_index = nearest_symmetry_mismatch(center)
+        estimated_radius = center_mismatch + sum(widths)
+        if (estimated_radius <= local_mismatch and
+                widths[2] + widths[3] <= local_outer_radius):
+            cache_key = (center_q[2], center_q[3], widths_q[2], widths_q[3])
+            try:
+                if cache_key not in local_cache:
+                    template = exact_local_row(
+                        center_q, widths_q, symmetry_index,
+                        direction_denominator=1000, cone_samples=1,
+                        trial_limit=local_trial_limit)
+                    local_cache[cache_key] = template
+                else:
+                    template = local_cache[cache_key]
+                    selected_rows = [[
+                        (contact["selected_index"], contact["direction"])
+                        for contact in certificate["contacts"]]
+                        for certificate in template["certificates"]]
+                    exact_r, frobenius_sq = exact_mismatch_radius(
+                        center_q, widths_q, symmetry_index)
+                    r = exact_certificate.ceil_to(exact_r, 10**12)
+                    c = template["c"]
+                    if r * r * (1 + c * c) > 4 * c * c:
+                        raise RuntimeError("cached local angle bound failed")
+                    template = {
+                        **template,
+                        "center": list(center_q),
+                        "half_widths": list(widths_q),
+                        "symmetry_index": symmetry_index,
+                        "r": r,
+                        "certificates": [{"contacts": [{
+                            "index": inverse_symmetry_action(
+                                symmetry_index, selected),
+                            "selected_index": selected,
+                            "direction": direction,
+                        } for selected, direction in contacts]}
+                            for contacts in selected_rows],
+                        "diagnostics": {
+                            "mismatch_frobenius_sq": frobenius_sq,
+                            "exact_mismatch_radius": exact_r,
+                        },
+                    }
+                rows[row_id] = {"kind": "local", "id": row_id,
+                                "bounds": bounds, "certificate": template}
+                counts["local"] += 1
+                continue
+            except (RuntimeError, AssertionError, ValueError):
+                counts["exact_local_rejections"] += 1
+
+        outer_radius = widths[2] + widths[3]
+        if outer_radius > local_outer_radius:
+            coordinate = max((2, 3),
+                key=lambda i: bounds[i][1] - bounds[i][0])
+        else:
+            coordinate = max((0, 1, 4),
+                key=lambda i: bounds[i][1] - bounds[i][0])
+        lower, upper = split_bounds(bounds, coordinate)
+        lower_id, upper_id = len(rows), len(rows) + 1
+        rows.extend((None, None))
+        rows[row_id] = {"kind": "split", "id": row_id,
+                        "bounds": bounds, "coordinate": coordinate,
+                        "lower_child": lower_id, "upper_child": upper_id}
+        counts["split"] += 1
+        stack.append((upper_id, upper, depth + 1))
+        stack.append((lower_id, lower, depth + 1))
+
+        processed = sum(counts.values()) - counts["exact_global_rejections"] - \
+            counts["exact_local_rejections"]
+        if checkpoint_every and processed % checkpoint_every == 0:
+            save_checkpoint(False)
+            print(json.dumps({"rows": len(rows), "pending": len(stack),
+                              "depth": maximum_depth, **counts}),
+                  file=sys.stderr, flush=True)
+
+    complete = not stack
+    save_checkpoint(complete)
+    return {"complete": complete, "rows": rows, "pending": stack,
+            "counts": counts, "maximum_depth": maximum_depth}
 
 
 def random_profile(samples, seed):
@@ -1031,6 +1223,15 @@ def main():
     explore.add_argument("--local-mismatch", type=float, default=0.01)
     explore.add_argument("--local-outer-radius", type=float, default=0.005)
     explore.add_argument("--global-margin-cutoff", type=float, default=1e-9)
+    generate = sub.add_parser("generate-cover")
+    generate.add_argument("--max-nodes", type=int, default=200000)
+    generate.add_argument("--directions", type=int, default=8)
+    generate.add_argument("--local-mismatch", type=float, default=0.02)
+    generate.add_argument("--local-outer-radius", type=float, default=0.005)
+    generate.add_argument("--global-margin-cutoff", type=float, default=1e-8)
+    generate.add_argument("--local-trials", type=int, default=2000)
+    generate.add_argument("--checkpoint")
+    generate.add_argument("--checkpoint-every", type=int, default=1000)
     args = parser.parse_args()
     if args.command == "profile":
         print(json.dumps(random_profile(args.samples, args.seed), indent=2))
@@ -1083,6 +1284,16 @@ def main():
         print(json.dumps(explore_cover(
             args.max_nodes, args.directions, args.local_mismatch,
             args.local_outer_radius, args.global_margin_cutoff), indent=2))
+    elif args.command == "generate-cover":
+        result = generate_exact_cover(
+            args.max_nodes, args.directions, args.local_mismatch,
+            args.local_outer_radius, args.global_margin_cutoff,
+            args.local_trials, args.checkpoint, args.checkpoint_every)
+        summary = {key: value for key, value in result.items()
+                   if key not in ("rows", "pending")}
+        summary["row_count"] = len(result["rows"])
+        summary["pending_count"] = len(result["pending"])
+        print(json.dumps(summary, indent=2, default=str))
     else:
         values = tuple(Q(value) for value in args.values.split(","))
         if len(values) != 5:
