@@ -223,6 +223,57 @@ def tpoly_scale(coefficient, value):
     return tpoly_mul(tpoly_const(coefficient), value)
 
 
+# Sparse exact polynomials with an arbitrary number of variables.  These are
+# used for the five-variable blow-up `(d,e,a,b,t)` after the exploratory
+# scaling has been fixed.
+def epoly_const(arity, value):
+    return {} if value == TEXPR_ZERO else {(0,)*arity: value}
+
+
+def epoly_var(arity, index):
+    power = [0]*arity
+    power[index] = 1
+    return {tuple(power): TEXPR_ONE}
+
+
+def epoly_add(left, right):
+    out = dict(left)
+    for power, coefficient in right.items():
+        out[power] = texpr_add(out.get(power, TEXPR_ZERO), coefficient)
+        if out[power] == TEXPR_ZERO:
+            del out[power]
+    return out
+
+
+def epoly_neg(value):
+    return {power: texpr_neg(coefficient)
+            for power, coefficient in value.items()}
+
+
+def epoly_sub(left, right):
+    return epoly_add(left, epoly_neg(right))
+
+
+def epoly_mul(left, right):
+    out = {}
+    for left_power, left_coefficient in left.items():
+        for right_power, right_coefficient in right.items():
+            power = tuple(a+b for a, b in zip(left_power, right_power))
+            out[power] = texpr_add(out.get(power, TEXPR_ZERO),
+                                  texpr_mul(left_coefficient,
+                                            right_coefficient))
+            if out[power] == TEXPR_ZERO:
+                del out[power]
+    return out
+
+
+def epoly_scale(coefficient, value):
+    if not value or coefficient == TEXPR_ZERO:
+        return {}
+    return {power: texpr_mul(coefficient, term)
+            for power, term in value.items()}
+
+
 def normalized_vertices_symbolic():
     base = ((Q(0), Q(1), Q(0)),
             (Q(1), Q(0), Q(0)),
@@ -391,6 +442,115 @@ def exact_z_transition_ratio_boxes():
 
     visit(Q(2, 5), Q(27, 4), 0)
     return leaves
+
+
+def exact_transition_blowup_polynomial(starts, finishes, supports,
+                                       competitors):
+    """Exact cleared obstruction in `(d,e,a,b,t)`, with its `d` factor removed.
+
+    `competitors[i]` is a vertex attaining the support defect for contact
+    `i` on the intended chart.  Separate linear checks certify that these
+    choices dominate every vertex on each generated chart box.
+    """
+    arity = 5
+    d, e, a, b, ratio = [epoly_var(arity, i) for i in range(arity)]
+    one = epoly_const(arity, TEXPR_ONE)
+    edges = [[texpr_sub(x, y) for x, y in zip(
+        VERTICES_SYMBOLIC[start], VERTICES_SYMBOLIC[finish])]
+        for start, finish in zip(starts, finishes)]
+    transition_edge = [texpr_sub(x, y) for x, y in zip(
+        VERTICES_SYMBOLIC[15], VERTICES_SYMBOLIC[11])]
+    transition_delta = [texpr_sub(x, y) for x, y in zip(
+        VERTICES_SYMBOLIC[3], VERTICES_SYMBOLIC[15])]
+    seam_coefficient = symbolic_cross(transition_edge, transition_delta)
+    inverse_slope = texpr_inv(
+        texpr_sub(seam_coefficient[1], seam_coefficient[0]))
+    h = epoly_mul(d, e)
+    u_numerator = epoly_sub(
+        epoly_sub(d, epoly_scale(seam_coefficient[0],
+                                epoly_sub(one, h))),
+        epoly_scale(seam_coefficient[2], h))
+    u = epoly_scale(inverse_slope, u_numerator)
+    view = [epoly_sub(epoly_sub(one, u), h), u, h]
+
+    def dot_view_exact(vector):
+        total = {}
+        for coordinate in range(3):
+            total = epoly_add(total,
+                epoly_scale(vector[coordinate], view[coordinate]))
+        return total
+
+    weights = [dot_view_exact(symbolic_cross(edges[1], edges[2])),
+               dot_view_exact(symbolic_cross(edges[2], edges[0])),
+               dot_view_exact(symbolic_cross(edges[0], edges[1]))]
+    x = epoly_mul(epoly_mul(d, d), a)
+    y = epoly_mul(epoly_mul(d, d), b)
+    z = epoly_mul(d, ratio)
+    xx, yy, zz = epoly_mul(x, x), epoly_mul(y, y), epoly_mul(z, z)
+    xy, xz, yz = epoly_mul(x, y), epoly_mul(x, z), epoly_mul(y, z)
+    denominator = epoly_add(epoly_add(epoly_add(one, xx), yy), zz)
+    two = (Q(2), Q(0), Q(0))
+    minus_two = (Q(-2), Q(0), Q(0))
+
+    def add_terms(*values):
+        total = {}
+        for value in values:
+            total = epoly_add(total, value)
+        return total
+
+    obstruction = {}
+    support_polynomials = []
+    for weight, edge, support, competitor in zip(
+            weights, edges, supports, competitors):
+        q = VERTICES_SYMBOLIC[support]
+        displacement = [
+            add_terms(epoly_scale(texpr_mul(minus_two, q[0]),
+                                   epoly_add(yy, zz)),
+                      epoly_scale(texpr_mul(two, q[1]),
+                                   epoly_sub(xy, z)),
+                      epoly_scale(texpr_mul(two, q[2]),
+                                   epoly_add(xz, y))),
+            add_terms(epoly_scale(texpr_mul(two, q[0]),
+                                   epoly_add(xy, z)),
+                      epoly_scale(texpr_mul(minus_two, q[1]),
+                                   epoly_add(xx, zz)),
+                      epoly_scale(texpr_mul(two, q[2]),
+                                   epoly_sub(yz, x))),
+            add_terms(epoly_scale(texpr_mul(two, q[0]),
+                                   epoly_sub(xz, y)),
+                      epoly_scale(texpr_mul(two, q[1]),
+                                   epoly_add(yz, x)),
+                      epoly_scale(texpr_mul(minus_two, q[2]),
+                                   epoly_add(xx, yy))),
+        ]
+        contact = [epoly_sub(epoly_scale(edge[1], displacement[2]),
+                             epoly_scale(edge[2], displacement[1])),
+                   epoly_sub(epoly_scale(edge[2], displacement[0]),
+                             epoly_scale(edge[0], displacement[2])),
+                   epoly_sub(epoly_scale(edge[0], displacement[1]),
+                             epoly_scale(edge[1], displacement[0]))]
+        contact_value = {}
+        for coordinate in range(3):
+            contact_value = epoly_add(contact_value,
+                epoly_mul(view[coordinate], contact[coordinate]))
+        delta = [texpr_sub(x, y) for x, y in zip(
+            VERTICES_SYMBOLIC[competitor], q)]
+        support_value = dot_view_exact(symbolic_cross(edge, delta))
+        support_polynomials.append(support_value)
+        cleared_margin = epoly_sub(
+            contact_value, epoly_mul(denominator, support_value))
+        obstruction = epoly_add(obstruction,
+                                epoly_mul(weight, cleared_margin))
+    minimum_d_power = min(power[0] for power in obstruction)
+    if minimum_d_power < 1:
+        raise RuntimeError("transition obstruction has no seam factor")
+    quotient = {(d_power-minimum_d_power,
+                 e_power, a_power, b_power, t_power): coefficient
+                for (d_power, e_power, a_power, b_power, t_power), coefficient
+                in obstruction.items()}
+    return {"quotient": quotient, "weights": weights,
+            "support_polynomials": support_polynomials,
+            "minimum_d_power": minimum_d_power}
 
 
 def vertex_matrix_int(index: int):
@@ -1522,6 +1682,218 @@ def projective_transition_profile():
         "heterogeneous_limit": heterogeneous,
         "axis_z_exact_quadratic": quadratic_rows,
         "samples": samples,
+    }
+
+
+def transition_axis_families():
+    """Return the oriented three-contact bank at the hard transition view."""
+    try:
+        from experiment_snub_axis_free import certificate_vectors
+        import experiment_snub_cube as experiment_cube
+    except ModuleNotFoundError:
+        from scripts.experiment_snub_axis_free import certificate_vectors
+        from scripts import experiment_snub_cube as experiment_cube
+    convention = np.diag([-1.0, -1.0, 1.0])
+    source_view = np.asarray([.8, .2, 0.0])
+    _, payloads, _ = certificate_vectors(source_view @ convention)
+    normalized_search_vertices = VERTICES_EXACT / np.linalg.norm(
+        VERTICES_EXACT[0])
+    rotated_experiment_vertices = experiment_cube.UNIT_VERTS @ convention
+    index_map = [int(np.argmin(np.linalg.norm(
+        normalized_search_vertices-rotated_experiment_vertices[i], axis=1)))
+        for i in range(24)]
+    transition_edge = VERTICES_EXACT[15] - VERTICES_EXACT[11]
+    transition_delta = VERTICES_EXACT[3] - VERTICES_EXACT[15]
+    seam = np.cross(transition_edge, transition_delta)
+    u0 = float(-seam[0]/(seam[1]-seam[0]))
+    transition_view = np.asarray([1-u0, u0, 0.0])
+    families = []
+    for source_index, payload in enumerate(payloads):
+        if len(payload["support_pairs"]) != 3:
+            continue
+        starts, finishes = [], []
+        for a, b, sigma in payload["support_pairs"]:
+            a, b = index_map[a], index_map[b]
+            start, finish = ((b, a) if sigma == 1 else (a, b))
+            starts.append(start)
+            finishes.append(finish)
+        supports = [index_map[i] for i in payload["support_vertices"]]
+        edges = [VERTICES_EXACT[a]-VERTICES_EXACT[b]
+                 for a, b in zip(starts, finishes)]
+        weights = np.asarray([
+            transition_view @ np.cross(edges[1], edges[2]),
+            transition_view @ np.cross(edges[2], edges[0]),
+            transition_view @ np.cross(edges[0], edges[1])])
+        if weights.max() < 0:
+            starts[1], starts[2] = starts[2], starts[1]
+            finishes[1], finishes[2] = finishes[2], finishes[1]
+            supports[1], supports[2] = supports[2], supports[1]
+            edges[1], edges[2] = edges[2], edges[1]
+            weights = weights[[0, 2, 1]] * -1
+        if weights.min() < -1e-9 or weights.sum() <= 1e-12:
+            continue
+        families.append({"name": f"axis-family-{len(families)}",
+                         "source_index": source_index,
+                         "starts": starts, "finishes": finishes,
+                         "supports": supports, "edges": edges})
+    return families
+
+
+def projective_transition_blowup_profile(samples: int, seed: int):
+    """Probe the full scale-invariant chart around the hardest seam.
+
+    The exact z-axis certificate uses ``z=d*t``.  The pointwise local margin
+    shows that the remaining bad axis cone narrows linearly with ``d``, so
+    the transverse Cayley coordinates have the second-order scaling
+    ``x=d^2*a`` and ``y=d^2*b``.  The seam is on the symmetry wall ``n_z=0``;
+    its tangential projective coordinate is written ``n_z=d*e``.
+
+    This routine is exploratory (the eventual boxes are checked exactly in
+    Lean), but it evaluates the actual finite Cayley rotation, exact snub
+    vertices, determinant weights, and support defects.  Its output tells us
+    whether one algebraic family controls a genuine five-variable chart.
+    """
+    families = transition_axis_families()
+    quadratic_family = families[192]
+    transition_edge = VERTICES_EXACT[15] - VERTICES_EXACT[11]
+    transition_delta = VERTICES_EXACT[3] - VERTICES_EXACT[15]
+    seam = np.cross(transition_edge, transition_delta)
+    slope = float(seam[1]-seam[0])
+
+    def evaluate(family, d, e, a, b, t):
+        h = d*e
+        u = (d-float(seam[0])*(1-h)-float(seam[2])*h)/slope
+        view = np.asarray([1-u-h, u, h])
+        cayley = np.asarray([d*d*a, d*d*b, d*t])
+        x, y, z = cayley
+        denominator = 1+x*x+y*y+z*z
+        numerator = np.asarray([
+            [1+x*x-y*y-z*z, 2*(x*y-z), 2*(x*z+y)],
+            [2*(x*y+z), 1-x*x+y*y-z*z, 2*(y*z-x)],
+            [2*(x*z-y), 2*(y*z+x), 1-x*x-y*y+z*z]])
+        weights = np.asarray([
+            view @ np.cross(family["edges"][1], family["edges"][2]),
+            view @ np.cross(family["edges"][2], family["edges"][0]),
+            view @ np.cross(family["edges"][0], family["edges"][1])])
+        if weights.min() < -1e-10:
+            return {"quotient": -math.inf,
+                    "displacement_quotient": -math.inf,
+                    "defect_quotient": math.inf,
+                    "minimum_weight": float(weights.min()),
+                    "maximum_support_defect": math.inf,
+                    "view": view.tolist()}
+        cleared_displacement = 0.0
+        cleared_defect = 0.0
+        defects = []
+        for weight, edge, selected in zip(
+                weights, family["edges"], family["supports"]):
+            q = VERTICES_EXACT[selected]
+            displacement = numerator@q-denominator*q
+            cleared_displacement += weight*float(
+                view @ np.cross(edge, displacement))
+            defect = max(0.0, max(float(view @ np.cross(
+                edge, VERTICES_EXACT[k]-q)) for k in range(24)))
+            defects.append(defect)
+            cleared_defect += weight*denominator*defect
+        return {
+            "quotient": (cleared_displacement-cleared_defect)/(d*d),
+            "displacement_quotient": cleared_displacement/(d*d),
+            "defect_quotient": cleared_defect/(d*d),
+            "minimum_weight": float(weights.min()),
+            "maximum_support_defect": max(defects),
+            "view": view.tolist(),
+        }
+
+    # Deterministic corners first, then log-uniform seam scales and random
+    # chart coordinates.  Ranges are deliberately generous; ordinary local
+    # leaves are expected to take over well before their boundary.
+    records = []
+    for d in (1e-7, 1e-6, 1e-5, 1e-4, 1e-3):
+        for e in (0.0, 1.0, 4.0, 16.0):
+            for a in (-16.0, 0.0, 16.0):
+                for b in (-16.0, 0.0, 16.0):
+                    for t in (0.4, 1.0, 3.0, 6.0, 6.75):
+                        records.append((d, e, a, b, t,
+                                        evaluate(quadratic_family,
+                                                 d, e, a, b, t)))
+    rng = random.Random(seed)
+    for _ in range(samples):
+        d = 10**rng.uniform(-8, -3)
+        e = rng.uniform(0, 16)
+        a = rng.uniform(-16, 16)
+        b = rng.uniform(-16, 16)
+        t = rng.uniform(.4, 6.75)
+        records.append((d, e, a, b, t,
+                        evaluate(quadratic_family, d, e, a, b, t)))
+    records.sort(key=lambda row: row[-1]["quotient"])
+    values = np.asarray([row[-1]["quotient"] for row in records])
+    probe_d = 1e-5
+    candidate_indices = {2, 192}
+    for e, t in ((.5, 5.8), (1.0, 5.0), (1.5, 4.2),
+                 (2.0, 3.2), (2.0, 3.4)):
+        scores = [evaluate(family, probe_d, e, 0.0, 0.0, t)[
+            "quotient"] for family in families]
+        candidate_indices.add(int(np.argmax(scores)))
+    transition_families = [families[i] for i in sorted(candidate_indices)]
+    overlap = []
+    for e in (0.0, .5, 1.0, 1.5, 2.0, 3.0):
+        h = probe_d*e
+        u = (probe_d-float(seam[0])*(1-h)-float(seam[2])*h)/slope
+        view = [1-u-h, u, h]
+        view_q = [Q(round(value*10**12), 10**12) for value in view]
+        view_q[-1] += 1-sum(view_q, Q(0))
+        try:
+            regular = projective_local_triangle([view_q]*3)
+            regular_ratio = float(regular["c"])/probe_d
+        except (RuntimeError, ValueError):
+            regular_ratio = 0.0
+        t_grid = np.linspace(.4, 10, 49)
+        worst_by_t = [min(max(evaluate(
+                              family, probe_d, e, a, b, float(t))["quotient"]
+                                  for family in transition_families)
+                          for a in (-16.0, 0.0, 16.0)
+                          for b in (-16.0, 0.0, 16.0))
+                      for t in t_grid]
+        covered_after_regular = [float(t) for t, value in
+                                 zip(t_grid, worst_by_t)
+                                 if t >= regular_ratio and value >= 0]
+        overlap.append({
+            "e": e,
+            "regular_radius_over_d": regular_ratio,
+            "family_minimum_on_transverse_corners": min(worst_by_t),
+            "family_worst_t": float(t_grid[int(np.argmin(worst_by_t))]),
+            "family_negative_t": [float(t) for t, value in
+                                  zip(t_grid, worst_by_t) if value < 0],
+            "family_positive_t_min": (min(covered_after_regular)
+                                      if covered_after_regular else None),
+            "family_positive_t_max": (max(covered_after_regular)
+                                      if covered_after_regular else None),
+            "gap_at_regular_boundary": (min(
+                max(evaluate(family, probe_d, e, a, b,
+                             regular_ratio)["quotient"]
+                    for family in transition_families)
+                for a in (-16.0, 0.0, 16.0)
+                for b in (-16.0, 0.0, 16.0))
+                if regular_ratio > 0 else None),
+        })
+    return {
+        "scaling": {"n_z": "d*e", "x": "d^2*a", "y": "d^2*b",
+                    "z": "d*t"},
+        "family_count": len(families),
+        "selected_transition_family_indices": sorted(candidate_indices),
+        "selected_transition_families": [
+            {key: value for key, value in families[i].items()
+             if key != "edges"} for i in sorted(candidate_indices)],
+        "quadratic_family": {key: value for key, value in
+                             quadratic_family.items() if key != "edges"},
+        "sample_count": len(records),
+        "quotient_quantiles_min_01_10_50_90_max": np.quantile(
+            values, [0, .01, .1, .5, .9, 1]).tolist(),
+        "negative_count": int((values < 0).sum()),
+        "regular_transition_overlap": overlap,
+        "worst": [{
+            "d": d, "e": e, "a": a, "b": b, "t": t, **result}
+            for d, e, a, b, t, result in records[:20]],
     }
 
 
@@ -2906,6 +3278,10 @@ def main():
     projective_local_cover_parser.add_argument("--exact-audit-limit", type=int,
                                                default=25)
     sub.add_parser("projective-transition-profile")
+    transition_blowup_parser = sub.add_parser(
+        "projective-transition-blowup-profile")
+    transition_blowup_parser.add_argument("--samples", type=int, default=5000)
+    transition_blowup_parser.add_argument("--seed", type=int, default=1)
     args = parser.parse_args()
     if args.command == "local-smoke":
         result = local_smoke(Q(args.theta), Q(args.phi),
@@ -3006,6 +3382,9 @@ def main():
         print(json.dumps(qjson(result), indent=2))
     elif args.command == "projective-transition-profile":
         result = projective_transition_profile()
+        print(json.dumps(qjson(result), indent=2))
+    elif args.command == "projective-transition-blowup-profile":
+        result = projective_transition_blowup_profile(args.samples, args.seed)
         print(json.dumps(qjson(result), indent=2))
 
 

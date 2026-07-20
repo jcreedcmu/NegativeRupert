@@ -36,6 +36,8 @@ public import Noperthedron.SnubCube.ProjectiveTransitionCertificate
 public import Noperthedron.SnubCube.ProjectiveTransitionCertificateSmoke
 public import Noperthedron.SnubCube.ProjectiveView
 public import Noperthedron.SnubCube.SolutionTree
+public import Noperthedron.SnubCube.SparseTribonacciPolynomial
+public import Noperthedron.SnubCube.SparseTribonacciPolynomialSmoke
 public import Noperthedron.SnubCube.Symmetry
 public import Noperthedron.SnubCube.Tightening
 public import Noperthedron.SnubCube.Tribonacci
