@@ -821,6 +821,7 @@ def projective_local_float_candidates(triangle, cone_samples=4):
     return feasible
 
 
+@functools.lru_cache(maxsize=256)
 def choose_projective_local_tetrahedron(triangle, cone_samples=4,
                                          trials=200_000, seed=214):
     """Choose a well-conditioned tetrahedron after triangle-wide filtering."""
@@ -1851,6 +1852,38 @@ def atlas_edge_contact_ball(chart, view, variables, q0, q1, inner_index):
     return exact_certificate.ball_dot(view, components)
 
 
+def qpoly_centered_lower_tight(coefficients, centers, radii):
+    """Exact lower bound for a quadratic on a centered coordinate box.
+
+    Unlike ordinary interval multiplication, this uses d_i^2 >= 0 for the
+    three diagonal remainder terms.  Cross terms still use the sharp box
+    bound |d_i d_j| <= r_i r_j.
+    """
+    x, y, z = centers
+    rx, ry, rz = radii
+    c = coefficients
+    value = (c[0] + c[1]*x + c[2]*y + c[3]*z + c[4]*x*x +
+             c[5]*x*y + c[6]*x*z + c[7]*y*y + c[8]*y*z +
+             c[9]*z*z)
+    gradient = (c[1] + 2*c[4]*x + c[5]*y + c[6]*z,
+                c[2] + c[5]*x + 2*c[7]*y + c[8]*z,
+                c[3] + c[6]*x + c[8]*y + 2*c[9]*z)
+    lower = value - sum(abs(g)*r for g, r in zip(gradient, radii))
+    lower += min(Q(0), c[4])*rx*rx
+    lower += min(Q(0), c[7])*ry*ry
+    lower += min(Q(0), c[9])*rz*rz
+    lower -= abs(c[5])*rx*ry + abs(c[6])*rx*rz + abs(c[8])*ry*rz
+    return lower
+
+
+def view_qpoly(view, component_polynomials):
+    total = exact_certificate.qpoly_zero()
+    for coefficient, polynomial in zip(view, component_polynomials):
+        total = exact_certificate.qpoly_add(
+            total, exact_certificate.qpoly_scale(coefficient, polynomial))
+    return total
+
+
 def atlas_edge_smoke(chart, center, half_widths):
     """Exact moving-edge certificate over one angular/Cayley atlas box."""
     theta, phi, x, y, z = center
@@ -1987,12 +2020,9 @@ def atlas_simplex_edge_smoke(chart, relative_center, relative_half_widths,
                 polynomials = atlas_edge_contact_qpolys(
                     chart, q0, q1, inner)
                 all_polynomials.append(polynomials)
-                components = [exact_certificate.qpoly_eval_centered(
-                    polynomial, relative_center, relative_half_widths)
-                    for polynomial in polynomials]
-                lower = min(sum(
-                    view[i]*(components[i][0]-components[i][1])
-                    for i in range(3)) for view in triangle)
+                lower = min(qpoly_centered_lower_tight(
+                    view_qpoly(view, polynomials), relative_center,
+                    relative_half_widths) for view in triangle)
                 if best is None or lower > best[0]:
                     best = (lower, inner, polynomials)
             _, inner, polynomials = best
@@ -2018,12 +2048,9 @@ def atlas_simplex_edge_smoke(chart, relative_center, relative_half_widths,
             for inner, polynomials in enumerate(all_polynomials):
                 candidate = [exact_certificate.qpoly_add(a, b)
                              for a, b in zip(base, polynomials)]
-                components = [exact_certificate.qpoly_eval_centered(
-                    polynomial, relative_center, relative_half_widths)
-                    for polynomial in candidate]
-                lower = min(sum(
-                    view[i]*(components[i][0]-components[i][1])
-                    for i in range(3)) for view in triangle)
+                lower = min(qpoly_centered_lower_tight(
+                    view_qpoly(view, candidate), relative_center,
+                    relative_half_widths) for view in triangle)
                 if best is None or lower > best[0]:
                     best = (lower, inner, candidate)
             _, inner, candidate = best
@@ -2039,11 +2066,7 @@ def atlas_simplex_edge_smoke(chart, relative_center, relative_half_widths,
     displacement_lowers = []
     ball_multipliers = []
     for view in triangle:
-        view_polynomial = exact_certificate.qpoly_zero()
-        for coefficient, polynomial in zip(view, total_polys):
-            view_polynomial = exact_certificate.qpoly_add(
-                view_polynomial,
-                exact_certificate.qpoly_scale(coefficient, polynomial))
+        view_polynomial = view_qpoly(view, total_polys)
         raw_candidates = [Q(0)]
         if view_polynomial[0] > 0:
             raw_candidates.append(view_polynomial[0] / 3)
@@ -2063,9 +2086,8 @@ def atlas_simplex_edge_smoke(chart, relative_center, relative_half_widths,
             adjusted[4] += multiplier
             adjusted[7] += multiplier
             adjusted[9] += multiplier
-            ball = exact_certificate.qpoly_eval_centered(
+            return qpoly_centered_lower_tight(
                 tuple(adjusted), relative_center, relative_half_widths)
-            return ball[0]-ball[1]
 
         multiplier = max(candidates, key=adjusted_lower)
         ball_multipliers.append(multiplier)
@@ -2152,6 +2174,43 @@ def qpoly_eval_centered_float_py(coefficients, centers, radii):
     return value, linear_radius+quadratic_radius
 
 
+def qpoly_centered_lower_tight_float(coefficients, centers, radii):
+    x, y, z = centers
+    rx, ry, rz = radii
+    c = coefficients
+    value = (c[0]+c[1]*x+c[2]*y+c[3]*z+c[4]*x*x+c[5]*x*y+
+             c[6]*x*z+c[7]*y*y+c[8]*y*z+c[9]*z*z)
+    gradient = (c[1]+2*c[4]*x+c[5]*y+c[6]*z,
+                c[2]+c[5]*x+2*c[7]*y+c[8]*z,
+                c[3]+c[6]*x+c[8]*y+2*c[9]*z)
+    lower = value-sum(abs(g)*r for g, r in zip(gradient, radii))
+    lower += min(0.0, c[4])*rx*rx
+    lower += min(0.0, c[7])*ry*ry
+    lower += min(0.0, c[9])*rz*rz
+    lower -= abs(c[5])*rx*ry+abs(c[6])*rx*rz+abs(c[8])*ry*rz
+    return lower
+
+
+def qpoly_centered_lower_tight_np(coefficients, centers, radii):
+    """Vectorized counterpart of qpoly_centered_lower_tight_float."""
+    c = np.asarray(coefficients)
+    x, y, z = centers
+    rx, ry, rz = radii
+    value = (c[..., 0]+c[..., 1]*x+c[..., 2]*y+c[..., 3]*z+
+             c[..., 4]*x*x+c[..., 5]*x*y+c[..., 6]*x*z+
+             c[..., 7]*y*y+c[..., 8]*y*z+c[..., 9]*z*z)
+    gx = c[..., 1]+2*c[..., 4]*x+c[..., 5]*y+c[..., 6]*z
+    gy = c[..., 2]+c[..., 5]*x+2*c[..., 7]*y+c[..., 8]*z
+    gz = c[..., 3]+c[..., 6]*x+c[..., 8]*y+2*c[..., 9]*z
+    lower = value-(np.abs(gx)*rx+np.abs(gy)*ry+np.abs(gz)*rz)
+    lower += np.minimum(0.0, c[..., 4])*rx*rx
+    lower += np.minimum(0.0, c[..., 7])*ry*ry
+    lower += np.minimum(0.0, c[..., 9])*rz*rz
+    lower -= (np.abs(c[..., 5])*rx*ry+np.abs(c[..., 6])*rx*rz+
+              np.abs(c[..., 8])*ry*rz)
+    return lower
+
+
 def atlas_simplex_float_screen_py(chart, relative_center,
                                   relative_half_widths, triangle,
                                   cycle=None, optimize_contacts=True):
@@ -2180,10 +2239,9 @@ def atlas_simplex_float_screen_py(chart, relative_center,
         all_polys = atlas_edge_all_contact_qpolys_float_py(chart, q0, q1)
         best = None
         for inner, polynomials in enumerate(all_polys):
-            balls = [qpoly_eval_centered_float_py(p, centers, radii)
-                     for p in polynomials]
-            lower = min(sum(view[i]*(balls[i][0]-balls[i][1])
-                            for i in range(3)) for view in views)
+            lower = min(qpoly_centered_lower_tight_float(
+                [sum(view[i]*polynomials[i][k] for i in range(3))
+                 for k in range(10)], centers, radii) for view in views)
             if best is None or lower > best[0]:
                 best = (lower, inner)
         inner = best[1]
@@ -2204,10 +2262,10 @@ def atlas_simplex_float_screen_py(chart, relative_center,
                 for inner, polynomials in enumerate(all_polys):
                     candidate = [[a+b for a, b in zip(x, y)]
                                  for x, y in zip(base, polynomials)]
-                    balls = [qpoly_eval_centered_float_py(
-                        p, centers, radii) for p in candidate]
-                    lower = min(sum(view[i]*(balls[i][0]-balls[i][1])
-                                    for i in range(3)) for view in views)
+                    lower = min(qpoly_centered_lower_tight_float(
+                        [sum(view[i]*candidate[i][k] for i in range(3))
+                         for k in range(10)], centers, radii)
+                        for view in views)
                     if best is None or lower > best[0]:
                         best = (lower, inner, candidate)
                 if best[1] != choices[edge_index]:
@@ -2233,8 +2291,8 @@ def atlas_simplex_float_screen_py(chart, relative_center,
             adjusted[4] += multiplier
             adjusted[7] += multiplier
             adjusted[9] += multiplier
-            ball = qpoly_eval_centered_float_py(adjusted, centers, radii)
-            return ball[0]-ball[1]
+            return qpoly_centered_lower_tight_float(
+                adjusted, centers, radii)
 
         displacement_lowers.append(max(map(adjusted_lower, candidates)))
     displacement_lower = min(displacement_lowers)
@@ -2280,9 +2338,9 @@ def atlas_simplex_float_screen(chart, relative_center,
             float(PROJECTIVE_SUPPORT_ERROR)
 
         all_polys = atlas_edge_all_contact_qpolys_float(chart, q0, q1)
-        value, radius = exact_certificate.qpoly_eval_centered_float(
-            all_polys, centers, radii)
-        lower = np.min(views @ value.T - views @ radius.T, axis=0)
+        view_polynomials = np.einsum("vc,icp->vip", views, all_polys)
+        lower = np.min(qpoly_centered_lower_tight_np(
+            view_polynomials, centers, radii), axis=0)
         inner = int(np.argmax(lower))
         total_polys += all_polys[inner]
         choices.append(inner)
@@ -2295,9 +2353,10 @@ def atlas_simplex_float_screen(chart, relative_center,
             for edge_index, all_polys in enumerate(edge_polys):
                 base = total_polys-all_polys[choices[edge_index]]
                 candidates = all_polys+base[None, :, :]
-                value, radius = exact_certificate.qpoly_eval_centered_float(
-                    candidates, centers, radii)
-                lower = np.min(views @ value.T - views @ radius.T, axis=0)
+                view_polynomials = np.einsum(
+                    "vc,icp->vip", views, candidates)
+                lower = np.min(qpoly_centered_lower_tight_np(
+                    view_polynomials, centers, radii), axis=0)
                 inner = int(np.argmax(lower))
                 if inner != choices[edge_index]:
                     total_polys = base+all_polys[inner]
@@ -2322,9 +2381,8 @@ def atlas_simplex_float_screen(chart, relative_center,
             adjusted[4] += multiplier
             adjusted[7] += multiplier
             adjusted[9] += multiplier
-            value, radius = exact_certificate.qpoly_eval_centered_float(
-                adjusted, centers, radii)
-            return float(value-radius)
+            return float(qpoly_centered_lower_tight_np(
+                adjusted, centers, radii))
 
         displacement_lowers.append(max(map(adjusted_lower, candidates)))
     displacement_lower = min(displacement_lowers)
@@ -2438,10 +2496,18 @@ def explore_atlas_projective_tree(max_nodes=10_000, max_view_depth=5,
                 counts["accepted"] += 1
                 counts["global_accepted"] += 1
                 continue
+        center_requires_view = False
+        if (result["minimum_strict_support_lower"] > 0 and
+                view_depth < max_view_depth):
+            center_result = atlas_simplex_float_screen(
+                chart, center, (Q(0), Q(0), Q(0)), triangle,
+                cycle=result["cycle"])
+            center_requires_view = center_result["lower_bound"] <= 1e-8
         # A missing result is a silhouette/support transition, which only a
         # view split can resolve.  Once support is stable, split the widest
         # relative coordinate before spending more projective triangles.
-        if (result["minimum_strict_support_lower"] <= 0 and
+        if ((result["minimum_strict_support_lower"] <= 0 or
+                center_requires_view) and
                 view_depth < max_view_depth):
             counts["view_splits"] += 1
             stack.extend((chart, center, widths, root, child, view_depth+1,
@@ -2512,6 +2578,7 @@ def generate_atlas_projective_table(
                                       for corner in triangle),
                           view_depth, None))
         counts = saved["counts"]
+        counts.setdefault("local", 0)
         failures = saved["failures"]
     else:
         rows = [None]
@@ -2529,7 +2596,7 @@ def generate_atlas_projective_table(
                    "children": root_children,
                    "center": root_center, "widths": root_widths}
         counts = {"view_root": 1, "view_split": 0, "relative_split": 0,
-                  "edge": 0, "global": 0, "radius": 0,
+                  "edge": 0, "global": 0, "local": 0, "radius": 0,
                   "exact_rejections": 0}
         failures = []
 
@@ -2602,15 +2669,48 @@ def generate_atlas_projective_table(
                     continue
                 counts["exact_rejections"] += 1
 
+        center_requires_view = False
+        center_view_depth = min(max_view_depth, 8)
+        if (edge_float["minimum_strict_support_lower"] > 0 and
+                view_depth < center_view_depth):
+            center_edge = atlas_simplex_float_screen(
+                chart, center, (Q(0), Q(0), Q(0)), triangle,
+                cycle=edge_float["cycle"])
+            center_requires_view = center_edge["lower_bound"] <= 1e-8
+
         support_transition = \
             edge_float["minimum_strict_support_lower"] <= 0
         widest = max(range(3), key=lambda i: widths[i])
+        local_refinement = False
+        if view_depth >= center_view_depth and max(widths) <= Q(1, 1024):
+            mismatch_candidates = sorted(
+                (atlas_projective_mismatch_radius(
+                    chart, symmetry_index, center, widths)[0],
+                 symmetry_index)
+                for symmetry_index in range(5))
+            mismatch_radius, symmetry_index = mismatch_candidates[0]
+            if mismatch_radius < Q(1, 20):
+                if max(widths) <= Q(1, 2048):
+                    local = atlas_projective_local_triangle(
+                        chart, center, widths, root, triangle,
+                        symmetry_index, cone_samples=5, trials=500_000)
+                    if local is not None and local["accepted"]:
+                        rows[row_id] = {**common, "kind": "local",
+                            "certificate": {
+                                "symmetry_index": symmetry_index,
+                                "certificates": local["certificates"],
+                                "c": local["c"], "delta": local["delta"],
+                                "r": local["r"]}}
+                        counts["local"] += 1
+                        continue
+                local_refinement = widths[widest] > Q(1, 4096)
         use_fine_relative_split = (global_float is not None and
             global_float["lower_bound"] > -2e-3)
-        relative_split = (not support_transition and
+        relative_split = (local_refinement or (not support_transition and
+            not center_requires_view and
             (widths[widest] > max(min_relative_half_width, Q(1, 256)) or
              (widths[widest] > min_relative_half_width and
-              use_fine_relative_split)))
+              use_fine_relative_split))))
         if relative_split:
             children = allocate(2)
             rows[row_id] = {**common, "kind": "relative_split",
@@ -2653,10 +2753,38 @@ def generate_atlas_projective_table(
                               tuple(child_widths), root, triangle, view_depth,
                               None))
         else:
+            mismatch_candidates = sorted(
+                (atlas_projective_mismatch_radius(
+                    chart, symmetry_index, center, widths)[0],
+                 symmetry_index)
+                for symmetry_index in range(5))
+            mismatch_radius, symmetry_index = mismatch_candidates[0]
+            # The five exact symmetry rotations are isolated local-rigidity
+            # centers.  Refine only their tiny neighborhoods past the normal
+            # global grid, then close them with the projective local theorem.
+            local_refinement_limit = Q(1, 4096)
+            if (mismatch_radius < Q(1, 20) and
+                    widths[widest] > local_refinement_limit):
+                children = allocate(2)
+                rows[row_id] = {**common, "kind": "relative_split",
+                                "coordinate": widest+2,
+                                "children": children}
+                counts["relative_split"] += 1
+                child_widths = list(widths)
+                child_widths[widest] /= 2
+                for direction, child in zip((-1, 1), children):
+                    child_center = list(center)
+                    child_center[widest] += direction*child_widths[widest]
+                    stack.append((child, tuple(child_center),
+                                  tuple(child_widths), root, triangle,
+                                  view_depth, None))
+                continue
             failures.append({**common,
                 "edge_lower": edge_float["lower_bound"],
                 "global_lower": None if global_float is None else
-                    global_float["lower_bound"]})
+                    global_float["lower_bound"],
+                "nearest_symmetry": symmetry_index,
+                "mismatch_radius": mismatch_radius})
             break
         if checkpoint_every and len(rows) % checkpoint_every < 4:
             checkpoint(False)

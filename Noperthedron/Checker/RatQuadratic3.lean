@@ -169,6 +169,65 @@ def evalBall (vars : Fin 3 → RatBall) (q : RatQuadratic3) : RatBall :=
     (q.centeredPolynomial (vars 0).center
       (vars 1).center (vars 2).center)
 
+/-- A variable translated to zero while retaining its certified radius. -/
+def centeredVariable (b : RatBall) : RatBall := ⟨0, b.radius⟩
+
+/-- The sharp center-radius enclosure `[0,r²]` for the square of a centered
+variable of radius `r`. -/
+def centeredSquare (b : RatBall) : RatBall :=
+  ⟨b.radius ^ 2 / 2, b.radius ^ 2 / 2⟩
+
+/-- A cancellation-preserving quadratic enclosure which additionally retains
+the fact that each diagonal centered remainder `dᵢ²` is nonnegative. -/
+def evalTightBall (vars : Fin 3 → RatBall) (q : RatQuadratic3) : RatBall :=
+  let x := (vars 0).center
+  let y := (vars 1).center
+  let z := (vars 2).center
+  let dx := centeredVariable (vars 0)
+  let dy := centeredVariable (vars 1)
+  let dz := centeredVariable (vars 2)
+  let gx := q.cx + 2*q.cxx*x + q.cxy*y + q.cxz*z
+  let gy := q.cy + q.cxy*x + 2*q.cyy*y + q.cyz*z
+  let gz := q.cz + q.cxz*x + q.cyz*y + 2*q.czz*z
+  RatBall.add
+    (RatBall.add
+      (RatBall.add
+        (RatBall.add
+          (RatBall.add
+            (RatBall.add
+              (RatBall.add
+                (RatBall.add
+                  (RatBall.add (RatBall.const (q.evalQ x y z))
+                    (RatBall.scale gx dx))
+                  (RatBall.scale gy dy))
+                (RatBall.scale gz dz))
+              (RatBall.scale q.cxx (centeredSquare (vars 0))))
+            (RatBall.scale q.cxy (RatBall.mul dx dy)))
+          (RatBall.scale q.cxz (RatBall.mul dx dz)))
+        (RatBall.scale q.cyy (centeredSquare (vars 1))))
+      (RatBall.scale q.cyz (RatBall.mul dy dz)))
+    (RatBall.scale q.czz (centeredSquare (vars 2)))
+
+theorem centeredVariable_holds {b : RatBall} {x : ℝ} (h : b.Holds x) :
+    (centeredVariable b).Holds (x - (b.center : ℝ)) := by
+  simpa [centeredVariable, RatBall.Holds] using h
+
+theorem centeredSquare_holds {b : RatBall} {x : ℝ}
+    (h : (centeredVariable b).Holds x) :
+    (centeredSquare b).Holds (x ^ 2) := by
+  have habs : |x| ≤ (b.radius : ℝ) := by
+    simpa [centeredVariable, RatBall.Holds] using h
+  have hr : 0 ≤ (b.radius : ℝ) := (abs_nonneg x).trans habs
+  have hxBounds : -(b.radius : ℝ) ≤ x ∧ x ≤ (b.radius : ℝ) :=
+    (abs_le.mp habs)
+  have hproduct : 0 ≤ ((b.radius : ℝ) - x) * ((b.radius : ℝ) + x) :=
+    mul_nonneg (sub_nonneg.mpr hxBounds.2) (by linarith [hxBounds.1])
+  have hxSq : x ^ 2 ≤ (b.radius : ℝ) ^ 2 := by nlinarith
+  unfold centeredSquare RatBall.Holds
+  push_cast
+  rw [abs_le]
+  constructor <;> nlinarith [sq_nonneg x]
+
 theorem evalBall_holds {vars : Fin 3 → RatBall}
     {x y z : ℝ}
     (hvars : ∀ i, (vars i).Holds (![x, y, z] i))
@@ -179,6 +238,52 @@ theorem evalBall_holds {vars : Fin 3 → RatBall}
       (vars 1).center (vars 2).center)
   rw [q.eval_centeredPolynomial] at h
   exact h
+
+theorem evalTightBall_holds {vars : Fin 3 → RatBall}
+    {x y z : ℝ}
+    (hvars : ∀ i, (vars i).Holds (![x, y, z] i))
+    (q : RatQuadratic3) :
+    (evalTightBall vars q).Holds (q.evalReal x y z) := by
+  let dx : ℝ := x - ((vars 0).center : ℝ)
+  let dy : ℝ := y - ((vars 1).center : ℝ)
+  let dz : ℝ := z - ((vars 2).center : ℝ)
+  let gx : ℚ := q.cx + 2*q.cxx*(vars 0).center +
+    q.cxy*(vars 1).center + q.cxz*(vars 2).center
+  let gy : ℚ := q.cy + q.cxy*(vars 0).center +
+    2*q.cyy*(vars 1).center + q.cyz*(vars 2).center
+  let gz : ℚ := q.cz + q.cxz*(vars 0).center +
+    q.cyz*(vars 1).center + 2*q.czz*(vars 2).center
+  have hdx : (centeredVariable (vars 0)).Holds dx := by
+    exact centeredVariable_holds (hvars 0)
+  have hdy : (centeredVariable (vars 1)).Holds dy := by
+    exact centeredVariable_holds (hvars 1)
+  have hdz : (centeredVariable (vars 2)).Holds dz := by
+    exact centeredVariable_holds (hvars 2)
+  have hsum := RatBall.holds_add
+    (RatBall.holds_add
+      (RatBall.holds_add
+        (RatBall.holds_add
+          (RatBall.holds_add
+            (RatBall.holds_add
+              (RatBall.holds_add
+                (RatBall.holds_add
+                  (RatBall.holds_add
+                    (RatBall.holds_const (q.evalQ
+                      (vars 0).center (vars 1).center (vars 2).center))
+                    (RatBall.holds_scale gx hdx))
+                  (RatBall.holds_scale gy hdy))
+                (RatBall.holds_scale gz hdz))
+              (RatBall.holds_scale q.cxx (centeredSquare_holds hdx)))
+            (RatBall.holds_scale q.cxy (RatBall.holds_mul hdx hdy)))
+          (RatBall.holds_scale q.cxz (RatBall.holds_mul hdx hdz)))
+        (RatBall.holds_scale q.cyy (centeredSquare_holds hdy)))
+      (RatBall.holds_scale q.cyz (RatBall.holds_mul hdy hdz)))
+    (RatBall.holds_scale q.czz (centeredSquare_holds hdz))
+  change (evalTightBall vars q).Holds _ at hsum
+  convert hsum using 1
+  simp only [dx, dy, dz, gx, gy, gz, evalQ, evalReal]
+  push_cast
+  ring
 
 end RatQuadratic3
 

@@ -186,7 +186,8 @@ def Box.adjustedQuadratic (box : Box) (j : Fin 3) : RatQuadratic3 :=
     RatQuadratic3.scale (box.ballMultiplier j) cayleyConstraintQuadratic
 
 def Box.adjustedDisplacementAt (box : Box) (j : Fin 3) : RatBall :=
-  RatQuadratic3.evalBall box.edgeShell.variableBalls (box.adjustedQuadratic j)
+  RatQuadratic3.evalTightBall box.edgeShell.variableBalls
+    (box.adjustedQuadratic j)
 
 def Box.adjustedDisplacementLower (box : Box) : ℚ :=
   min3 fun j => (box.adjustedDisplacementAt j).center -
@@ -312,7 +313,8 @@ theorem Box.adjustedDisplacementAt_holds (box : Box) {p : AtlasPose ℝ}
     · exact box.interval.coordinateBall_holds hp 2
     · exact box.interval.coordinateBall_holds hp 3
     · exact box.interval.coordinateBall_holds hp 4
-  have hball := RatQuadratic3.evalBall_holds hvars (box.adjustedQuadratic j)
+  have hball := RatQuadratic3.evalTightBall_holds hvars
+    (box.adjustedQuadratic j)
   simpa only [Box.adjustedDisplacementAt, Box.adjustedQuadratic,
     RatQuadratic3.evalReal_add, RatQuadratic3.evalReal_scale,
     box.viewQuadratic_eval j p, cayleyConstraintQuadratic_eval] using hball
