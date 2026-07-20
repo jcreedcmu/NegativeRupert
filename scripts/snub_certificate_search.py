@@ -688,6 +688,80 @@ def epoly_centered_float_lower(polynomial, endpoints):
         abs(value) for powers, value in centered.items() if powers != zero)
 
 
+def epoly_compose(polynomial, substitutions):
+    """Exactly compose a sparse polynomial with sparse substitutions."""
+    answer = {}
+    for powers, coefficient in polynomial.items():
+        term = epoly_const(len(substitutions), coefficient)
+        for power, substitution in zip(powers, substitutions):
+            term = epoly_mul(term, epoly_pow(substitution, power))
+        answer = epoly_add(answer, term)
+    return answer
+
+
+def epoly_leading_and_tail(polynomial):
+    """Write `polynomial = leading + d * tail` in coordinate zero."""
+    leading = {powers: coefficient for powers, coefficient in
+               polynomial.items() if powers[0] == 0}
+    tail = {(powers[0]-1,) + powers[1:]: coefficient
+            for powers, coefficient in polynomial.items()
+            if powers[0] > 0}
+    return leading, tail
+
+
+def epoly_bernstein_coefficients(polynomial, endpoints):
+    """Exact tensor Bernstein coefficients on a rational box."""
+    power_basis = epoly_recenter(
+        polynomial, [(lo, hi-lo) for lo, hi in endpoints])
+    if not power_basis:
+        degrees = (0,) * len(endpoints)
+        return degrees, {degrees: TEXPR_ZERO}
+    degrees = tuple(max(powers[i] for powers in power_basis)
+                    for i in range(len(endpoints)))
+    answer = {}
+    for powers, coefficient in power_basis.items():
+        for index in itertools.product(*(
+                range(power, degree+1)
+                for power, degree in zip(powers, degrees))):
+            scalar = Q(1)
+            for i, power, degree in zip(index, powers, degrees):
+                scalar *= Q(math.comb(i, power), math.comb(degree, power))
+            answer[index] = texpr_add(
+                answer.get(index, TEXPR_ZERO),
+                texpr_scale(scalar, coefficient))
+    return degrees, answer
+
+
+def bernstein_lower(coefficients):
+    return min(center-radius for center, radius in
+               map(texpr_ball, coefficients.values()))
+
+
+def bernstein_split(coefficients, degrees, axis):
+    """Exact midpoint de Casteljau split along one tensor coordinate."""
+    groups = {}
+    for index, coefficient in coefficients.items():
+        key = index[:axis] + index[axis+1:]
+        groups.setdefault(key, [None] * (degrees[axis]+1))[index[axis]] = \
+            coefficient
+    left, right = {}, {}
+    for key, row in groups.items():
+        levels = [row]
+        while len(levels[-1]) > 1:
+            levels.append([texpr_scale(Q(1, 2), texpr_add(a, b))
+                           for a, b in zip(levels[-1], levels[-1][1:])])
+        left_row = [levels[i][0] for i in range(len(row))]
+        right_row = [levels[len(row)-1-i][i]
+                     for i in range(len(row))]
+        for i, coefficient in enumerate(left_row):
+            index = key[:axis] + (i,) + key[axis:]
+            left[index] = coefficient
+        for i, coefficient in enumerate(right_row):
+            index = key[:axis] + (i,) + key[axis:]
+            right[index] = coefficient
+    return left, right
+
+
 def transition_blowup_families_exact():
     specifications = [
         ([8, 15, 10], [9, 11, 14], [1, 11, 10], [1, 3, 2],
@@ -705,6 +779,131 @@ def transition_blowup_families_exact():
     ]
     return [exact_transition_blowup_polynomial(*specification)
             for specification in specifications]
+
+
+def transition_guarded_leading_certificate():
+    """Exact low-degree certificate on the `L89 <= 3/100` branch.
+
+    The guard region is parameterized by `(d,e,u,a,b)`, with `u` moving
+    between the family-89 guard boundary and the original lower bound
+    `t = 3/5`.  The returned soft maximum is
+
+        (5 + L_transverse)^3 * L_transverse
+          + (5 + L_nested)^3 * L_nested.
+
+    Its weights are nonnegative wherever both `5 + L` terms are
+    nonnegative, so positivity proves that one leading obstruction is
+    positive.  Finite-seam remainder bounds are handled separately.
+    """
+    families = transition_blowup_families_exact()
+    variables = [epoly_var(5, i) for i in range(5)]
+    leading89, _ = epoly_leading_and_tail(families[1]["quotient"])
+    constant = leading89[(0, 0, 0, 0, 0)]
+    tangential = leading89[(0, 1, 0, 0, 0)]
+    rotation = leading89[(0, 0, 0, 0, 1)]
+    guard = (Q(3, 100), Q(0), Q(0))
+    lower_t = (Q(3, 5), Q(0), Q(0))
+    inverse_rotation = texpr_inv(rotation)
+    slack_at_lower_t = texpr_sub(
+        texpr_sub(guard, constant), texpr_mul(rotation, lower_t))
+    maximum_slack = epoly_sub(
+        epoly_const(5, slack_at_lower_t),
+        epoly_scale(tangential, variables[1]))
+    slack = epoly_mul(variables[2], maximum_slack)
+    t_numerator = epoly_sub(
+        epoly_sub(epoly_const(5, texpr_sub(guard, constant)),
+                  epoly_scale(tangential, variables[1])),
+        slack)
+    t = epoly_scale(inverse_rotation, t_numerator)
+    substitutions = [variables[0], variables[1], variables[3],
+                     variables[4], t]
+    leading = []
+    tails = []
+    for family_index in (3, 4):
+        family_leading, family_tail = epoly_leading_and_tail(
+            families[family_index]["quotient"])
+        leading.append(epoly_compose(family_leading, substitutions))
+        tails.append(epoly_compose(family_tail, substitutions))
+    five = (Q(5), Q(0), Q(0))
+    weights = [epoly_pow(epoly_add(value, epoly_const(5, five)), 3)
+               for value in leading]
+    soft_maximum = epoly_add(
+        epoly_mul(weights[0], leading[0]),
+        epoly_mul(weights[1], leading[1]))
+    return {
+        "guard": guard,
+        "leading89": leading89,
+        "parameter_t": t,
+        "leading": leading,
+        "tails": tails,
+        "weights": weights,
+        "soft_maximum": soft_maximum,
+    }
+
+
+def transition_guarded_bernstein_cover(max_nodes=5000, max_depth=100,
+                                       threshold=Q(0)):
+    """Exact Bernstein cover of the guarded leading soft maximum."""
+    certificate = transition_guarded_leading_certificate()
+    root = [(Q(0), Q(0)), (Q(0), Q(2)), (Q(0), Q(1)),
+            (Q(-16), Q(16)), (Q(-16), Q(16))]
+    degrees, coefficients = epoly_bernstein_coefficients(
+        certificate["soft_maximum"], root)
+    leaves = []
+    failures = []
+    node_count = 0
+    truncated = False
+
+    class NodeLimit(Exception):
+        pass
+
+    def visit(table, endpoints, depth):
+        nonlocal node_count
+        if node_count >= max_nodes:
+            raise NodeLimit
+        node_count += 1
+        lower = bernstein_lower(table)
+        if lower > threshold:
+            leaves.append({"endpoints": endpoints, "lower": lower})
+            return
+        if depth >= max_depth:
+            failures.append({"endpoints": endpoints, "lower": lower})
+            return
+        candidates = []
+        for axis in range(5):
+            if degrees[axis] == 0:
+                continue
+            children = bernstein_split(table, degrees, axis)
+            lowers = [bernstein_lower(child) for child in children]
+            score = (sum(lower > threshold for lower in lowers),
+                     min(lowers), sum(lowers))
+            candidates.append((score, axis, children))
+        _, axis, children = max(candidates, key=lambda item: item[0])
+        lo, hi = endpoints[axis]
+        mid = (lo + hi) / 2
+        child_endpoints = []
+        for child_range in ((lo, mid), (mid, hi)):
+            child = list(endpoints)
+            child[axis] = child_range
+            child_endpoints.append(child)
+        for child, child_box in zip(children, child_endpoints):
+            visit(child, child_box, depth+1)
+
+    try:
+        visit(coefficients, root, 0)
+    except NodeLimit:
+        truncated = True
+    return {
+        "root": root,
+        "degrees": degrees,
+        "coefficient_count": len(coefficients),
+        "root_lower": bernstein_lower(coefficients),
+        "threshold": threshold,
+        "node_count": node_count,
+        "truncated": truncated,
+        "leaves": leaves,
+        "failures": failures,
+    }
 
 
 def transition_box_base_diagnostics(family, endpoints):
@@ -3669,6 +3868,11 @@ def main():
     transition_cover_parser.add_argument("--max-nodes", type=int,
                                          default=20000)
     transition_cover_parser.add_argument("--max-depth", type=int, default=100)
+    guarded_cover_parser = sub.add_parser(
+        "projective-transition-guarded-cover")
+    guarded_cover_parser.add_argument("--max-nodes", type=int, default=5000)
+    guarded_cover_parser.add_argument("--max-depth", type=int, default=100)
+    guarded_cover_parser.add_argument("--threshold", default="0")
     sub.add_parser("projective-transition-gap-profile")
     args = parser.parse_args()
     if args.command == "local-smoke":
@@ -3778,6 +3982,15 @@ def main():
         print(json.dumps(qjson(transition_box_probe()), indent=2))
     elif args.command == "projective-transition-box-cover":
         result = transition_box_cover(args.max_nodes, args.max_depth)
+        summary = {key: value for key, value in result.items()
+                   if key not in ("leaves", "failures")}
+        summary["leaf_count"] = len(result["leaves"])
+        summary["failure_count"] = len(result["failures"])
+        summary["failure_examples"] = result["failures"][:3]
+        print(json.dumps(qjson(summary), indent=2))
+    elif args.command == "projective-transition-guarded-cover":
+        result = transition_guarded_bernstein_cover(
+            args.max_nodes, args.max_depth, Q(args.threshold))
         summary = {key: value for key, value in result.items()
                    if key not in ("leaves", "failures")}
         summary["leaf_count"] = len(result["leaves"])
