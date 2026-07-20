@@ -29,6 +29,7 @@ from scipy.spatial import ConvexHull
 
 KAPPA = Q(1, 10**10)
 SUPPORT_ERROR = 10 * KAPPA
+PROJECTIVE_VARIATION_ERROR = 150 * KAPPA
 TRIBONACCI_Q = Q(1839286755214161, 10**15)
 ROTATION_ERROR = 3 * KAPPA + KAPPA * KAPPA
 CENTER_VECTOR_ERROR = 2 * KAPPA + KAPPA * KAPPA
@@ -622,6 +623,230 @@ def qpoly_add(a, b):
 
 def qpoly_scale(q, a):
     return [q*x for x in a]
+
+
+def qpoly_mul_linear(a, b):
+    """Product of homogeneous linear forms in the checker basis."""
+    return [Q(0), Q(0), Q(0), Q(0),
+            a[0]*b[0], a[0]*b[1]+a[1]*b[0],
+            a[0]*b[2]+a[2]*b[0], a[1]*b[1],
+            a[1]*b[2]+a[2]*b[1], a[2]*b[2]]
+
+
+def projective_lift_coefficient(edge, coordinate):
+    if coordinate == 0:
+        return [Q(0), edge[2], -edge[1]]
+    if coordinate == 1:
+        return [-edge[2], Q(0), edge[0]]
+    return [edge[1], -edge[0], Q(0)]
+
+
+def projective_cross_lift_coefficient(edge, vertex, coordinate):
+    lift = [projective_lift_coefficient(edge, c) for c in range(3)]
+    if coordinate == 0:
+        return [vertex[1]*lift[2][c]-vertex[2]*lift[1][c]
+                for c in range(3)]
+    if coordinate == 1:
+        return [vertex[2]*lift[0][c]-vertex[0]*lift[2][c]
+                for c in range(3)]
+    return [vertex[0]*lift[1][c]-vertex[1]*lift[0][c]
+            for c in range(3)]
+
+
+def projective_variation_polynomials(edges, support_vertices):
+    weights = [cross3(edges[1], edges[2]),
+               cross3(edges[2], edges[0]),
+               cross3(edges[0], edges[1])]
+    answer = []
+    for coordinate in range(3):
+        total = qpoly_zero()
+        for i in range(3):
+            coefficient = projective_cross_lift_coefficient(
+                edges[i], VERTICES_Q[support_vertices[i]], coordinate)
+            total = qpoly_add(total,
+                              qpoly_mul_linear(weights[i], coefficient))
+        answer.append(total)
+    return weights, answer
+
+
+def projective_triangle_balls(triangle):
+    balls = []
+    for coordinate in range(3):
+        lo = min(corner[coordinate] for corner in triangle)
+        hi = max(corner[coordinate] for corner in triangle)
+        balls.append(((lo+hi)/2, (hi-lo)/2))
+    return balls
+
+
+def projective_local_axis_row(triangle, payload):
+    starts, finishes = [], []
+    for a, b, sigma in payload["support_pairs"]:
+        # Lean's edge is start-finish; the experiment stores sigma*(b-a).
+        start, finish = ((b, a) if sigma == 1 else (a, b))
+        starts.append(start)
+        finishes.append(finish)
+    supports = list(payload["support_vertices"])
+    if any(s not in (a, b) for s, a, b in zip(supports, starts, finishes)):
+        raise RuntimeError("projective support vertex is not on its edge")
+    edges = [[x-y for x, y in zip(VERTICES_Q[a], VERTICES_Q[b])]
+             for a, b in zip(starts, finishes)]
+    probe_weights = [qdot(triangle[0], cross3(edges[1], edges[2])),
+                     qdot(triangle[0], cross3(edges[2], edges[0])),
+                     qdot(triangle[0], cross3(edges[0], edges[1]))]
+    if max(probe_weights) < 0:
+        for values in (starts, finishes, supports, edges):
+            values[1], values[2] = values[2], values[1]
+    weight_coefficients, polynomials = projective_variation_polynomials(
+        edges, supports)
+    weight_at = [[qdot(corner, coefficient) for corner in triangle]
+                 for coefficient in weight_coefficients]
+    weight_lower = [min(values)-SUPPORT_ERROR for values in weight_at]
+    weight_upper = [max(values)+SUPPORT_ERROR for values in weight_at]
+    if min(weight_lower) < 0 or max(weight_lower) <= 0:
+        raise RuntimeError(f"weight signs fail: {weight_lower}")
+
+    support_upper = []
+    witnesses = []
+    for edge, start, finish, selected in zip(
+            edges, starts, finishes, supports):
+        values = []
+        for k in range(24):
+            if k in (start, finish):
+                upper = Q(0)
+            else:
+                delta = [x-y for x, y in zip(VERTICES_Q[k],
+                                              VERTICES_Q[selected])]
+                coefficient = cross3(edge, delta)
+                upper = max(qdot(corner, coefficient)
+                            for corner in triangle) + SUPPORT_ERROR
+            values.append(upper)
+        if max(values) > 0:
+            raise RuntimeError(
+                f"support fails by {float(max(values)):.6g} on edge "
+                f"{start}->{finish}")
+        witness = min(range(24), key=values.__getitem__)
+        if values[witness] >= 0:
+            raise RuntimeError("no strict nonzero witness")
+        support_upper.append(values)
+        witnesses.append(witness)
+
+    variable_balls = projective_triangle_balls(triangle)
+    centers = [x[0] for x in variable_balls]
+    radii = [x[1] for x in variable_balls]
+    variation_balls = [qpoly_eval_centered(poly, centers, radii)
+                       for poly in polynomials]
+    B = 2*sum(weight_upper, Q(0))
+    if B <= 0:
+        raise RuntimeError("nonpositive projective remainder budget")
+    normalized_center = [ball[0]/B for ball in variation_balls]
+    delta = (sum((ball[1] for ball in variation_balls), Q(0)) +
+             3*PROJECTIVE_VARIATION_ERROR) / B
+    return {
+        "edge_start": starts,
+        "edge_finish": finishes,
+        "support_index": supports,
+        "nonzero_witness": witnesses,
+        "B": B,
+        "normalized_center": normalized_center,
+        "delta": delta,
+        "diagnostics": {
+            "weight_lower": weight_lower,
+            "weight_upper": weight_upper,
+            "variation_balls": variation_balls,
+            "maximum_support_upper": max(max(row) for row in support_upper),
+            "strict_witness_upper": [row[k] for row, k in
+                                     zip(support_upper, witnesses)],
+        },
+    }
+
+
+def projective_local_smoke(view, triangle_width):
+    """Generate one exact projective-local row and audit every rational gate."""
+    try:
+        from experiment_snub_axis_free import (certificate_vectors,
+                                                best_centered_tetrahedron)
+        import experiment_snub_cube as experiment_cube
+    except ModuleNotFoundError:
+        from scripts.experiment_snub_axis_free import (
+            certificate_vectors, best_centered_tetrahedron)
+        from scripts import experiment_snub_cube as experiment_cube
+    if len(view) != 3 or sum(view, Q(0)) != 1 or min(view) <= 0:
+        raise ValueError("view must be a positive rational simplex point")
+    e = triangle_width
+    triangle = [[view[0]+e, view[1]-e, view[2]],
+                [view[0], view[1]+e, view[2]-e],
+                [view[0]-e, view[1], view[2]+e]]
+    if min(x for corner in triangle for x in corner) < 0:
+        raise ValueError("triangle leaves the positive simplex")
+    # The older floating experiment uses the same chirality after the proper
+    # rotation diag(-1,-1,1), and normalizes vertices to radius one instead
+    # of the proof's conservative division by five.
+    convention = np.diag([-1.0, -1.0, 1.0])
+    experiment_view = np.asarray([float(x) for x in view]) @ convention
+    points, payloads, _ = certificate_vectors(experiment_view)
+    float_radius, chosen_indices = best_centered_tetrahedron(points)
+    if chosen_indices is None:
+        raise RuntimeError("no centered projective-local tetrahedron")
+    normalized_search_vertices = VERTICES_EXACT / np.linalg.norm(
+        VERTICES_EXACT[0])
+    rotated_experiment_vertices = experiment_cube.UNIT_VERTS @ convention
+    index_map = [int(np.argmin(np.linalg.norm(
+        normalized_search_vertices-rotated_experiment_vertices[i], axis=1)))
+                 for i in range(24)]
+    if len(set(index_map)) != 24 or max(
+            np.linalg.norm(normalized_search_vertices[index_map[i]]-
+                           rotated_experiment_vertices[i])
+            for i in range(24)) > 1e-9:
+        raise AssertionError("experiment/search vertex conventions disagree")
+    chosen_payloads = []
+    for chosen in chosen_indices:
+        payload = payloads[int(chosen)]
+        chosen_payloads.append({
+            **payload,
+            "support_pairs": [[index_map[a], index_map[b], sigma]
+                              for a, b, sigma in payload["support_pairs"]],
+            "support_vertices": [index_map[i]
+                                 for i in payload["support_vertices"]],
+        })
+    rows = [projective_local_axis_row(triangle, payload)
+            for payload in chosen_payloads]
+    delta = max(row["delta"] for row in rows)
+    centers = [row["normalized_center"] for row in rows]
+    axis_radius = exact_tetrahedron_axis_radius(centers)
+    cover_radius = Q(19, 20) * Q(4, 7) * axis_radius
+    c = cover_radius-delta
+    if c <= 0:
+        raise RuntimeError(
+            f"axis perturbation consumes cover: radius={float(axis_radius):.6g} "
+            f"delta={float(delta):.6g}")
+    target_length = Q(7, 4)*(c+delta)
+    bary = []
+    for axis in range(3):
+        for sign in (1, -1):
+            target = [Q(0)]*3
+            target[axis] = sign*target_length
+            lam = barycentric(centers, target)
+            if min(lam) < 0 or sum(lam, Q(0)) != 1:
+                raise AssertionError("invalid projective-local barycentric gate")
+            bary.append(lam)
+    return {
+        "view": view,
+        "triangle_width": triangle_width,
+        "triangle": triangle,
+        "certificates": [{key: value for key, value in row.items()
+                          if key not in ("normalized_center", "delta")}
+                         for row in rows],
+        "c": c,
+        "delta": delta,
+        "diagnostics": {
+            "floating_selected_radius": float_radius,
+            "selected_indices": list(map(int, chosen_indices)),
+            "normalized_centers": centers,
+            "exact_axis_radius": axis_radius,
+            "cover_radius": cover_radius,
+            "minimum_barycentric": min(x for row in bary for x in row),
+        },
+    }
 
 
 def qpoly_eval_centered(coefficients, centers, radii):
@@ -1978,6 +2203,11 @@ def main():
     mixed_profile_parser.add_argument("--max-view-depth", type=int, default=5)
     mixed_profile_parser.add_argument("--optimized-count", type=int, default=4)
     mixed_profile_parser.add_argument("--max-nodes", type=int, default=100000)
+    projective_local_parser = sub.add_parser("projective-local-smoke")
+    projective_local_parser.add_argument(
+        "--view", default="3/5,3/20,1/4",
+        help="three positive simplex coordinates")
+    projective_local_parser.add_argument("--triangle-width", default="1/100000")
     args = parser.parse_args()
     if args.command == "local-smoke":
         result = local_smoke(Q(args.theta), Q(args.phi),
@@ -2065,6 +2295,12 @@ def main():
             Q(args.coarse_half_width), Q(args.target_half_width),
             args.base_view_depth, args.max_view_depth, args.optimized_count,
             args.max_nodes)
+        print(json.dumps(qjson(result), indent=2))
+    elif args.command == "projective-local-smoke":
+        view = [Q(x) for x in args.view.split(",")]
+        if len(view) != 3:
+            parser.error("view must have three comma-separated entries")
+        result = projective_local_smoke(view, Q(args.triangle_width))
         print(json.dumps(qjson(result), indent=2))
 
 

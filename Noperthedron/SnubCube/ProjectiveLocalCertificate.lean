@@ -165,8 +165,11 @@ def Box.supportAt (box : Box) (j : Fin 4) (corner : Fin 3)
 
 def Box.supportUpper (box : Box) (j : Fin 4) (i : Fin 3)
     (k : VertexIndex) : ℚ :=
-  max3 (fun corner => box.supportAt j corner i k) +
-    CayleyEdgeCertificate.supportError
+  if k = (box.certificate j).edgeStart i ∨
+      k = (box.certificate j).edgeFinish i then 0
+  else
+    max3 (fun corner => box.supportAt j corner i k) +
+      CayleyEdgeCertificate.supportError
 
 def Box.weightAt (box : Box) (j : Fin 4) (corner : Fin 3)
     (i : Fin 3) : ℚ :=
@@ -229,6 +232,11 @@ structure Box.Valid (box : Box) : Prop where
   B_pos : ∀ j, 0 < (box.certificate j).B
   weight_nonneg : ∀ j i, 0 ≤ box.weightLower j i
   weight_pos : ∀ j, ∃ i, 0 < box.weightLower j i
+  support_on_edge : ∀ j i,
+    (box.certificate j).supportIndex i =
+        (box.certificate j).edgeStart i ∨
+      (box.certificate j).supportIndex i =
+        (box.certificate j).edgeFinish i
   support : ∀ j i k, box.supportUpper j i k ≤ 0
   direction_nonzero : ∀ j i,
     box.supportUpper j i ((box.certificate j).nonzeroWitness i) < 0
@@ -672,10 +680,24 @@ theorem Box.exactSupport_le_upper (box : Box) (h : box.Valid)
     (j : Fin 4) (i : Fin 3) (k : VertexIndex) :
     (box.certificate j).exactSupport p i k ≤
       (box.supportUpper j i k : ℝ) := by
+  by_cases hk : k = (box.certificate j).edgeStart i ∨
+      k = (box.certificate j).edgeFinish i
+  · have hs := h.support_on_edge j i
+    have hzero : (box.certificate j).exactSupport p i k = 0 := by
+      rcases hk with hk | hk <;> rcases hs with hs | hs <;>
+        subst k <;>
+        unfold AxisCertificate.exactSupport AxisCertificate.exactEdge
+          AxisCertificate.exactDelta <;>
+        rw [hs] <;>
+        simp [linearValue, cross3, cross_apply] <;>
+        ring
+    rw [hzero]
+    simp [Box.supportUpper, hk]
   have happ := box.approxSupport_le_max hmem j i k
   have herr := (box.certificate j).exactSupport_sub_approx_abs_le
     hchamber i k
   rw [abs_le] at herr
+  simp only [Box.supportUpper, if_neg hk]
   change _ ≤ ((max3 (fun corner => box.supportAt j corner i k) +
     CayleyEdgeCertificate.supportError : ℚ) : ℝ)
   push_cast

@@ -1,6 +1,6 @@
 module
 
-public import Noperthedron.SnubCube.ProjectiveEdgeCertificate
+public import Noperthedron.SnubCube.ProjectiveLocalCertificate
 
 @[expose] public section
 
@@ -63,6 +63,7 @@ inductive Row where
   | viewSplit (id : ℕ) (children : Fin 4 → ℕ)
       (interval : Interval) (triangle : Triangle)
   | projective (id : ℕ) (box : ProjectiveEdgeCertificate.Box)
+  | projectiveLocal (id : ℕ) (box : ProjectiveLocalCertificate.Box)
   | localLeaf (id : ℕ) (region : Region)
       (box : CayleyLocalCertificate.Box)
   | prune (id : ℕ) (region : Region)
@@ -73,6 +74,7 @@ def Row.id : Row → ℕ
   | .viewRoot id .. => id
   | .viewSplit id .. => id
   | .projective id .. => id
+  | .projectiveLocal id .. => id
   | .localLeaf id .. => id
   | .prune id .. => id
 
@@ -81,6 +83,7 @@ def Row.interval : Row → Interval
   | .viewRoot _ _ interval => interval
   | .viewSplit _ _ interval _ => interval
   | .projective _ box => box.interval
+  | .projectiveLocal _ box => box.interval
   | .localLeaf _ _ box => box.interval
   | .prune _ _ box => box.interval
 
@@ -89,6 +92,7 @@ def Row.region : Row → Region
   | .viewRoot .. => .chamber
   | .viewSplit _ _ _ triangle => .triangle triangle
   | .projective _ box => .triangle box.triangle
+  | .projectiveLocal _ box => .triangle box.triangle
   | .localLeaf _ region _ => region
   | .prune _ region _ => region
 
@@ -114,6 +118,7 @@ def Row.ValidAt (get : ℕ → Row) (size : ℕ) : Row → Prop
       (get (children j)).interval = interval ∧
       (get (children j)).region = .triangle (split triangle j)
   | .projective _ box => box.Valid
+  | .projectiveLocal _ box => box.Valid
   | .localLeaf _ _ box => box.Valid
   | .prune _ _ box => box.Valid
 
@@ -141,6 +146,11 @@ theorem valid_imp_noRupert_ix (get : ℕ → Row) (size : ℕ)
       unfold NoRupert
       rintro ⟨p, hp, offset, -, hchamber, hregion, hrupert⟩
       exact ProjectiveEdgeCertificate.Box.valid_imp_not_translated_rupert
+        box hvalid p hp offset hchamber hregion hrupert
+  | projectiveLocal id box =>
+      unfold NoRupert
+      rintro ⟨p, hp, offset, -, hchamber, hregion, hrupert⟩
+      exact ProjectiveLocalCertificate.Box.valid_imp_not_translated_rupert
         box hvalid p hp offset hchamber hregion hrupert
   | localLeaf id region box =>
       unfold NoRupert
