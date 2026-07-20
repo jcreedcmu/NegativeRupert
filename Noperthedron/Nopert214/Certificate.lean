@@ -1,7 +1,7 @@
 module
 
 public import Noperthedron.BalancedSupport.RationalCertificate
-public import Noperthedron.Nopert214.Vertices
+public import Noperthedron.Nopert214.Approximation
 
 @[expose] public section
 
@@ -10,8 +10,8 @@ public import Noperthedron.Nopert214.Vertices
 # Balanced-global certificates for Nopert #214
 
 The checker is the generic rational balanced-support checker instantiated
-with the exact rational Nopert #214 vertices.  Since the formal vertices are
-rational, the real/rational approximation error is identically zero.
+with the printed STL coordinates.  `Approximation.lean` connects those
+rational coordinates to the intended exact fivefold-symmetric vertices.
 -/
 
 namespace Noperthedron.Nopert214.Certificate

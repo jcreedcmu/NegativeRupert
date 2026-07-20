@@ -531,7 +531,8 @@ theorem valid_center_normalizedA_approx (box : Box)
     (fun i => by
       change ‖exactVertex (cert.contact i).index -
         toR3 (rationalVertex (cert.contact i).index)‖ ≤ RationalApprox.κ
-      simp [exactVertex, RationalApprox.κ])
+      simpa [exactApproximation, exactPolyhedron, rationalPolyhedron] using
+        (exactApproximation.approx (cert.contact i).index))
     (fun i => by
       have hlift := Noperthedron.SnubCube.norm_outerLift_rationalApprox_sub_le
         box.center h.center_in_four (0 : ℝ²) (cert.realDirection i)

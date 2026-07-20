@@ -1,26 +1,30 @@
 module
 
-public import Noperthedron.RationalApprox.Basic
+public import Noperthedron.RationalApprox.TrigLemmas
+public import Noperthedron.Vertices.Taylor
+public import Mathlib.Analysis.Real.Pi.Bounds
 
 @[expose] public section
 
 
 /-!
-# Exact rational vertices of Nopert #214
+# Exact and rational vertices of Nopert #214
 
 Tom 7 publishes Nopert #214 as an ASCII STL linked from
-<https://tom7.org/ruperts/>.  The mesh has twenty distinct vertices.  This
-file interprets each printed decimal coordinate as an exact rational number,
-ordered in four nearly fivefold-symmetric orbits.  Thus the formal object is
-completely specified without relying on floating-point semantics or on the
-triangulation of its boundary.
+<https://tom7.org/ruperts/>.  Its source construction takes four seed vertices
+and rotates them around the z axis in increments of `2π/5`.  The STL stores
+rounded decimal coordinates.  We therefore use the intended fivefold-symmetric
+construction as the exact real polyhedron, and the twenty printed STL vertices
+as rational approximations used by the executable checker.
 -/
 
 namespace Noperthedron.Nopert214
 
 abbrev VertexIndex := Fin 20
+abbrev SeedIndex := Fin 4
+abbrev OrbitIndex := Fin 5
 
-def rationalVertices : VertexIndex → Fin 3 → ℚ := ![
+def stlVertices : VertexIndex → Fin 3 → ℚ := ![
   ![0.5542570167628148, 0.13498214234883502, 0.5670539264866502],
   ![0.839503072954794, 0.4526456900329921, 0.3005768949769993],
   ![0.7619849874129984, 0.5429603653859462, -0.04074876955046458],
@@ -43,49 +47,66 @@ def rationalVertices : VertexIndex → Fin 3 → ℚ := ![
   ![0.3075852394346786, -0.5223713341527026, -0.7653829489805983]
 ]
 
-def rationalVertex (i : VertexIndex) : Fin 3 → ℚ := rationalVertices i
+def rationalVertex (i : VertexIndex) : Fin 3 → ℚ := stlVertices i
+
+def seedVertex : SeedIndex → Fin 3 → ℚ := ![
+  ![0.5542570167628148, 0.13498214234883502, 0.5670539264866502],
+  ![0.839503072954794, 0.4526456900329921, 0.3005768949769993],
+  ![0.7619849874129984, 0.5429603653859462, -0.04074876955046458],
+  ![0.591853727475924, 0.13110932665305655, -0.7653829489805983]
+]
+
+def orbitIndex (i : VertexIndex) : OrbitIndex :=
+  ⟨i.val / 4, by omega⟩
+
+def seedIndex (i : VertexIndex) : SeedIndex :=
+  ⟨i.val % 4, Nat.mod_lt _ (by omega)⟩
+
+/-- A rational trigonometric approximation to the intended exact orbit vertex.
+Angles in the second half of the orbit are reduced modulo `2π`, keeping their
+absolute values below `π`. -/
+def taylorVertex (i : VertexIndex) : Fin 3 → ℚ :=
+  let k := orbitIndex i
+  let k' : ℚ := if k.val ≤ 2 then k.val else k.val - 5
+  let θ : ℚ := 2 * Noperthedron.piQ * k' / 5
+  let c := RationalApprox.cosℚ θ
+  let s := RationalApprox.sinℚ θ
+  let v := seedVertex (seedIndex i)
+  ![c * v 0 - s * v 1, s * v 0 + c * v 1, v 2]
 
 def rationalPolyhedron : Polyhedron VertexIndex (Fin 3 → ℚ) :=
   ⟨rationalVertex⟩
 
 noncomputable def exactVertex (i : VertexIndex) : ℝ³ :=
-  toR3 (rationalVertex i)
+  RzL (2 * Real.pi * (orbitIndex i : ℝ) / 5) (toR3 (seedVertex (seedIndex i)))
 
 noncomputable def exactPolyhedron : Polyhedron VertexIndex ℝ³ :=
-  rationalPolyhedron.toReal
+  ⟨exactVertex⟩
 
 @[simp] theorem exactPolyhedron_vertex (i : VertexIndex) :
     exactPolyhedron.v i = exactVertex i := rfl
 
 theorem exactVertex_norm_pos (i : VertexIndex) : 0 < ‖exactVertex i‖ := by
-  rw [norm_pos_iff]
+  rw [exactVertex, Bounding.Rz_preserves_norm, norm_pos_iff]
   intro h
   have hcoord := congrFun (congrArg WithLp.ofLp h) (2 : Fin 3)
   fin_cases i <;>
-    simp [exactVertex, rationalVertex, rationalVertices, toR3] at hcoord <;>
+    simp [seedIndex, seedVertex, toR3] at hcoord <;>
     norm_num at hcoord
 
 theorem exactVertex_norm_le_one (i : VertexIndex) : ‖exactVertex i‖ ≤ 1 := by
+  rw [exactVertex, Bounding.Rz_preserves_norm]
   rw [← sq_le_sq₀ (norm_nonneg _) (by norm_num : (0 : ℝ) ≤ 1)]
   simp only [PiLp.norm_sq_eq_of_L2, Fin.sum_univ_three,
     Real.norm_eq_abs, sq_abs, one_pow]
   fin_cases i <;>
-    simp [exactVertex, rationalVertex, rationalVertices, toR3] <;>
+    simp [seedIndex, seedVertex, toR3] <;>
     norm_num
 
 noncomputable def exactGoodPoly : GoodPoly VertexIndex where
   vertices := exactPolyhedron
   nontriv := exactVertex_norm_pos
   vertex_radius_le_one := exactVertex_norm_le_one
-
-noncomputable def exactApproximation :
-    RationalApprox.κApproxPoly exactPolyhedron rationalPolyhedron where
-  bijection := Equiv.refl VertexIndex
-  approx := by
-    intro i
-    change ‖toR3 (rationalVertex i) - toR3 (rationalVertex i)‖ ≤
-      RationalApprox.κ
-    simp [RationalApprox.κ]
 
 end Noperthedron.Nopert214
 
