@@ -394,6 +394,26 @@ def exact_tetrahedron_axis_radius(points):
     return min(bounds)
 
 
+def tetrahedron_axis_radius_float(points):
+    """Floating analogue used only by diagnostic profiles."""
+    matrix = np.vstack((np.asarray(points, dtype=float).T, np.ones(4)))
+    try:
+        inverse = np.linalg.inv(matrix)
+    except np.linalg.LinAlgError:
+        return 0.0
+    zero = inverse @ np.asarray([0., 0., 0., 1.])
+    if zero.min() <= 0:
+        return 0.0
+    bounds = []
+    for axis in range(3):
+        for sign in (-1, 1):
+            direction = np.zeros(4)
+            direction[axis] = sign
+            derivative = inverse @ direction
+            bounds.extend(zero[derivative < 0]/(-derivative[derivative < 0]))
+    return float(min(bounds))
+
+
 def sqrt_q_up16(x: Q):
     if x <= 0:
         return Q(0)
@@ -851,6 +871,10 @@ def projective_local_triangle(triangle):
     convention = np.diag([-1.0, -1.0, 1.0])
     experiment_view = np.asarray([float(x) for x in view]) @ convention
     points, payloads, _ = certificate_vectors(experiment_view)
+    keep = [i for i, payload in enumerate(payloads)
+            if len(payload["support_pairs"]) == 3]
+    points = points[keep]
+    payloads = [payloads[i] for i in keep]
     float_radius, chosen_indices = best_centered_tetrahedron(points)
     if chosen_indices is None:
         raise RuntimeError("no centered projective-local tetrahedron")
@@ -1019,6 +1043,225 @@ def projective_local_cover(max_depth, exact_audit_limit=25):
             "exact_audit": exact_audit,
             "radius_quantiles_min_01_10_50_90_99_max": quantiles,
             "failure_examples": failures}
+
+
+def projective_transition_profile():
+    """Measure the scale-invariant constants at the hardest symmetry-wall seam.
+
+    The seam replaces the silhouette path `15-11-10-14` by
+    `15-3-2-14`.  A strong bundle from the first side is retained as an
+    approximate-support defect bundle on the second side.  The regular bundle
+    on the second side has radius proportional to the exact support
+    orientation `d`; the ratios below test the overlap inequality formalized
+    in `BalancedSupport.Transition`.
+    """
+    transition_edge = VERTICES_EXACT[15] - VERTICES_EXACT[11]
+    transition_delta = VERTICES_EXACT[3] - VERTICES_EXACT[15]
+    transition_coefficient = np.cross(transition_edge, transition_delta)
+    # Solve `(1-u,u,0) dot coefficient = 0`.
+    u0 = float(-transition_coefficient[0] /
+               (transition_coefficient[1]-transition_coefficient[0]))
+    central_u = Q(1, 5)
+    central_view_q = [1-central_u, central_u, Q(0)]
+    central = projective_local_triangle(
+        [central_view_q, central_view_q, central_view_q])
+    rows = central["certificates"]
+
+    def central_at(view):
+        points = []
+        defects = []
+        minimum_weight = math.inf
+        for row in rows:
+            starts = row["edge_start"]
+            finishes = row["edge_finish"]
+            supports = row["support_index"]
+            edges = [VERTICES_EXACT[a]-VERTICES_EXACT[b]
+                     for a, b in zip(starts, finishes)]
+            weights = np.asarray([
+                view @ np.cross(edges[1], edges[2]),
+                view @ np.cross(edges[2], edges[0]),
+                view @ np.cross(edges[0], edges[1])])
+            minimum_weight = min(minimum_weight, float(weights.min()))
+            avec = np.zeros(3)
+            total_defect = 0.0
+            for weight, edge, selected in zip(weights, edges, supports):
+                lift = np.cross(view, edge)
+                avec += weight * np.cross(VERTICES_EXACT[selected], lift)
+                support = max(float(view @ np.cross(
+                    edge, VERTICES_EXACT[k]-VERTICES_EXACT[selected]))
+                              for k in range(24))
+                total_defect += weight * max(0.0, support)
+            B = float(row["B"])
+            points.append(avec/B)
+            defects.append(total_defect/B)
+        radius = tetrahedron_axis_radius_float(points)
+        return {"c": 4*radius/7, "maximum_normalized_defect": max(defects),
+                "minimum_weight": minimum_weight}
+
+    samples = []
+    for offset in (1e-6, 2e-6, 5e-6, 1e-5, 2e-5, 5e-5,
+                   1e-4, 2e-4, 5e-4, 1e-3, 2e-3, 5e-3):
+        u = u0 + offset
+        view = np.asarray([1-u, u, 0.0])
+        d = float(view @ transition_coefficient)
+        central_row = central_at(view)
+        regular_q = Q(round(u*10**12), 10**12)
+        regular_view = [1-regular_q, regular_q, Q(0)]
+        try:
+            regular = projective_local_triangle(
+                [regular_view, regular_view, regular_view])
+            regular_c = float(regular["c"])
+        except RuntimeError:
+            regular_c = 0.0
+        samples.append({
+            "u_offset": offset, "support_distance": d,
+            "regular_c": regular_c,
+            "regular_k_ratio": regular_c/d if d > 0 else 0.0,
+            "central_c": central_row["c"],
+            "central_defect": central_row["maximum_normalized_defect"],
+            "central_D_ratio": (central_row["maximum_normalized_defect"]/d
+                                if d > 0 else math.inf),
+            "central_minimum_weight": central_row["minimum_weight"],
+        })
+    positive_k = [row["regular_k_ratio"] for row in samples
+                  if row["regular_k_ratio"] > 0]
+    D = max(row["central_D_ratio"] for row in samples)
+    k = min(positive_k) if positive_k else 0.0
+    c = min(row["central_c"] for row in samples)
+    # Largest small-rotation chart radius allowed by the formal overlap gate.
+    # D(1+r²) <= 2k(c-r).
+    coefficients = [D, 2*k, D-2*k*c]
+    roots = np.roots(coefficients) if D > 0 else [c]
+    allowed = [float(root.real) for root in roots
+               if abs(root.imag) < 1e-12 and 0 < root.real < min(1, c)]
+
+    # Retain heterogeneous defect slopes instead of replacing all of them by
+    # the single worst D.  This computes the blown-up limiting problem
+    #   min_axis max_j (axis dot a_j - D_j/(2t)).
+    # It is the numerical target for a finite polynomial axis-case checker.
+    try:
+        from experiment_snub_axis_free import certificate_vectors
+        import experiment_snub_cube as experiment_cube
+    except ModuleNotFoundError:
+        from scripts.experiment_snub_axis_free import certificate_vectors
+        from scripts import experiment_snub_cube as experiment_cube
+    convention = np.diag([-1.0, -1.0, 1.0])
+    source_view = np.asarray(list(map(float, central_view_q)))
+    _, source_payloads, _ = certificate_vectors(source_view @ convention)
+    normalized_search_vertices = VERTICES_EXACT / np.linalg.norm(
+        VERTICES_EXACT[0])
+    rotated_experiment_vertices = experiment_cube.UNIT_VERTS @ convention
+    index_map = [int(np.argmin(np.linalg.norm(
+        normalized_search_vertices-rotated_experiment_vertices[i], axis=1)))
+        for i in range(24)]
+    transition_view = np.asarray([1-u0, u0, 0.0])
+    probe_view = np.asarray([1-u0-1e-7, u0+1e-7, 0.0])
+    probe_d = float(probe_view @ transition_coefficient)
+    family_points = []
+    family_D = []
+    for payload in source_payloads:
+        if len(payload["support_pairs"]) != 3:
+            continue
+        starts, finishes = [], []
+        for a, b, sigma in payload["support_pairs"]:
+            a, b = index_map[a], index_map[b]
+            start, finish = ((b, a) if sigma == 1 else (a, b))
+            starts.append(start)
+            finishes.append(finish)
+        supports = [index_map[i] for i in payload["support_vertices"]]
+        edges = [VERTICES_EXACT[a]-VERTICES_EXACT[b]
+                 for a, b in zip(starts, finishes)]
+        weights = np.asarray([
+            transition_view @ np.cross(edges[1], edges[2]),
+            transition_view @ np.cross(edges[2], edges[0]),
+            transition_view @ np.cross(edges[0], edges[1])])
+        if weights.max() < 0:
+            for values in (starts, finishes, supports, edges):
+                values[1], values[2] = values[2], values[1]
+            weights = weights[[0, 2, 1]] * -1
+        if weights.min() < -1e-9 or weights.sum() <= 1e-12:
+            continue
+        B = 2*weights.sum()
+        avec = np.zeros(3)
+        total_defect = 0.0
+        for weight, edge, selected in zip(weights, edges, supports):
+            avec += weight*np.cross(
+                VERTICES_EXACT[selected], np.cross(transition_view, edge))
+            support = max(float(probe_view @ np.cross(
+                edge, VERTICES_EXACT[q]-VERTICES_EXACT[selected]))
+                          for q in range(24))
+            total_defect += weight*max(0.0, support)
+        family_points.append(avec/B)
+        family_D.append(total_defect/(B*probe_d))
+    family_points = np.asarray(family_points)
+    family_D = np.asarray(family_D)
+    rng = np.random.default_rng(20260719)
+    axes = rng.normal(size=(50000, 3))
+    axes /= np.linalg.norm(axes, axis=1)[:, None]
+
+    def sampled_heterogeneous_margin(t):
+        values = axes @ family_points.T - family_D[None, :]/(2*t)
+        maxima = values.max(axis=1)
+        return float(maxima.min()), int(np.argmin(maxima))
+
+    from scipy.optimize import minimize
+
+    def optimized_heterogeneous_margin(t, start_count=16):
+        values = axes @ family_points.T - family_D[None, :]/(2*t)
+        maxima = values.max(axis=1)
+        starts = axes[np.argsort(maxima)[:start_count]]
+
+        def objective(raw):
+            norm = np.linalg.norm(raw)
+            if norm < 1e-12:
+                return 1.0
+            axis = raw/norm
+            return float(np.max(family_points @ axis - family_D/(2*t)))
+
+        best = (math.inf, None)
+        for start in starts:
+            result = minimize(objective, start, method="Nelder-Mead",
+                              options={"maxiter": 1200, "xatol": 1e-11,
+                                       "fatol": 1e-12})
+            if result.fun < best[0]:
+                best = (float(result.fun), result.x/np.linalg.norm(result.x))
+        return best
+
+    lo, hi = 1e-4, 128.0
+    for _ in range(24):
+        mid = math.sqrt(lo*hi)
+        if optimized_heterogeneous_margin(mid, 8)[0] >= 0:
+            hi = mid
+        else:
+            lo = mid
+    threshold_margin, threshold_axis = optimized_heterogeneous_margin(hi, 24)
+    regular_margin, regular_axis = (
+        optimized_heterogeneous_margin(k, 32) if k > 0
+        else (-math.inf, np.zeros(3)))
+    sampled_regular_margin, _ = (
+        sampled_heterogeneous_margin(k) if k > 0 else (-math.inf, 0))
+    heterogeneous = {
+        "certificate_count": len(family_points),
+        "regular_boundary_t": k,
+        "margin_at_regular_boundary": regular_margin,
+        "sampled_margin_at_regular_boundary": sampled_regular_margin,
+        "worst_axis_at_regular_boundary": regular_axis.tolist(),
+        "estimated_defect_threshold_t": hi,
+        "threshold_margin": threshold_margin,
+        "threshold_axis": threshold_axis.tolist(),
+        "defect_slope_quantiles": np.quantile(
+            family_D, [0, .1, .5, .9, 1]).tolist(),
+    }
+    return {
+        "transition_u": u0,
+        "transition_coefficient": transition_coefficient.tolist(),
+        "central_view": list(map(float, central_view_q)),
+        "conservative_constants": {"c": c, "k": k, "D": D,
+                                   "maximum_overlap_radius":
+                                       max(allowed) if allowed else 0.0},
+        "heterogeneous_limit": heterogeneous,
+        "samples": samples,
+    }
 
 
 def qpoly_eval_centered(coefficients, centers, radii):
@@ -2401,6 +2644,7 @@ def main():
                                                default=5)
     projective_local_cover_parser.add_argument("--exact-audit-limit", type=int,
                                                default=25)
+    sub.add_parser("projective-transition-profile")
     args = parser.parse_args()
     if args.command == "local-smoke":
         result = local_smoke(Q(args.theta), Q(args.phi),
@@ -2498,6 +2742,9 @@ def main():
     elif args.command == "projective-local-cover":
         result = projective_local_cover(args.max_depth,
                                         args.exact_audit_limit)
+        print(json.dumps(qjson(result), indent=2))
+    elif args.command == "projective-transition-profile":
+        result = projective_transition_profile()
         print(json.dumps(qjson(result), indent=2))
 
 
