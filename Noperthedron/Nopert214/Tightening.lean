@@ -30,6 +30,12 @@ present inside the domain that the certificate tree must cover. -/
 def InTightPoseRegion (q : Pose ℝ) : Prop :=
   q ∈ tightPoseInterval ∧ q.θ₁ - q.θ₂ ∈ Set.Icc (-(2 / 3)) (2 / 3)
 
+/-- The exact angular wedge retained by the fivefold symmetry reduction.
+Unlike the rational root box, these sharp bounds preserve the signs of the
+first two outer viewing coordinates. -/
+def InViewWedge (q : Pose ℝ) : Prop :=
+  q.θ₂ ∈ Set.Icc 0 (2 * π / 5) ∧ q.φ₂ ∈ Set.Icc 0 π
+
 private theorem translated_innerShadow_eq (p : Pose ℝ) (offset : ℝ²)
     (S : Set ℝ³) :
     innerShadow (p.matrixPoseWithOffset offset) S =
@@ -138,9 +144,10 @@ the symmetry-reduced rational root box. -/
 theorem exists_tight_translated_pose (p : MatrixPose) :
     ∃ δ : ℝ, ∃ q : Pose ℝ, ∃ offset : ℝ²,
       InTightPoseRegion q ∧
+      InViewWedge q ∧
       (RupertPose (q.matrixPoseWithOffset offset) exactPolyhedron.hull ↔
         RupertPose (p.rotateBy δ) exactPolyhedron.hull) := by
-  obtain ⟨δ, p0, offset, hp0, heq⟩ :=
+  obtain ⟨δ, p0, offset, hp0, _hθ0, hφ0, heq⟩ :=
     Noperthedron.BalancedSupport.exists_universal_translated_pose p
   obtain ⟨q, hθ₂, hdiff, hφ₁, hφ₂, hα, hinner, houter⟩ := tighten_theta p0
   have hq : q ∈ tightPoseInterval := by
@@ -158,7 +165,12 @@ theorem exists_tight_translated_pose (p : MatrixPose) :
         hα.symm ▸ hhi.2.2.2.2⟩⟩
   have hrelative : q.θ₁ - q.θ₂ ∈ Set.Icc (-(2 / 3)) (2 / 3) := by
     constructor <;> nlinarith [hdiff.1, hdiff.2, Real.pi_lt_d20]
-  refine ⟨δ, q, offset, ⟨hq, hrelative⟩, ?_⟩
+  have hview : InViewWedge q := by
+    constructor
+    · exact ⟨hθ₂.1, hθ₂.2.le⟩
+    · rw [hφ₂]
+      exact hφ0
+  refine ⟨δ, q, offset, ⟨hq, hrelative⟩, hview, ?_⟩
   rw [← heq]
   exact (translated_rupert_iff_of_images offset hinner houter).symm
 
@@ -168,7 +180,7 @@ theorem no_matrixPose_of_no_tight_translated_pose
       RupertPose (q.matrixPoseWithOffset offset) exactPolyhedron.hull) :
     ¬ ∃ p : MatrixPose, RupertPose p exactPolyhedron.hull := by
   rintro ⟨p, hp⟩
-  obtain ⟨δ, q, offset, hq, heq⟩ := exists_tight_translated_pose p
+  obtain ⟨δ, q, offset, hq, -, heq⟩ := exists_tight_translated_pose p
   have hrot : RupertPose (p.rotateBy δ) exactPolyhedron.hull :=
     (MatrixPose.RupertPose_rotateBy_iff p δ exactPolyhedron.hull).mpr hp
   exact h ⟨q, hq, offset, heq.mpr hrot⟩

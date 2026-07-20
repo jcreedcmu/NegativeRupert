@@ -33,6 +33,7 @@ def box : Box where
   outerIndex := fun i => ![13, 17, 18, 3, 7, 6, 9, 12] i
   innerIndex := fun i => ![9, 9, 12, 17, 18, 3, 7, 6] i
   nonzeroWitness := fun i => ![7, 6, 9, 12, 17, 18, 3, 3] i
+  ballMultiplier := fun _ => 1 / 100
 
 theorem valid_kernel : box.Valid := by
   decide +kernel
@@ -42,21 +43,23 @@ theorem valid_native : box.Valid := by
 
 theorem excludes_triangle_kernel {p : AtlasPose ℝ}
     (hp : p ∈ interval.toReal) (offset : ℝ²)
+    (hbounded : p.CayleyBounded)
     (hscale : 1 ≤ viewScale box.root p)
     (hmem : InTriangle (toReal triangle)
       (normalizedView box.root p)) :
     ¬ RupertPose (p.matrixPoseWithOffset box.chart offset)
       exactPolyhedron.hull :=
-  box.valid_imp_not_translated_rupert valid_kernel hp offset hscale hmem
+  box.valid_imp_not_translated_rupert valid_kernel hp hbounded offset hscale hmem
 
 theorem excludes_triangle_native {p : AtlasPose ℝ}
     (hp : p ∈ interval.toReal) (offset : ℝ²)
+    (hbounded : p.CayleyBounded)
     (hscale : 1 ≤ viewScale box.root p)
     (hmem : InTriangle (toReal triangle)
       (normalizedView box.root p)) :
     ¬ RupertPose (p.matrixPoseWithOffset box.chart offset)
       exactPolyhedron.hull :=
-  box.valid_imp_not_translated_rupert valid_native hp offset hscale hmem
+  box.valid_imp_not_translated_rupert valid_native hp hbounded offset hscale hmem
 
 end Noperthedron.Nopert214.AtlasProjectiveEdgeCertificateSmoke
 

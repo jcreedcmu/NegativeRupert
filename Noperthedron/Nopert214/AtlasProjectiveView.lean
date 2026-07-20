@@ -40,6 +40,11 @@ def signedBasis (root : Fin 8) (c : Fin 3) : Vector ℚ :=
 def rootTriangle (root : Fin 8) : Triangle ℚ :=
   fun c => signedBasis root c
 
+/-- The two signed projective roots that meet the exact fivefold-reduced
+viewing wedge. -/
+def wedgeRoot (root : Fin 2) : Fin 8 :=
+  ⟨root.val, by omega⟩
+
 noncomputable def viewScale (root : Fin 8) (p : AtlasPose ℝ) : ℝ :=
   ∑ c, (rootSign root c : ℝ) * viewVector p c
 
@@ -101,6 +106,48 @@ theorem normalizedView_mem_root_of_sign {root : Fin 8}
       rw [show ((rootSign root 2 : ℚ) : ℝ) ^ 2 = 1 by
         exact_mod_cast rootSign_sq root 2]
       ring
+
+/-- In the exact symmetry-reduced wedge, the first two viewing coordinates
+are nonnegative. -/
+theorem viewVector_first_two_nonneg {p : AtlasPose ℝ}
+    (hview : p.InViewWedge) :
+    0 ≤ viewVector p 0 ∧ 0 ≤ viewVector p 1 := by
+  have hthetaHalf : p.θ ≤ Real.pi / 2 := by
+    have hpi : 0 < Real.pi := Real.pi_pos
+    exact hview.1.2.trans (by nlinarith)
+  have hcos : 0 ≤ Real.cos p.θ :=
+    Real.cos_nonneg_of_mem_Icc ⟨by linarith [hview.1.1], hthetaHalf⟩
+  have hsinTheta : 0 ≤ Real.sin p.θ :=
+    Real.sin_nonneg_of_nonneg_of_le_pi hview.1.1
+      (hthetaHalf.trans (by linarith [Real.pi_pos]))
+  have hsinPhi : 0 ≤ Real.sin p.φ :=
+    Real.sin_nonneg_of_mem_Icc hview.2
+  constructor <;> simp [viewVector, mul_nonneg, hcos, hsinTheta, hsinPhi]
+
+/-- Every view in the exact fivefold-reduced wedge belongs to one of the
+two projective roots `+++` and `++-`. -/
+theorem exists_wedgeRoot (p : AtlasPose ℝ) (hview : p.InViewWedge) :
+    ∃ root : Fin 2,
+      1 ≤ viewScale (wedgeRoot root) p ∧
+      InTriangle (toReal (rootTriangle (wedgeRoot root)))
+        (normalizedView (wedgeRoot root) p) := by
+  obtain ⟨hx, hy⟩ := viewVector_first_two_nonneg hview
+  by_cases hz : 0 ≤ viewVector p 2
+  · let root : Fin 2 := 0
+    have hsign : ∀ c,
+        0 ≤ (rootSign (wedgeRoot root) c : ℝ) * viewVector p c := by
+      intro c
+      fin_cases c <;> simp [root, wedgeRoot, rootSign, hx, hy, hz]
+    exact ⟨root, one_le_viewScale_of_sign hsign,
+      normalizedView_mem_root_of_sign hsign⟩
+  · let root : Fin 2 := 1
+    have hz' : viewVector p 2 ≤ 0 := le_of_not_ge hz
+    have hsign : ∀ c,
+        0 ≤ (rootSign (wedgeRoot root) c : ℝ) * viewVector p c := by
+      intro c
+      fin_cases c <;> simp [root, wedgeRoot, rootSign, hx, hy, hz']
+    exact ⟨root, one_le_viewScale_of_sign hsign,
+      normalizedView_mem_root_of_sign hsign⟩
 
 /-- Every outer view belongs to one of the eight signed projective roots,
 with a positive scaling factor at least one. -/

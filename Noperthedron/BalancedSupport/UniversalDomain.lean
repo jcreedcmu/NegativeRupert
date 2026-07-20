@@ -39,6 +39,7 @@ shape-independent rational root box. -/
 theorem exists_universal_translated_pose (p : MatrixPose) :
     ∃ δ : ℝ, ∃ q : Pose ℝ, ∃ offset : ℝ²,
       q ∈ universalPoseInterval ∧
+      q.θ₂ ∈ Set.Ioc (-π) π ∧ q.φ₂ ∈ Set.Icc 0 π ∧
       q.matrixPoseWithOffset offset = p.rotateBy δ := by
   obtain ⟨θi, φi, αi, hθi, hφi, _hαi, hinner⟩ :=
     Noperthedron.SnubCube.SO3_to_bounded_rotRM_params
@@ -61,7 +62,8 @@ theorem exists_universal_translated_pose (p : MatrixPose) :
         by linarith [hα.1]⟩,
       ⟨by linarith [hθi.2], by linarith [hθo.2], hφi.2.trans hpi4,
         hφo.2.trans hpi4, by linarith [hα.2]⟩⟩
-  refine ⟨δ, q, offset, hq, ?_⟩
+  refine ⟨δ, q, offset, hq, by simpa [q] using hθo,
+    by simpa [q] using hφo, ?_⟩
   have hin : Rz_mat δ * p.innerRot.val = rotRM_mat θi φi α := by
     rw [hinner, Rz_mul_rotRM_mat]
     unfold rotRM_mat
@@ -86,7 +88,8 @@ theorem no_matrixPose_of_no_universal_translated_pose {S : Set ℝ³}
       RupertPose (q.matrixPoseWithOffset offset) S) :
     ¬ ∃ p : MatrixPose, RupertPose p S := by
   rintro ⟨p, hp⟩
-  obtain ⟨δ, q, offset, hq, heq⟩ := exists_universal_translated_pose p
+  obtain ⟨δ, q, offset, hq, -, -, heq⟩ :=
+    exists_universal_translated_pose p
   have hrot : RupertPose (p.rotateBy δ) S :=
     (MatrixPose.RupertPose_rotateBy_iff p δ S).mpr hp
   exact h ⟨q, hq, offset, heq.symm ▸ hrot⟩

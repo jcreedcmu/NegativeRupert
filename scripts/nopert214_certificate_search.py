@@ -2027,12 +2027,37 @@ def atlas_simplex_edge_smoke(chart, relative_center, relative_half_widths,
             total_polys = candidate
         if not changed:
             break
-    components = [exact_certificate.qpoly_eval_centered(
-        polynomial, relative_center, relative_half_widths)
-        for polynomial in total_polys]
-    displacement_lowers = [sum(
-        view[i]*(components[i][0]-components[i][1]) for i in range(3))
-        for view in triangle]
+    # Combine view components before interval evaluation, then optimize an
+    # independent nonnegative Cayley-ball multiplier at each triangle corner.
+    # This exactly mirrors AtlasProjectiveEdgeCertificate.adjustedQuadratic.
+    displacement_lowers = []
+    ball_multipliers = []
+    for view in triangle:
+        view_polynomial = exact_certificate.qpoly_zero()
+        for coefficient, polynomial in zip(view, total_polys):
+            view_polynomial = exact_certificate.qpoly_add(
+                view_polynomial,
+                exact_certificate.qpoly_scale(coefficient, polynomial))
+        candidates = [Q(0)]
+        if view_polynomial[0] > 0:
+            candidates.append(view_polynomial[0] / 3)
+        for index in (4, 7, 9):
+            if view_polynomial[index] < 0:
+                candidates.append(-view_polynomial[index])
+
+        def adjusted_lower(multiplier):
+            adjusted = list(view_polynomial)
+            adjusted[0] -= 3*multiplier
+            adjusted[4] += multiplier
+            adjusted[7] += multiplier
+            adjusted[9] += multiplier
+            ball = exact_certificate.qpoly_eval_centered(
+                tuple(adjusted), relative_center, relative_half_widths)
+            return ball[0]-ball[1]
+
+        multiplier = max(candidates, key=adjusted_lower)
+        ball_multipliers.append(multiplier)
+        displacement_lowers.append(adjusted_lower(multiplier))
     endpoints = [(c-e, c+e)
                  for c, e in zip(relative_center, relative_half_widths)]
     d_bound = 1 + sum(max(abs(lo), abs(hi))**2 for lo, hi in endpoints)
@@ -2042,6 +2067,7 @@ def atlas_simplex_edge_smoke(chart, relative_center, relative_half_widths,
             "relative_center": relative_center,
             "relative_half_widths": relative_half_widths,
             "triangle": triangle, "cycle": cycle, "contacts": contacts,
+            "ball_multipliers": ball_multipliers,
             "diagnostics": {"edge_count": len(cycle),
                             "minimum_strict_support_lower": minimum_strict,
                             "total_support_defect": total_defect,
@@ -2178,11 +2204,28 @@ def atlas_simplex_float_screen_py(chart, relative_center,
                 total_polys = best[2]
             if not changed:
                 break
-    balls = [qpoly_eval_centered_float_py(p, centers, radii)
-             for p in total_polys]
-    displacement_lower = min(sum(
-        view[i]*(balls[i][0]-balls[i][1]) for i in range(3))
-        for view in views)
+    displacement_lowers = []
+    for view in views:
+        polynomial = [sum(view[i]*total_polys[i][k] for i in range(3))
+                      for k in range(10)]
+        candidates = [0.0]
+        if polynomial[0] > 0:
+            candidates.append(polynomial[0]/3)
+        for index in (4, 7, 9):
+            if polynomial[index] < 0:
+                candidates.append(-polynomial[index])
+
+        def adjusted_lower(multiplier):
+            adjusted = list(polynomial)
+            adjusted[0] -= 3*multiplier
+            adjusted[4] += multiplier
+            adjusted[7] += multiplier
+            adjusted[9] += multiplier
+            ball = qpoly_eval_centered_float_py(adjusted, centers, radii)
+            return ball[0]-ball[1]
+
+        displacement_lowers.append(max(map(adjusted_lower, candidates)))
+    displacement_lower = min(displacement_lowers)
     endpoint_abs = [max(abs(c-r), abs(c+r))
                     for c, r in zip(centers, radii)]
     d_bound = 1+sum(value*value for value in endpoint_abs)
@@ -2251,9 +2294,28 @@ def atlas_simplex_float_screen(chart, relative_center,
             if not changed:
                 break
 
-    value, radius = exact_certificate.qpoly_eval_centered_float(
-        total_polys, centers, radii)
-    displacement_lower = float(np.min(views @ value - views @ radius))
+    view_polynomials = views @ total_polys
+    displacement_lowers = []
+    for polynomial in view_polynomials:
+        candidates = [0.0]
+        if polynomial[0] > 0:
+            candidates.append(float(polynomial[0]/3))
+        for index in (4, 7, 9):
+            if polynomial[index] < 0:
+                candidates.append(float(-polynomial[index]))
+
+        def adjusted_lower(multiplier):
+            adjusted = polynomial.copy()
+            adjusted[0] -= 3*multiplier
+            adjusted[4] += multiplier
+            adjusted[7] += multiplier
+            adjusted[9] += multiplier
+            value, radius = exact_certificate.qpoly_eval_centered_float(
+                adjusted, centers, radii)
+            return float(value-radius)
+
+        displacement_lowers.append(max(map(adjusted_lower, candidates)))
+    displacement_lower = min(displacement_lowers)
     endpoint_abs = np.maximum(np.abs(centers-radii),
                               np.abs(centers+radii))
     d_bound = 1+float(np.sum(endpoint_abs**2))
@@ -2314,7 +2376,10 @@ def explore_atlas_projective_tree(max_nodes=10_000, max_view_depth=5,
     """
     stack = []
     for chart in range(4):
-        for root, triangle in enumerate(SIGNED_PROJECTIVE_ROOTS):
+        # Exact fivefold symmetry reduces the outer view to the wedge whose
+        # first two coordinates are nonnegative.  Only signed roots +++ and
+        # ++- meet that wedge; AtlasProjectiveSolutionTree proves this once.
+        for root, triangle in enumerate(SIGNED_PROJECTIVE_ROOTS[:2]):
             stack.append((chart, (Q(0), Q(0), Q(0)),
                           (Q(2), Q(2), Q(2)), root, triangle, 0, None))
     counts = {"nodes": 0, "accepted": 0, "radius_pruned": 0,
@@ -2440,7 +2505,9 @@ def generate_atlas_projective_table(
         rows = [None]
         root_children = []
         stack = []
-        for root, triangle in enumerate(SIGNED_PROJECTIVE_ROOTS):
+        # The formal root theorem restricts the exact symmetry-reduced view
+        # to signed roots +++ and ++-.
+        for root, triangle in enumerate(SIGNED_PROJECTIVE_ROOTS[:2]):
             child = len(rows)
             rows.append(None)
             root_children.append(child)
@@ -2462,12 +2529,14 @@ def generate_atlas_projective_table(
     def checkpoint(complete=False):
         if checkpoint_path is None:
             return
-        with open(checkpoint_path, "w", encoding="utf-8") as output:
+        temporary_path = checkpoint_path + ".tmp"
+        with open(temporary_path, "w", encoding="utf-8") as output:
             json.dump({"complete": complete, "chart": chart, "rows": rows,
                        "pending": [state[:-1] for state in stack],
                        "pending_candidates_omitted": True,
                        "counts": counts,
                        "failures": failures}, output, default=str)
+        os.replace(temporary_path, checkpoint_path)
 
     while stack and len(rows) < max_nodes:
         (row_id, center, widths, root, triangle, view_depth,
@@ -2491,7 +2560,9 @@ def generate_atlas_projective_table(
                 rows[row_id] = {**common, "kind": "edge",
                                 "certificate": {
                                     "cycle": exact["cycle"],
-                                    "contacts": exact["contacts"]}}
+                                    "contacts": exact["contacts"],
+                                    "ball_multipliers":
+                                      exact["ball_multipliers"]}}
                 counts["edge"] += 1
                 continue
             counts["exact_rejections"] += 1

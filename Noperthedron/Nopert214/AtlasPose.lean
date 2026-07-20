@@ -154,6 +154,11 @@ def AtlasPose.ofPose (euler : Pose ℝ) (x y z : ℝ) : AtlasPose ℝ :=
 def AtlasPose.CayleyBounded (p : AtlasPose ℝ) : Prop :=
   p.x ^ 2 + p.y ^ 2 + p.z ^ 2 ≤ 3
 
+/-- The exact outer-view wedge inherited from the symmetry-reduced Euler
+representative. -/
+def AtlasPose.InViewWedge (p : AtlasPose ℝ) : Prop :=
+  p.θ ∈ Set.Icc 0 (2 * Real.pi / 5) ∧ p.φ ∈ Set.Icc 0 Real.pi
+
 theorem AtlasPose.ofPose_mem_root (euler : Pose ℝ) (x y z : ℝ)
     (heuler : euler ∈ tightPoseInterval)
     (hx : x ∈ Set.Icc (-2 : ℝ) 2)
@@ -209,9 +214,9 @@ theorem exists_atlas_pose_of_tight_pose (euler : Pose ℝ) (offset : ℝ²)
 /-- The atlas representative also lies in the radius-`√3` Cayley ball. -/
 theorem exists_bounded_atlas_pose_of_tight_pose
     (euler : Pose ℝ) (offset : ℝ²)
-    (heuler : euler ∈ tightPoseInterval) :
+    (heuler : euler ∈ tightPoseInterval) (hview : InViewWedge euler) :
     ∃ chart : ChartIndex, ∃ q ∈ AtlasPose.rootInterval ℝ,
-      q.CayleyBounded ∧
+      q.CayleyBounded ∧ q.InViewWedge ∧
       q.matrixPoseWithOffset chart offset =
         euler.matrixPoseWithOffset offset := by
   let oldPose := euler.matrixPoseWithOffset offset
@@ -220,7 +225,8 @@ theorem exists_bounded_atlas_pose_of_tight_pose
       (Noperthedron.SnubCube.MatrixPose.relativeRotation_mem_SO3 oldPose)
   refine ⟨chart, AtlasPose.ofPose euler x y z,
     AtlasPose.ofPose_mem_root euler x y z heuler hx hy hz,
-    hradius, ?_⟩
+    hradius, by simpa [AtlasPose.InViewWedge, AtlasPose.ofPose, InViewWedge]
+      using hview, ?_⟩
   exact AtlasPose.matrixPoseWithOffset_ofPose_eq
     euler offset chart x y z hrelative
 
@@ -232,7 +238,7 @@ theorem exists_atlas_translated_pose (p : MatrixPose) :
       (RupertPose (q.matrixPoseWithOffset chart offset)
           exactPolyhedron.hull ↔
         RupertPose (p.rotateBy δ) exactPolyhedron.hull) := by
-  obtain ⟨δ, euler, offset, heuler, heq⟩ :=
+  obtain ⟨δ, euler, offset, heuler, -, heq⟩ :=
     exists_tight_translated_pose p
   obtain ⟨chart, q, hq, hmatrix⟩ :=
     exists_atlas_pose_of_tight_pose euler offset heuler.1
@@ -257,21 +263,22 @@ theorem no_matrixPose_of_no_atlas_translated_pose
 /-- It suffices to exclude only the radius-bounded part of each atlas root. -/
 theorem no_matrixPose_of_no_bounded_atlas_translated_pose
     (h : ¬ ∃ chart : ChartIndex, ∃ q ∈ AtlasPose.rootInterval ℝ,
-      q.CayleyBounded ∧ ∃ offset : ℝ²,
+      q.CayleyBounded ∧ q.InViewWedge ∧ ∃ offset : ℝ²,
         RupertPose (q.matrixPoseWithOffset chart offset)
           exactPolyhedron.hull) :
     ¬ ∃ p : MatrixPose, RupertPose p exactPolyhedron.hull := by
   rintro ⟨p, hp⟩
-  obtain ⟨δ, euler, offset, heuler, heq⟩ :=
+  obtain ⟨δ, euler, offset, heuler, hview, heq⟩ :=
     exists_tight_translated_pose p
-  obtain ⟨chart, q, hq, hbounded, hmatrix⟩ :=
-    exists_bounded_atlas_pose_of_tight_pose euler offset heuler.1
+  obtain ⟨chart, q, hq, hbounded, hqview, hmatrix⟩ :=
+    exists_bounded_atlas_pose_of_tight_pose euler offset heuler.1 hview
   have hrot : RupertPose (p.rotateBy δ) exactPolyhedron.hull :=
     (MatrixPose.RupertPose_rotateBy_iff p δ exactPolyhedron.hull).mpr hp
   have heulerRupert :
       RupertPose (euler.matrixPoseWithOffset offset) exactPolyhedron.hull :=
     heq.mpr hrot
-  exact h ⟨chart, q, hq, hbounded, offset, hmatrix ▸ heulerRupert⟩
+  exact h ⟨chart, q, hq, hbounded, hqview, offset,
+    hmatrix ▸ heulerRupert⟩
 
 end Noperthedron.Nopert214
 
