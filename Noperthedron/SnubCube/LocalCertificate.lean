@@ -414,12 +414,12 @@ def tetraBarycentricQ (p : Fin 4 → Fin 3 → ℚ) (target : Fin 3 → ℚ) :
   let l2 := det3Q a b y / D
   ![l0, l1, l2, 1 - l0 - l1 - l2]
 
-private theorem tetraBarycentricQ_sum (p : Fin 4 → Fin 3 → ℚ)
+theorem tetraBarycentricQ_sum (p : Fin 4 → Fin 3 → ℚ)
     (target : Fin 3 → ℚ) :
     ∑ j, tetraBarycentricQ p target j = 1 := by
   simp [tetraBarycentricQ, Fin.sum_univ_four]
 
-private theorem tetraBarycentricQ_combination (p : Fin 4 → Fin 3 → ℚ)
+theorem tetraBarycentricQ_combination (p : Fin 4 → Fin 3 → ℚ)
     (target : Fin 3 → ℚ) (hdet : tetraDetQ p ≠ 0) :
     ∑ j, tetraBarycentricQ p target j • p j = target := by
   simp only [tetraDetQ] at hdet
