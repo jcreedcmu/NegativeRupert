@@ -59,6 +59,20 @@ def rootInterval (R : Type) [Field R] [LinearOrder R] [IsStrictOrderedRing R] :
       { θ := 8 / 5, φ := 4, x := 2, y := 2, z := 2 }⟩
     (by rw [le_iff]; norm_num)
 
+/-- Componentwise rational-to-real conversion. -/
+def toReal (p : AtlasPose ℚ) : AtlasPose ℝ where
+  θ := p.θ
+  φ := p.φ
+  x := p.x
+  y := p.y
+  z := p.z
+
+@[simp] theorem toReal_θ (p : AtlasPose ℚ) : p.toReal.θ = (p.θ : ℝ) := rfl
+@[simp] theorem toReal_φ (p : AtlasPose ℚ) : p.toReal.φ = (p.φ : ℝ) := rfl
+@[simp] theorem toReal_x (p : AtlasPose ℚ) : p.toReal.x = (p.x : ℝ) := rfl
+@[simp] theorem toReal_y (p : AtlasPose ℚ) : p.toReal.y = (p.y : ℝ) := rfl
+@[simp] theorem toReal_z (p : AtlasPose ℚ) : p.toReal.z = (p.z : ℝ) := rfl
+
 /-- The outer viewing rotation bundled as an element of `SO(3)`. -/
 noncomputable def outerSO3 (p : AtlasPose ℝ) : SO3 :=
   ⟨rotRM_mat p.θ p.φ 0, rotRM_mat_mem_SO3 _ _ _⟩
@@ -91,6 +105,29 @@ noncomputable def matrixPoseWithOffset (chart : ChartIndex)
     matrixPoseWithOffset_outerRot_val, matrixPoseWithOffset_innerRot_val]
   rw [Matrix.mul_assoc, ← Matrix.mul_assoc
     (rotRM_mat p.θ p.φ 0)ᵀ, horth, Matrix.one_mul]
+
+theorem matrixPoseWithOffset_inner_rotation_project (chart : ChartIndex)
+    (p : AtlasPose ℝ) (offset : ℝ²) (v : ℝ³) :
+    proj_xyL ((p.matrixPoseWithOffset chart offset).innerRot.val.toEuclideanLin v) =
+      rotM p.θ p.φ
+        ((chartMatrix chart * cayleyMatrix p.x p.y p.z).toEuclideanLin v) := by
+  have hrot := congrArg (fun f : ℝ³ →L[ℝ] ℝ³ =>
+      f ((chartMatrix chart * cayleyMatrix p.x p.y p.z).toEuclideanLin v))
+    (rotRM_eq_rotRM_mat p.θ p.φ 0)
+  rw [← Pose.proj_rm_eq_m]
+  apply congrArg proj_xyL
+  simpa [matrixPoseWithOffset_innerRot_val, Matrix.toLpLin_apply,
+    Matrix.mulVec_mulVec, Matrix.mul_assoc] using hrot.symm
+
+theorem matrixPoseWithOffset_outer_rotation_project (chart : ChartIndex)
+    (p : AtlasPose ℝ) (offset : ℝ²) (v : ℝ³) :
+    proj_xyL ((p.matrixPoseWithOffset chart offset).outerRot.val.toEuclideanLin v) =
+      rotM p.θ p.φ v := by
+  have hrot := congrArg (fun f : ℝ³ →L[ℝ] ℝ³ => f v)
+    (rotRM_eq_rotRM_mat p.θ p.φ 0)
+  rw [← Pose.proj_rm_eq_m]
+  apply congrArg proj_xyL
+  simpa [matrixPoseWithOffset_outerRot_val] using hrot.symm
 
 end AtlasPose
 
