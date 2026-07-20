@@ -2,6 +2,7 @@ module
 
 public import Noperthedron.Nopert214.AtlasProjectiveEdgeCertificate
 public import Noperthedron.Nopert214.AtlasLocalCertificate
+public import Noperthedron.Nopert214.AtlasProjectiveLocalCertificate
 
 @[expose] public section
 
@@ -128,11 +129,13 @@ inductive Row where
   | projective (id : ℕ) (box : AtlasProjectiveEdgeCertificate.Box)
   | symmetryLocal (id : ℕ) (box : AtlasLocalCertificate.Box)
       (region : Region)
+  | projectiveLocal (id : ℕ) (box : AtlasProjectiveLocalCertificate.Box)
   | radiusPrune (id : ℕ) (interval : Interval) (region : Region)
 
 def Row.id : Row → ℕ
   | .cayleySplit id .. | .viewRoot id .. | .viewSplit id .. |
       .projective id .. | .symmetryLocal id .. | .radiusPrune id .. => id
+  | .projectiveLocal id .. => id
 
 def Row.interval : Row → Interval
   | .cayleySplit _ _ _ _ interval _ => interval
@@ -140,6 +143,7 @@ def Row.interval : Row → Interval
   | .viewSplit _ _ interval _ _ => interval
   | .projective _ box => box.interval
   | .symmetryLocal _ box _ => box.interval
+  | .projectiveLocal _ box => box.interval
   | .radiusPrune _ interval _ => interval
 
 def Row.region : Row → Region
@@ -148,6 +152,7 @@ def Row.region : Row → Region
   | .viewSplit _ _ _ root triangle => .triangle root triangle
   | .projective _ box => .triangle box.root box.triangle
   | .symmetryLocal _ _ region => region
+  | .projectiveLocal _ box => .triangle box.root box.triangle
   | .radiusPrune _ _ region => region
 
 instance : Inhabited Row where
@@ -174,6 +179,7 @@ def Row.ValidAt (chart : ChartIndex) (get : ℕ → Row)
         .triangle root (split triangle child)
   | .projective _ box => box.chart = chart ∧ box.Valid
   | .symmetryLocal _ box _ => box.chart = chart ∧ box.Valid
+  | .projectiveLocal _ box => box.chart = chart ∧ box.Valid
   | .radiusPrune _ interval _ => interval.outsideCayleyBall
 
 instance (chart : ChartIndex) (get : ℕ → Row) (size : ℕ) (row : Row) :
@@ -209,6 +215,13 @@ theorem valid_imp_noRupert_ix (chart : ChartIndex) (get : ℕ → Row)
       obtain ⟨hchart, hbox⟩ := hvalid
       subst hchart
       exact box.valid_imp_not_translated_rupert hbox p hp offset hrupert
+  | projectiveLocal id box =>
+      unfold NoRupert
+      rintro ⟨p, hp, -, offset, hregion, hrupert⟩
+      obtain ⟨hchart, hbox⟩ := hvalid
+      subst hchart
+      exact box.valid_imp_not_translated_rupert hbox hp offset
+        hregion.1 hregion.2 hrupert
   | cayleySplit id lowerChild upperChild coordinate interval region =>
       obtain ⟨hlower, hupper, hlowerSize, hupperSize,
         hlowerInterval, hupperInterval, hlowerRegion, hupperRegion⟩ := hvalid

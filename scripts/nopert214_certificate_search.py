@@ -453,6 +453,8 @@ def projective_local_axis_candidates(view, cone_samples=1):
 
     contacts = []
     for position, vertex in enumerate(cycle):
+        previous = cycle[(position - 1) % len(cycle)]
+        following = cycle[(position + 1) % len(cycle)]
         before = edges[(position - 1) % len(cycle)]
         after = edges[position]
         for sample in range(cone_samples):
@@ -465,7 +467,17 @@ def projective_local_axis_candidates(view, cone_samples=1):
                                (1-lam) * norm3(after))
             contacts.append({"vertex": vertex, "lift": lift,
                              "direction_bound": direction_bound,
-                             "lambda": lam})
+                             "lambda": lam,
+                             # Lean stores edge vectors as start-finish.
+                             # The projected hull is clockwise in the frame
+                             # convention above.  Negating its two incident
+                             # tangents makes `cross(view, edge)` an outward
+                             # support direction at `vertex`.
+                             "edge_start": previous,
+                             "edge_finish": vertex,
+                             "edge_start2": vertex,
+                             "edge_finish2": following,
+                             "mix": round(1000 * lam)})
 
     candidates = []
     for contact_indices in itertools.combinations(range(len(contacts)), 3):
@@ -491,6 +503,205 @@ def projective_local_axis_candidates(view, cone_samples=1):
             "B": b,
         })
     return cycle, candidates
+
+
+PROJECTIVE_CERTIFICATE_DENOMINATOR = 10**9
+PROJECTIVE_SUPPORT_ERROR = 10 * exact_certificate.KAPPA
+PROJECTIVE_VARIATION_ERROR = 150 * exact_certificate.KAPPA
+
+
+def projective_mixed_edge_q(contact):
+    """Exact rational edge encoded by a cone-interior contact."""
+    lam = Q(contact["mix"], 1000)
+    first = [a-b for a, b in zip(
+        VERTICES_Q[contact["edge_start"]],
+        VERTICES_Q[contact["edge_finish"]])]
+    second = [a-b for a, b in zip(
+        VERTICES_Q[contact["edge_start2"]],
+        VERTICES_Q[contact["edge_finish2"]])]
+    return [lam*a + (1-lam)*b for a, b in zip(first, second)]
+
+
+def projective_local_axis_row_mixed(triangle, contacts, symmetry_index=0):
+    """Exactly audit one mixed-edge projective-local axis certificate."""
+    contacts = [dict(contact) for contact in contacts]
+    edges = [projective_mixed_edge_q(contact) for contact in contacts]
+    supports = [contact["vertex"] for contact in contacts]
+    probe_weights = [exact_certificate.qdot(
+        triangle[0], cross3(edges[1], edges[2])),
+        exact_certificate.qdot(triangle[0], cross3(edges[2], edges[0])),
+        exact_certificate.qdot(triangle[0], cross3(edges[0], edges[1]))]
+    if max(probe_weights) < 0:
+        contacts[1], contacts[2] = contacts[2], contacts[1]
+        edges[1], edges[2] = edges[2], edges[1]
+        supports[1], supports[2] = supports[2], supports[1]
+    weight_coefficients, polynomials = \
+        exact_certificate.projective_variation_polynomials(edges, supports)
+    weight_at = [[exact_certificate.qdot(corner, coefficient)
+                  for corner in triangle]
+                 for coefficient in weight_coefficients]
+    weight_lower = [min(values)-PROJECTIVE_SUPPORT_ERROR
+                    for values in weight_at]
+    weight_upper = [max(values)+PROJECTIVE_SUPPORT_ERROR
+                    for values in weight_at]
+    if min(weight_lower) < 0 or max(weight_lower) <= 0:
+        raise RuntimeError(f"weight signs fail: {weight_lower}")
+
+    support_upper = []
+    witnesses = []
+    for edge, selected in zip(edges, supports):
+        values = []
+        for k in range(len(VERTICES_Q)):
+            if k == selected:
+                upper = Q(0)
+            else:
+                delta = [x-y for x, y in zip(
+                    VERTICES_Q[k], VERTICES_Q[selected])]
+                coefficient = cross3(edge, delta)
+                upper = max(exact_certificate.qdot(corner, coefficient)
+                            for corner in triangle) + \
+                    PROJECTIVE_SUPPORT_ERROR
+            values.append(upper)
+        if max(values) > 0:
+            raise RuntimeError(
+                f"support fails by {float(max(values)):.6g} at {selected}")
+        witness = min(range(len(VERTICES_Q)), key=values.__getitem__)
+        if values[witness] >= 0:
+            raise RuntimeError("no strict nonzero witness")
+        support_upper.append(values)
+        witnesses.append(witness)
+
+    balls = exact_certificate.projective_triangle_balls(triangle)
+    centers = [ball[0] for ball in balls]
+    radii = [ball[1] for ball in balls]
+    variation_balls = [exact_certificate.qpoly_eval_centered(
+        polynomial, centers, radii) for polynomial in polynomials]
+    exact_B = 2*sum(weight_upper, Q(0))
+    B = exact_certificate.ceil_to(
+        exact_B, PROJECTIVE_CERTIFICATE_DENOMINATOR)
+    if B <= 0:
+        raise RuntimeError("nonpositive projective remainder budget")
+    normalized_center = [ball[0]/B for ball in variation_balls]
+    exact_delta = (sum((ball[1] for ball in variation_balls), Q(0)) +
+                   3*PROJECTIVE_VARIATION_ERROR) / B
+    delta = exact_certificate.ceil_to(
+        exact_delta, PROJECTIVE_CERTIFICATE_DENOMINATOR)
+    return {
+        "edge_start": [contact["edge_start"] for contact in contacts],
+        "edge_finish": [contact["edge_finish"] for contact in contacts],
+        "edge_start2": [contact["edge_start2"] for contact in contacts],
+        "edge_finish2": [contact["edge_finish2"] for contact in contacts],
+        "mix": [contact["mix"] for contact in contacts],
+        "support_index": [inverse_symmetry_action(symmetry_index, index)
+                          for index in supports],
+        "nonzero_witness": witnesses,
+        "B": B,
+        "normalized_center": normalized_center,
+        "delta": delta,
+        "diagnostics": {
+            "weight_lower": weight_lower,
+            "weight_upper": weight_upper,
+            "variation_balls": variation_balls,
+            "exact_weight_budget": exact_B,
+            "exact_delta": exact_delta,
+            "maximum_support_upper": max(max(row) for row in support_upper),
+            "strict_witness_upper": [row[k] for row, k in
+                                     zip(support_upper, witnesses)],
+        },
+    }
+
+
+def atlas_projective_mismatch_radius(chart, symmetry_index, centers, radii):
+    """Mirror `AtlasLocalCertificate.Box.mismatchRadius` exactly."""
+    symmetry_q = symmetry_matrix_q(symmetry_index)
+    upper_sq = Q(0)
+    entry_balls = []
+    for i in range(3):
+        row = []
+        for j in range(3):
+            polynomial = exact_certificate.qpoly_add(
+                exact_certificate.qpoly_scale(
+                    ATLAS_CHART_SIGNS[chart][i],
+                    exact_certificate.CAYLEY_NUMERATOR_QPOLYS[i][j]),
+                exact_certificate.qpoly_scale(
+                    -symmetry_q[i][j],
+                    exact_certificate.CAYLEY_DENOM_QPOLY))
+            ball = exact_certificate.qpoly_eval_centered(
+                polynomial, centers, radii)
+            upper = abs(ball[0]) + ball[1]
+            upper_sq += upper*upper
+            row.append(ball)
+        entry_balls.append(row)
+    radius = exact_certificate.sqrt_q_up16(upper_sq) + SYMMETRY_ERROR
+    return radius, entry_balls, upper_sq
+
+
+def atlas_projective_local_smoke(
+        triangle_width=Q(1, 10**6), relative_half_width=Q(1, 10**6),
+        candidate_indices=(622, 742, 848, 1300)):
+    """Produce the first fully exact projective-local row for Nopert #214."""
+    view = [Q(1, 3)]*3
+    e = triangle_width
+    triangle = [[view[0]+e, view[1]-e, view[2]],
+                [view[0], view[1]+e, view[2]-e],
+                [view[0]-e, view[1], view[2]+e]]
+    cycle, candidates = projective_local_axis_candidates((1, 1, 1), 4)
+    selected = [candidates[index] for index in candidate_indices]
+    rows = [projective_local_axis_row_mixed(
+        triangle, candidate["contacts"]) for candidate in selected]
+    delta = max(row["delta"] for row in rows)
+    centers = [row["normalized_center"] for row in rows]
+    axis_radius = exact_certificate.exact_tetrahedron_axis_radius(centers)
+    cover_radius = Q(19, 20) * Q(4, 7) * axis_radius
+    c = exact_certificate.floor_to(
+        cover_radius-delta, PROJECTIVE_CERTIFICATE_DENOMINATOR)
+    if c <= 0:
+        raise RuntimeError(
+            f"axis cover consumed: axis={float(axis_radius):.6g}, "
+            f"delta={float(delta):.6g}")
+    target_length = Q(7, 4)*(c+delta)
+    barycentric = []
+    for axis in range(3):
+        for sign in (1, -1):
+            target = [Q(0)]*3
+            target[axis] = sign*target_length
+            lam = exact_certificate.barycentric(centers, target)
+            if min(lam) < 0 or sum(lam, Q(0)) != 1:
+                raise AssertionError("invalid projective-local barycentric gate")
+            barycentric.append(lam)
+
+    relative_center = [Q(0)]*3
+    relative_radii = [relative_half_width]*3
+    exact_r, entry_balls, mismatch_sq = atlas_projective_mismatch_radius(
+        0, 0, relative_center, relative_radii)
+    r = exact_certificate.ceil_to(
+        exact_r, PROJECTIVE_CERTIFICATE_DENOMINATOR)
+    if r*r*(1+c*c) > 4*c*c:
+        raise RuntimeError(
+            f"angle gate fails: c={float(c):.6g}, r={float(r):.6g}")
+    return {
+        "root": 0,
+        "chart": 0,
+        "symmetry_index": 0,
+        "triangle": triangle,
+        "interval": [[Q(0), Q(0)], [Q(0), Q(0)]] +
+                    [[-relative_half_width, relative_half_width]]*3,
+        "certificates": rows,
+        "c": c,
+        "delta": delta,
+        "r": r,
+        "diagnostics": {
+            "cycle": cycle,
+            "candidate_indices": list(candidate_indices),
+            "normalized_centers": centers,
+            "exact_axis_radius": axis_radius,
+            "cover_radius": cover_radius,
+            "minimum_barycentric": min(x for row in barycentric for x in row),
+            "exact_mismatch_radius": exact_r,
+            "mismatch_frobenius_sq_upper": mismatch_sq,
+            "mismatch_entry_balls": entry_balls,
+        },
+    }
 
 
 def best_local_tetrahedron(theta, phi, cone_samples=1,

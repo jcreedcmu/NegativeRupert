@@ -17,6 +17,8 @@ public import Noperthedron.Nopert214.AtlasProjectiveEdgeCertificate
 public import Noperthedron.Nopert214.AtlasProjectiveEdgeCertificateSmoke
 public import Noperthedron.Nopert214.AtlasLocalCertificateSmoke
 public import Noperthedron.Nopert214.AtlasProjectiveLocalRigidity
+public import Noperthedron.Nopert214.AtlasProjectiveLocalCertificate
+public import Noperthedron.Nopert214.AtlasProjectiveLocalCertificateSmoke
 public import Noperthedron.Nopert214.AtlasProjectiveSolutionTree
 public import Noperthedron.BalancedSupport.UniversalDomain
 
