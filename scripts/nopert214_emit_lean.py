@@ -195,6 +195,7 @@ def table : AtlasProjectiveSolutionTree.Table where
   size := {size}
 
 {validity}
+{audit}
 
 end Noperthedron.Nopert214.GeneratedChart{chart}
 
@@ -211,6 +212,7 @@ def main():
     parser.add_argument("--interval-chunk-size", type=int, default=16,
                         help="number of interned intervals per Lean definition")
     parser.add_argument("--unchecked-prefix", type=int)
+    parser.add_argument("--audit-first-local", action="store_true")
     args = parser.parse_args()
 
     with open(args.input, "r", encoding="utf-8") as source:
@@ -337,8 +339,22 @@ def main():
         output.write("]\n")
         validity = ("theorem table_valid_native : table.Valid := by "
                     "native_decide" if args.unchecked_prefix is None else "")
+        audit = ""
+        if args.audit_first_local:
+            first_local = next(
+                (i for i, row in enumerate(rows) if row["kind"] == "local"),
+                None)
+            if first_local is None:
+                raise SystemExit("no projective-local row available to audit")
+            audit = f"""theorem first_local_valid :
+    (getRow {first_local}).ValidAt {chart} getRow {len(rows)} := by
+  native_decide
+
+theorem first_local_valid_kernel :
+    (getRow {first_local}).ValidAt {chart} getRow {len(rows)} := by
+  decide +kernel"""
         output.write(FOOTER.format(
-            chart=chart, validity=validity,
+            chart=chart, validity=validity, audit=audit,
             chunk_size=args.chunk_size, size=len(rows)))
 
 
