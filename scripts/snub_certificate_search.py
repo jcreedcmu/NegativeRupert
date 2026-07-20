@@ -127,6 +127,67 @@ def normalized_vertices_exact_float():
 VERTICES_EXACT = normalized_vertices_exact_float()
 
 
+# Exact arithmetic in Q[t]/(t^3-t^2-t-1), matching ExactArithmetic.lean.
+def texpr_add(a, b):
+    return tuple(x+y for x, y in zip(a, b))
+
+
+def texpr_neg(a):
+    return tuple(-x for x in a)
+
+
+def texpr_sub(a, b):
+    return texpr_add(a, texpr_neg(b))
+
+
+def texpr_scale(q, a):
+    return tuple(q*x for x in a)
+
+
+def texpr_mul(a, b):
+    d0 = a[0]*b[0]
+    d1 = a[0]*b[1] + a[1]*b[0]
+    d2 = a[0]*b[2] + a[1]*b[1] + a[2]*b[0]
+    d3 = a[1]*b[2] + a[2]*b[1]
+    d4 = a[2]*b[2]
+    return (d0+d3+d4, d1+d3+2*d4, d2+d3+2*d4)
+
+
+def normalized_vertices_symbolic():
+    base = ((Q(0), Q(1), Q(0)),
+            (Q(1), Q(0), Q(0)),
+            (Q(0), Q(0), Q(1)))
+    out = []
+    for p, perm in enumerate(PERMUTATIONS):
+        signs_table = ODD_SIGNS if PERMUTATION_ODD[p] else EVEN_SIGNS
+        for signs in signs_table:
+            out.append([texpr_scale(Q(signs[c], 5), base[perm[c]])
+                        for c in range(3)])
+    return out
+
+
+VERTICES_SYMBOLIC = normalized_vertices_symbolic()
+
+
+def symbolic_cross(a, b):
+    return [texpr_sub(texpr_mul(a[1], b[2]), texpr_mul(a[2], b[1])),
+            texpr_sub(texpr_mul(a[2], b[0]), texpr_mul(a[0], b[2])),
+            texpr_sub(texpr_mul(a[0], b[1]), texpr_mul(a[1], b[0]))]
+
+
+def symbolic_support_zero(triangle, start, finish, selected, k):
+    edge = [texpr_sub(x, y) for x, y in
+            zip(VERTICES_SYMBOLIC[start], VERTICES_SYMBOLIC[finish])]
+    delta = [texpr_sub(x, y) for x, y in
+             zip(VERTICES_SYMBOLIC[k], VERTICES_SYMBOLIC[selected])]
+    coefficient = symbolic_cross(edge, delta)
+    return all(
+        texpr_add(texpr_add(texpr_scale(corner[0], coefficient[0]),
+                            texpr_scale(corner[1], coefficient[1])),
+                  texpr_scale(corner[2], coefficient[2])) == (Q(0), Q(0), Q(0))
+        for corner in triangle)
+
+
 def vertex_matrix_int(index: int):
     p, s = divmod(index, 4)
     signs = (ODD_SIGNS if PERMUTATION_ODD[p] else EVEN_SIGNS)[s]
@@ -687,8 +748,6 @@ def projective_local_axis_row(triangle, payload):
         starts.append(start)
         finishes.append(finish)
     supports = list(payload["support_vertices"])
-    if any(s not in (a, b) for s, a, b in zip(supports, starts, finishes)):
-        raise RuntimeError("projective support vertex is not on its edge")
     edges = [[x-y for x, y in zip(VERTICES_Q[a], VERTICES_Q[b])]
              for a, b in zip(starts, finishes)]
     probe_weights = [qdot(triangle[0], cross3(edges[1], edges[2])),
@@ -712,7 +771,8 @@ def projective_local_axis_row(triangle, payload):
             edges, starts, finishes, supports):
         values = []
         for k in range(24):
-            if k in (start, finish):
+            if symbolic_support_zero(
+                    triangle, start, finish, selected, k):
                 upper = Q(0)
             else:
                 delta = [x-y for x, y in zip(VERTICES_Q[k],

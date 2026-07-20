@@ -14,6 +14,7 @@ public import Noperthedron.SnubCube.CayleyInterval
 public import Noperthedron.SnubCube.CayleyLocalCertificate
 public import Noperthedron.SnubCube.CayleyLocalCertificateSmoke
 public import Noperthedron.SnubCube.CayleyLocalRigidity
+public import Noperthedron.SnubCube.ExactArithmetic
 public import Noperthedron.SnubCube.FundamentalDomain
 public import Noperthedron.SnubCube.CayleySolutionTree
 public import Noperthedron.SnubCube.CayleySolutionTreeSmoke

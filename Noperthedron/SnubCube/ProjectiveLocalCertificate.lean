@@ -5,6 +5,7 @@ public import Noperthedron.Checker.SqrtFixed
 public import Noperthedron.SnubCube.LocalCertificate
 public import Noperthedron.SnubCube.ProjectiveEdgeCertificate
 public import Noperthedron.SnubCube.ProjectiveLocalRigidity
+public import Noperthedron.SnubCube.ExactArithmetic
 
 @[expose] public section
 
@@ -163,10 +164,29 @@ def Box.supportAt (box : Box) (j : Fin 4) (corner : Fin 3)
     (crossQ ((box.certificate j).edgeQ i)
       ((box.certificate j).deltaQ i k))
 
+def AxisCertificate.symbolicSupportCross (cert : AxisCertificate)
+    (i : Fin 3) (k : VertexIndex) : Fin 3 → TribonacciExpr :=
+  SnubCube.symbolicSupportCross (cert.edgeStart i) (cert.edgeFinish i)
+    (cert.supportIndex i) k
+
+def Box.symbolicSupportAt (box : Box) (j : Fin 4) (corner : Fin 3)
+    (i : Fin 3) (k : VertexIndex) : TribonacciExpr :=
+  Noperthedron.SnubCube.symbolicDotRat (box.triangle corner)
+    ((box.certificate j).symbolicSupportCross i k)
+
+/-- Exact algebraic support ties pay no decimal approximation error. -/
+def Box.exactSupportZero (box : Box) (j : Fin 4) (i : Fin 3)
+    (k : VertexIndex) : Prop :=
+  ∀ corner, box.symbolicSupportAt j corner i k = 0
+
+instance (box : Box) (j : Fin 4) (i : Fin 3) (k : VertexIndex) :
+    Decidable (box.exactSupportZero j i k) := by
+  unfold Box.exactSupportZero
+  infer_instance
+
 def Box.supportUpper (box : Box) (j : Fin 4) (i : Fin 3)
     (k : VertexIndex) : ℚ :=
-  if k = (box.certificate j).edgeStart i ∨
-      k = (box.certificate j).edgeFinish i then 0
+  if box.exactSupportZero j i k then 0
   else
     max3 (fun corner => box.supportAt j corner i k) +
       CayleyEdgeCertificate.supportError
@@ -232,11 +252,6 @@ structure Box.Valid (box : Box) : Prop where
   B_pos : ∀ j, 0 < (box.certificate j).B
   weight_nonneg : ∀ j i, 0 ≤ box.weightLower j i
   weight_pos : ∀ j, ∃ i, 0 < box.weightLower j i
-  support_on_edge : ∀ j i,
-    (box.certificate j).supportIndex i =
-        (box.certificate j).edgeStart i ∨
-      (box.certificate j).supportIndex i =
-        (box.certificate j).edgeFinish i
   support : ∀ j i k, box.supportUpper j i k ≤ 0
   direction_nonzero : ∀ j i,
     box.supportUpper j i ((box.certificate j).nonzeroWitness i) < 0
@@ -673,6 +688,39 @@ theorem AxisCertificate.exactSupport_sub_approx_abs_le
       norm_num [CayleyEdgeCertificate.supportError,
         RationalApprox.κ, RationalApprox.κℚ]
 
+theorem Box.eval_symbolicSupportAt (box : Box) (j : Fin 4)
+    (corner : Fin 3) (i : Fin 3) (k : VertexIndex) :
+    TribonacciExpr.eval (box.symbolicSupportAt j corner i k) =
+      linearValue (toReal box.triangle corner)
+        (cross3 ((box.certificate j).exactEdge i)
+          ((box.certificate j).exactDelta i k)) := by
+  rw [Box.symbolicSupportAt,
+    Noperthedron.SnubCube.eval_symbolicDotRat]
+  apply congrArg (linearValue (toReal box.triangle corner))
+  funext coordinate
+  rw [AxisCertificate.symbolicSupportCross,
+    Noperthedron.SnubCube.eval_symbolicSupportCross]
+  rfl
+
+theorem Box.exactSupport_eq_zero_of_symbolic (box : Box)
+    {p : CayleyPose ℝ}
+    (hmem : InTriangle (toReal box.triangle) (normalizedView p))
+    (j : Fin 4) (i : Fin 3) (k : VertexIndex)
+    (hzero : box.exactSupportZero j i k) :
+    (box.certificate j).exactSupport p i k = 0 := by
+  have hcorner (corner : Fin 3) :
+      linearValue (toReal box.triangle corner)
+        (cross3 ((box.certificate j).exactEdge i)
+          ((box.certificate j).exactDelta i k)) = 0 := by
+    rw [← box.eval_symbolicSupportAt j corner i k]
+    exact TribonacciExpr.eval_eq_zero_of_eq_zero (hzero corner)
+  have hle := linearValue_le_of_mem hmem (bound := 0)
+    (fun corner => (hcorner corner).le)
+  have hge := le_linearValue_of_mem hmem (bound := 0)
+    (fun corner => (hcorner corner).ge)
+  unfold AxisCertificate.exactSupport
+  linarith
+
 theorem Box.exactSupport_le_upper (box : Box) (h : box.Valid)
     {p : CayleyPose ℝ} {offset : ℝ²}
     (hchamber : (p.matrixPoseWithOffset offset).InOuterViewChamber)
@@ -680,17 +728,8 @@ theorem Box.exactSupport_le_upper (box : Box) (h : box.Valid)
     (j : Fin 4) (i : Fin 3) (k : VertexIndex) :
     (box.certificate j).exactSupport p i k ≤
       (box.supportUpper j i k : ℝ) := by
-  by_cases hk : k = (box.certificate j).edgeStart i ∨
-      k = (box.certificate j).edgeFinish i
-  · have hs := h.support_on_edge j i
-    have hzero : (box.certificate j).exactSupport p i k = 0 := by
-      rcases hk with hk | hk <;> rcases hs with hs | hs <;>
-        subst k <;>
-        unfold AxisCertificate.exactSupport AxisCertificate.exactEdge
-          AxisCertificate.exactDelta <;>
-        rw [hs] <;>
-        simp [linearValue, cross3, cross_apply] <;>
-        ring
+  by_cases hk : box.exactSupportZero j i k
+  · have hzero := box.exactSupport_eq_zero_of_symbolic hmem j i k hk
     rw [hzero]
     simp [Box.supportUpper, hk]
   have happ := box.approxSupport_le_max hmem j i k

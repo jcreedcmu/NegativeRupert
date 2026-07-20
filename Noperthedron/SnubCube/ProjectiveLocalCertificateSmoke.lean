@@ -92,6 +92,63 @@ theorem smoke_no_translated_rupert :
   exact smokeBox.valid_imp_not_translated_rupert smoke_valid_kernel
     p hp offset hchamber htriangle hrupert
 
+/-! A degenerate triangle on the symmetry wall exercises exact algebraic
+support ties whose selected vertex is not an endpoint of the stored edge. -/
+
+def boundaryTriangle : Triangle ℚ := ![
+  ![4 / 5, 1 / 5, 0], ![4 / 5, 1 / 5, 0], ![4 / 5, 1 / 5, 0]]
+
+def boundaryCertificates : Fin 4 → AxisCertificate := ![
+  { edgeStart := ![VertexIndex.ofFin24 8, VertexIndex.ofFin24 15,
+        VertexIndex.ofFin24 10]
+    edgeFinish := ![VertexIndex.ofFin24 9, VertexIndex.ofFin24 11,
+        VertexIndex.ofFin24 14]
+    supportIndex := ![VertexIndex.ofFin24 1, VertexIndex.ofFin24 11,
+        VertexIndex.ofFin24 10]
+    nonzeroWitness := ![VertexIndex.ofFin24 2, VertexIndex.ofFin24 8,
+        VertexIndex.ofFin24 9]
+    B := 307367627 / 250000000 },
+  { edgeStart := ![VertexIndex.ofFin24 8, VertexIndex.ofFin24 15,
+        VertexIndex.ofFin24 10]
+    edgeFinish := ![VertexIndex.ofFin24 9, VertexIndex.ofFin24 11,
+        VertexIndex.ofFin24 14]
+    supportIndex := ![VertexIndex.ofFin24 0, VertexIndex.ofFin24 11,
+        VertexIndex.ofFin24 10]
+    nonzeroWitness := ![VertexIndex.ofFin24 2, VertexIndex.ofFin24 8,
+        VertexIndex.ofFin24 9]
+    B := 307367627 / 250000000 },
+  { edgeStart := ![VertexIndex.ofFin24 5, VertexIndex.ofFin24 15,
+        VertexIndex.ofFin24 4]
+    edgeFinish := ![VertexIndex.ofFin24 15, VertexIndex.ofFin24 11,
+        VertexIndex.ofFin24 8]
+    supportIndex := ![VertexIndex.ofFin24 5, VertexIndex.ofFin24 15,
+        VertexIndex.ofFin24 4]
+    nonzeroWitness := ![VertexIndex.ofFin24 4, VertexIndex.ofFin24 8,
+        VertexIndex.ofFin24 15]
+    B := 387860023 / 500000000 },
+  { edgeStart := ![VertexIndex.ofFin24 14, VertexIndex.ofFin24 9,
+        VertexIndex.ofFin24 10]
+    edgeFinish := ![VertexIndex.ofFin24 4, VertexIndex.ofFin24 5,
+        VertexIndex.ofFin24 14]
+    supportIndex := ![VertexIndex.ofFin24 4, VertexIndex.ofFin24 5,
+        VertexIndex.ofFin24 14]
+    nonzeroWitness := ![VertexIndex.ofFin24 5, VertexIndex.ofFin24 14,
+        VertexIndex.ofFin24 9]
+    B := 387860023 / 500000000 }]
+
+def boundaryBox : Box where
+  interval := smokeInterval
+  triangle := boundaryTriangle
+  certificate := boundaryCertificates
+  c := 2628893 / 200000000
+  δ := 59 / 1000000000
+
+theorem boundary_valid_kernel : boundaryBox.Valid := by
+  decide +kernel
+
+theorem boundary_valid_native : boundaryBox.Valid := by
+  native_decide
+
 end Noperthedron.SnubCube.ProjectiveLocalCertificateSmoke
 
 end
