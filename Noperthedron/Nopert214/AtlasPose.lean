@@ -51,12 +51,12 @@ instance {R : Type} [PartialOrder R] [DecidableLE R] :
     DecidableLE (AtlasPose R) :=
   fun p q => decidable_of_iff _ (le_iff p q).symm
 
-/-- The rational root common to all four charts. -/
+/-- The rational root common to the four maximum-trace charts. -/
 def rootInterval (R : Type) [Field R] [LinearOrder R] [IsStrictOrderedRing R] :
     NonemptyInterval (AtlasPose R) :=
   NonemptyInterval.mk
-    ⟨{ θ := 0, φ := 0, x := -2, y := -2, z := -2 },
-      { θ := 8 / 5, φ := 4, x := 2, y := 2, z := 2 }⟩
+    ⟨{ θ := 0, φ := 0, x := -1, y := -1, z := -1 },
+      { θ := 8 / 5, φ := 4, x := 1, y := 1, z := 1 }⟩
     (by rw [le_iff]; norm_num)
 
 /-- Componentwise rational-to-real conversion. -/
@@ -166,9 +166,9 @@ def AtlasPose.InUpperView (p : AtlasPose ℝ) : Prop :=
 
 theorem AtlasPose.ofPose_mem_root (euler : Pose ℝ) (x y z : ℝ)
     (heuler : euler ∈ tightPoseInterval)
-    (hx : x ∈ Set.Icc (-2 : ℝ) 2)
-    (hy : y ∈ Set.Icc (-2 : ℝ) 2)
-    (hz : z ∈ Set.Icc (-2 : ℝ) 2) :
+    (hx : x ∈ Set.Icc (-1 : ℝ) 1)
+    (hy : y ∈ Set.Icc (-1 : ℝ) 1)
+    (hz : z ∈ Set.Icc (-1 : ℝ) 1) :
     AtlasPose.ofPose euler x y z ∈ AtlasPose.rootInterval ℝ := by
   rw [NonemptyInterval.mem_def, Pose.le_iff, Pose.le_iff] at heuler
   rw [NonemptyInterval.mem_def, AtlasPose.le_iff, AtlasPose.le_iff]

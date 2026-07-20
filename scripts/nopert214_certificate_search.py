@@ -2737,7 +2737,9 @@ def generate_atlas_projective_table(
         checkpoint_every=1000, resume=False):
     """Generate one exact chart table for the formal projective checker."""
     root_center = (Q(0), Q(0), Q(0))
-    root_widths = (Q(2), Q(2), Q(2))
+    # The maximum-trace four-chart atlas puts each Cayley coordinate in
+    # [-1,1], an eightfold volume reduction over the earlier atlas root.
+    root_widths = (Q(1), Q(1), Q(1))
     if resume and checkpoint_path and os.path.exists(checkpoint_path):
         with open(checkpoint_path, "r", encoding="utf-8") as source:
             saved = json.load(source)
@@ -2822,8 +2824,14 @@ def generate_atlas_projective_table(
         fundamental_coordinates = (2,) if chart in (0, 3) else (0, 1)
         fundamental_widest = max(
             fundamental_coordinates, key=lambda i: widths[i])
+        # Resolve chart 0's one-dimensional Dirichlet-cell boundary before
+        # duplicating it under projective view splits.  Its two-dimensional
+        # analogues in charts 1 and 2 have quadratically many boundary boxes,
+        # so the coarser cutoff remains preferable there.
+        fundamental_cutoff = (min_relative_half_width
+                              if chart in (0, 3) else Q(1, 64))
         if (fundamental_status == "boundary" and
-                widths[fundamental_widest] > Q(1, 64)):
+                widths[fundamental_widest] > fundamental_cutoff):
             children = allocate(2)
             rows[row_id] = {**common, "kind": "relative_split",
                             "coordinate": fundamental_widest+2,

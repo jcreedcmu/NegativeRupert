@@ -64,38 +64,110 @@ theorem exists_chart_trace_nonneg (R : Matrix (Fin 3) (Fin 3) ℝ) :
     Fin.sum_univ_three] at h0 h1 h2 h3
   linarith
 
+def toggleX : ChartIndex → ChartIndex := ![1, 0, 3, 2]
+def toggleY : ChartIndex → ChartIndex := ![2, 3, 0, 1]
+def toggleZ : ChartIndex → ChartIndex := ![3, 2, 1, 0]
+
+@[simp] theorem chartMatrix_toggleX_mul (chart : ChartIndex) :
+    chartMatrix (toggleX chart) * chartMatrix chart = chartMatrix 1 := by
+  ext i j
+  fin_cases chart <;> fin_cases i <;> fin_cases j <;>
+    norm_num [toggleX, chartMatrix, Matrix.mul_apply, Fin.sum_univ_three]
+
+@[simp] theorem chartMatrix_toggleY_mul (chart : ChartIndex) :
+    chartMatrix (toggleY chart) * chartMatrix chart = chartMatrix 2 := by
+  ext i j
+  fin_cases chart <;> fin_cases i <;> fin_cases j <;>
+    norm_num [toggleY, chartMatrix, Matrix.mul_apply, Fin.sum_univ_three]
+
+@[simp] theorem chartMatrix_toggleZ_mul (chart : ChartIndex) :
+    chartMatrix (toggleZ chart) * chartMatrix chart = chartMatrix 3 := by
+  ext i j
+  fin_cases chart <;> fin_cases i <;> fin_cases j <;>
+    norm_num [toggleZ, chartMatrix, Matrix.mul_apply, Fin.sum_univ_three]
+
+/-- Cayley coordinates in a chart whose trace is maximal among the four
+diagonal half-turn charts lie in the unit cube. -/
+theorem cayley_mem_unit_cube_of_maximal_chart (chart : ChartIndex)
+    (x y z : ℝ)
+    (hmax : ∀ other : ChartIndex,
+      Matrix.trace
+          (chartMatrix other * (chartMatrix chart * cayleyMatrix x y z)) ≤
+        Matrix.trace
+          (chartMatrix chart * (chartMatrix chart * cayleyMatrix x y z))) :
+    x ∈ Set.Icc (-1 : ℝ) 1 ∧ y ∈ Set.Icc (-1 : ℝ) 1 ∧
+      z ∈ Set.Icc (-1 : ℝ) 1 := by
+  have hx := hmax (toggleX chart)
+  have hy := hmax (toggleY chart)
+  have hz := hmax (toggleZ chart)
+  have hx' : Matrix.trace (chartMatrix 1 * cayleyMatrix x y z) ≤
+      Matrix.trace (cayleyMatrix x y z) := by
+    simpa only [← Matrix.mul_assoc, chartMatrix_toggleX_mul,
+      chartMatrix_mul_self, Matrix.one_mul] using hx
+  have hy' : Matrix.trace (chartMatrix 2 * cayleyMatrix x y z) ≤
+      Matrix.trace (cayleyMatrix x y z) := by
+    simpa only [← Matrix.mul_assoc, chartMatrix_toggleY_mul,
+      chartMatrix_mul_self, Matrix.one_mul] using hy
+  have hz' : Matrix.trace (chartMatrix 3 * cayleyMatrix x y z) ≤
+      Matrix.trace (cayleyMatrix x y z) := by
+    simpa only [← Matrix.mul_assoc, chartMatrix_toggleZ_mul,
+      chartMatrix_mul_self, Matrix.one_mul] using hz
+  have hd := cayleyDenom_pos x y z
+  simp [chartMatrix, Matrix.trace, Matrix.mul_apply, cayleyMatrix,
+    Fin.sum_univ_three] at hx' hy' hz'
+  have hx'' := mul_le_mul_of_nonneg_right hx' hd.le
+  have hy'' := mul_le_mul_of_nonneg_right hy' hd.le
+  have hz'' := mul_le_mul_of_nonneg_right hz' hd.le
+  field_simp [cayleyDenom_ne] at hx'' hy'' hz''
+  constructor
+  · constructor <;> nlinarith [sq_nonneg (x - 1), sq_nonneg (x + 1)]
+  · constructor
+    · constructor <;> nlinarith [sq_nonneg (y - 1), sq_nonneg (y + 1)]
+    · constructor <;> nlinarith [sq_nonneg (z - 1), sq_nonneg (z + 1)]
+
+/-- Choosing a maximum-trace chart, rather than merely a nonnegative-trace
+chart, puts every Cayley coordinate in `[-1,1]`. -/
 theorem exists_bounded_chart_cayley (R : Matrix (Fin 3) (Fin 3) ℝ)
     (hR : R ∈ Matrix.specialOrthogonalGroup (Fin 3) ℝ) :
     ∃ chart : ChartIndex,
-      ∃ x ∈ Set.Icc (-2 : ℝ) 2,
-      ∃ y ∈ Set.Icc (-2 : ℝ) 2,
-      ∃ z ∈ Set.Icc (-2 : ℝ) 2,
+      ∃ x ∈ Set.Icc (-1 : ℝ) 1,
+      ∃ y ∈ Set.Icc (-1 : ℝ) 1,
+      ∃ z ∈ Set.Icc (-1 : ℝ) 1,
         x ^ 2 + y ^ 2 + z ^ 2 ≤ 3 ∧
         R = chartMatrix chart * cayleyMatrix x y z := by
-  obtain ⟨chart, htrace⟩ := exists_chart_trace_nonneg R
+  obtain ⟨chart, hmax⟩ := Finite.exists_max
+    (fun chart : ChartIndex ↦ Matrix.trace (chartMatrix chart * R))
+  obtain ⟨nonnegativeChart, hnonnegative⟩ := exists_chart_trace_nonneg R
+  have htrace : 0 ≤ Matrix.trace (chartMatrix chart * R) :=
+    hnonnegative.trans (hmax nonnegativeChart)
   have hproduct : chartMatrix chart * R ∈
       Matrix.specialOrthogonalGroup (Fin 3) ℝ :=
     Submonoid.mul_mem _ (chartMatrix_mem_SO3 chart) hR
   obtain ⟨x, y, z, hradius, heq⟩ :=
     exists_cayleyMatrix_of_trace_nonneg
       (chartMatrix chart * R) hproduct htrace
-  have hxSq : x ^ 2 ≤ 3 := by nlinarith [sq_nonneg y, sq_nonneg z]
-  have hySq : y ^ 2 ≤ 3 := by nlinarith [sq_nonneg x, sq_nonneg z]
-  have hzSq : z ^ 2 ≤ 3 := by nlinarith [sq_nonneg x, sq_nonneg y]
-  have hx : x ∈ Set.Icc (-2 : ℝ) 2 := by
-    constructor <;> nlinarith [sq_nonneg (x - 2), sq_nonneg (x + 2)]
-  have hy : y ∈ Set.Icc (-2 : ℝ) 2 := by
-    constructor <;> nlinarith [sq_nonneg (y - 2), sq_nonneg (y + 2)]
-  have hz : z ∈ Set.Icc (-2 : ℝ) 2 := by
-    constructor <;> nlinarith [sq_nonneg (z - 2), sq_nonneg (z + 2)]
+  have hrelative : R = chartMatrix chart * cayleyMatrix x y z := by
+    calc
+      R = 1 * R := by rw [Matrix.one_mul]
+      _ = (chartMatrix chart * chartMatrix chart) * R := by
+        rw [chartMatrix_mul_self]
+      _ = chartMatrix chart * (chartMatrix chart * R) := by
+        rw [Matrix.mul_assoc]
+      _ = chartMatrix chart * cayleyMatrix x y z := by rw [heq]
+  have hmaxC : ∀ other : ChartIndex,
+      Matrix.trace
+          (chartMatrix other *
+            (chartMatrix chart * cayleyMatrix x y z)) ≤
+        Matrix.trace
+          (chartMatrix chart *
+            (chartMatrix chart * cayleyMatrix x y z)) := by
+    intro other
+    rw [← hrelative]
+    exact hmax other
+  obtain ⟨hx, hy, hz⟩ :=
+    cayley_mem_unit_cube_of_maximal_chart chart x y z hmaxC
   refine ⟨chart, x, hx, y, hy, z, hz, hradius, ?_⟩
-  calc
-    R = 1 * R := by rw [Matrix.one_mul]
-    _ = (chartMatrix chart * chartMatrix chart) * R := by
-      rw [chartMatrix_mul_self]
-    _ = chartMatrix chart * (chartMatrix chart * R) := by
-      rw [Matrix.mul_assoc]
-    _ = chartMatrix chart * cayleyMatrix x y z := by rw [heq]
+  exact hrelative
 
 end Noperthedron.Nopert214.CayleyAtlas
 
