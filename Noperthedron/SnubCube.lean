@@ -32,6 +32,8 @@ public import Noperthedron.SnubCube.ProjectiveLocalCertificate
 public import Noperthedron.SnubCube.ProjectiveLocalCertificateSmoke
 public import Noperthedron.SnubCube.ProjectiveSolutionTree
 public import Noperthedron.SnubCube.ProjectiveSolutionTreeSmoke
+public import Noperthedron.SnubCube.ProjectiveTransitionCertificate
+public import Noperthedron.SnubCube.ProjectiveTransitionCertificateSmoke
 public import Noperthedron.SnubCube.ProjectiveView
 public import Noperthedron.SnubCube.SolutionTree
 public import Noperthedron.SnubCube.Symmetry

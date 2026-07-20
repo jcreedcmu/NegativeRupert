@@ -153,6 +153,76 @@ def texpr_mul(a, b):
     return (d0+d3+d4, d1+d3+2*d4, d2+d3+2*d4)
 
 
+TEXPR_ZERO = (Q(0), Q(0), Q(0))
+TEXPR_ONE = (Q(1), Q(0), Q(0))
+
+
+def texpr_inv(a):
+    """Inverse in Q[t]/(t^3-t^2-t-1), by exact Gaussian elimination."""
+    columns = [texpr_mul(a, basis) for basis in (
+        TEXPR_ONE, (Q(0), Q(1), Q(0)), (Q(0), Q(0), Q(1)))]
+    matrix = [[columns[column][row] for column in range(3)] +
+              [Q(1 if row == 0 else 0)] for row in range(3)]
+    for column in range(3):
+        pivot = next(row for row in range(column, 3)
+                     if matrix[row][column] != 0)
+        matrix[column], matrix[pivot] = matrix[pivot], matrix[column]
+        scale = matrix[column][column]
+        matrix[column] = [value/scale for value in matrix[column]]
+        for row in range(3):
+            if row == column:
+                continue
+            scale = matrix[row][column]
+            matrix[row] = [x-scale*y for x, y in
+                           zip(matrix[row], matrix[column])]
+    result = tuple(matrix[row][3] for row in range(3))
+    assert texpr_mul(a, result) == TEXPR_ONE
+    return result
+
+
+# Sparse polynomials in `(d,t)` with exact tribonacci-field coefficients.
+def tpoly_const(value):
+    return {} if value == TEXPR_ZERO else {(0, 0): value}
+
+
+def tpoly_var(index):
+    return {(1, 0) if index == 0 else (0, 1): TEXPR_ONE}
+
+
+def tpoly_add(a, b):
+    out = dict(a)
+    for power, coefficient in b.items():
+        out[power] = texpr_add(out.get(power, TEXPR_ZERO), coefficient)
+        if out[power] == TEXPR_ZERO:
+            del out[power]
+    return out
+
+
+def tpoly_neg(a):
+    return {power: texpr_neg(coefficient)
+            for power, coefficient in a.items()}
+
+
+def tpoly_sub(a, b):
+    return tpoly_add(a, tpoly_neg(b))
+
+
+def tpoly_mul(a, b):
+    out = {}
+    for (ad, at), ac in a.items():
+        for (bd, bt), bc in b.items():
+            power = (ad+bd, at+bt)
+            out[power] = texpr_add(
+                out.get(power, TEXPR_ZERO), texpr_mul(ac, bc))
+            if out[power] == TEXPR_ZERO:
+                del out[power]
+    return out
+
+
+def tpoly_scale(coefficient, value):
+    return tpoly_mul(tpoly_const(coefficient), value)
+
+
 def normalized_vertices_symbolic():
     base = ((Q(0), Q(1), Q(0)),
             (Q(1), Q(0), Q(0)),
@@ -186,6 +256,141 @@ def symbolic_support_zero(triangle, start, finish, selected, k):
                             texpr_scale(corner[1], coefficient[1])),
                   texpr_scale(corner[2], coefficient[2])) == (Q(0), Q(0), Q(0))
         for corner in triangle)
+
+
+def exact_z_transition_quotient():
+    """Exact seam^2 quotient for the hard z-axis transition certificate."""
+    starts = [14, 8, 5]
+    finishes = [4, 9, 15]
+    supports = [14, 1, 15]
+    competitor = None
+    edges = [[texpr_sub(x, y) for x, y in zip(
+        VERTICES_SYMBOLIC[start], VERTICES_SYMBOLIC[finish])]
+        for start, finish in zip(starts, finishes)]
+    transition_edge = [texpr_sub(x, y) for x, y in zip(
+        VERTICES_SYMBOLIC[15], VERTICES_SYMBOLIC[11])]
+    transition_delta = [texpr_sub(x, y) for x, y in zip(
+        VERTICES_SYMBOLIC[3], VERTICES_SYMBOLIC[15])]
+    seam_coefficient = symbolic_cross(transition_edge, transition_delta)
+    slope = texpr_sub(seam_coefficient[1], seam_coefficient[0])
+    inverse_slope = texpr_inv(slope)
+    seam_u = texpr_neg(texpr_mul(seam_coefficient[0], inverse_slope))
+
+    d = tpoly_var(0)
+    ratio = tpoly_var(1)
+    u = tpoly_add(tpoly_const(seam_u), tpoly_scale(inverse_slope, d))
+    view = [tpoly_sub(tpoly_const(TEXPR_ONE), u), u,
+            tpoly_const(TEXPR_ZERO)]
+
+    def dot_view(vector):
+        out = {}
+        for coordinate in range(3):
+            out = tpoly_add(out,
+                tpoly_scale(vector[coordinate], view[coordinate]))
+        return out
+
+    def dot_view_poly(vector):
+        out = {}
+        for coordinate in range(3):
+            out = tpoly_add(out,
+                tpoly_mul(vector[coordinate], view[coordinate]))
+        return out
+
+    assert dot_view(seam_coefficient) == d
+    weights = [dot_view(symbolic_cross(edges[1], edges[2])),
+               dot_view(symbolic_cross(edges[2], edges[0])),
+               dot_view(symbolic_cross(edges[0], edges[1]))]
+    z = tpoly_mul(d, ratio)
+    z_sq = tpoly_mul(z, z)
+
+    displacement = {}
+    contact_values = []
+    for weight, edge, support in zip(weights, edges, supports):
+        vertex = VERTICES_SYMBOLIC[support]
+        # N(0,0,z)q - (1+z^2)q, with the Cayley convention used in Lean.
+        delta = [tpoly_add(tpoly_scale(texpr_scale(-2, vertex[0]), z_sq),
+                           tpoly_scale(texpr_scale(-2, vertex[1]), z)),
+                 tpoly_add(tpoly_scale(texpr_scale(2, vertex[0]), z),
+                           tpoly_scale(texpr_scale(-2, vertex[1]), z_sq)),
+                 {}]
+        contact = [tpoly_sub(tpoly_scale(edge[1], delta[2]),
+                             tpoly_scale(edge[2], delta[1])),
+                   tpoly_sub(tpoly_scale(edge[2], delta[0]),
+                             tpoly_scale(edge[0], delta[2])),
+                   tpoly_sub(tpoly_scale(edge[0], delta[1]),
+                             tpoly_scale(edge[1], delta[0]))]
+        contact_value = dot_view_poly(contact)
+        contact_values.append(contact_value)
+        displacement = tpoly_add(displacement,
+            tpoly_mul(weight, contact_value))
+
+    obstruction = displacement
+    assert obstruction
+    assert min(power[0] for power in obstruction) >= 2
+    quotient = {(d_power-2, t_power): coefficient
+                for (d_power, t_power), coefficient in obstruction.items()}
+    return {
+        "edge_starts": starts,
+        "edge_finishes": finishes,
+        "support_vertices": supports,
+        "support_competitor": competitor,
+        "seam_coefficient": seam_coefficient,
+        "seam_u": seam_u,
+        "weights": weights,
+        "contact_values": contact_values,
+        "quotient": quotient,
+    }
+
+
+def exact_z_transition_ratio_boxes():
+    """Adaptive rational interval cover for the exact z-axis quotient."""
+    root_ball = (Q(1839286755214161, 10**15) +
+                 Q(1839286755214162, 10**15)) / 2, Q(1, 2*10**15)
+
+    def ball_add(a, b):
+        return a[0]+b[0], a[1]+b[1]
+
+    def ball_mul(a, b):
+        return (a[0]*b[0], abs(a[0])*b[1] +
+                a[1]*abs(b[0]) + a[1]*b[1])
+
+    def ball_scale(q, a):
+        return q*a[0], abs(q)*a[1]
+
+    def coefficient_ball(a):
+        return ball_add(ball_add((a[0], Q(0)), ball_scale(a[1], root_ball)),
+                        ball_scale(a[2], ball_mul(root_ball, root_ball)))
+
+    q = exact_z_transition_quotient()["quotient"]
+    coefficients = {power: coefficient_ball(value)
+                    for power, value in q.items()}
+    seam = ((Q(1, 10**9)+Q(1, 1000))/2,
+            (Q(1, 1000)-Q(1, 10**9))/2)
+
+    def quotient_ball(lo, hi):
+        ratio = ((lo+hi)/2, (hi-lo)/2)
+        seam_sq = ball_mul(seam, seam)
+        linear = ball_add(coefficients[(0, 1)],
+                          ball_mul(seam, coefficients[(1, 1)]))
+        square = ball_add(ball_add(coefficients[(0, 2)],
+                                   ball_mul(seam, coefficients[(1, 2)])),
+                          ball_mul(seam_sq, coefficients[(2, 2)]))
+        return ball_mul(ratio, ball_add(linear, ball_mul(ratio, square)))
+
+    leaves = []
+
+    def visit(lo, hi, depth):
+        value = quotient_ball(lo, hi)
+        if value[0]-value[1] > 0:
+            leaves.append((lo, hi, value[0]-value[1]))
+            return
+        assert depth < 20
+        mid = (lo+hi)/2
+        visit(lo, mid, depth+1)
+        visit(mid, hi, depth+1)
+
+    visit(Q(2, 5), Q(27, 4), 0)
+    return leaves
 
 
 def vertex_matrix_int(index: int):
@@ -1292,9 +1497,20 @@ def projective_transition_profile():
             score = displacement-defect
             if score > best_score:
                 best_score, best_index = score, index
+        best_starts, best_finishes, best_supports = family_records[best_index]
+        best_edges = [VERTICES_EXACT[a]-VERTICES_EXACT[b]
+                      for a, b in zip(best_starts, best_finishes)]
+        support_competitors = [max(range(24), key=lambda q: float(
+            chart_view @ np.cross(edge,
+                VERTICES_EXACT[q]-VERTICES_EXACT[selected])))
+            for edge, selected in zip(best_edges, best_supports)]
         quadratic_rows.append({
             "t": t, "best_score_over_d_sq": best_score/(chart_d*chart_d),
             "best_certificate": best_index,
+            "edge_starts": best_starts,
+            "edge_finishes": best_finishes,
+            "support_vertices": best_supports,
+            "support_competitors": support_competitors,
         })
     return {
         "transition_u": u0,

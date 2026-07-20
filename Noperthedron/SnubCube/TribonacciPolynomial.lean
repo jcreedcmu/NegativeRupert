@@ -73,6 +73,12 @@ theorem evalBall_holds {n : ℕ} {vars : Fin n → RatBall}
     (value : TribonacciExpr) :
     evalReal vars (.const value) = value.eval := rfl
 
+@[simp] theorem evalReal_zero {n : ℕ} (vars : Fin n → ℝ) :
+    evalReal vars (0 : Polynomial n) = 0 := by simp [evalReal]
+
+@[simp] theorem evalReal_one {n : ℕ} (vars : Fin n → ℝ) :
+    evalReal vars (1 : Polynomial n) = 1 := by simp [evalReal]
+
 @[simp] theorem evalReal_var {n : ℕ} (vars : Fin n → ℝ) (index : Fin n) :
     evalReal vars (.var index) = vars index := rfl
 

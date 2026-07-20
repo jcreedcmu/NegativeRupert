@@ -150,6 +150,17 @@ theorem tribonacci_fourth :
       rw [tribonacci_cubic]
       ring
 
+theorem tribonacci_fifth :
+    tribonacci ^ 5 = 4 * tribonacci ^ 2 + 3 * tribonacci + 2 := by
+  calc
+    tribonacci ^ 5 = tribonacci * tribonacci ^ 4 := by ring
+    _ = tribonacci * (2 * tribonacci ^ 2 + 2 * tribonacci + 1) := by
+      rw [tribonacci_fourth]
+    _ = 2 * tribonacci ^ 3 + 2 * tribonacci ^ 2 + tribonacci := by ring
+    _ = 4 * tribonacci ^ 2 + 3 * tribonacci + 2 := by
+      rw [tribonacci_cubic]
+      ring
+
 @[simp] theorem eval_mul (a b : TribonacciExpr) :
     eval (a * b) = eval a * eval b := by
   change eval (mul a b) = eval a * eval b
