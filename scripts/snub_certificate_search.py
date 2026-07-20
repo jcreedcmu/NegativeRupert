@@ -672,6 +672,12 @@ def texpr_float(value):
             float(value[2]) * TRIBONACCI_FLOAT**2)
 
 
+def epoly_float_value(polynomial, values):
+    return sum(texpr_float(coefficient) * math.prod(
+        value ** power for value, power in zip(values, powers))
+        for powers, coefficient in polynomial.items())
+
+
 def epoly_centered_float_lower(polynomial, endpoints):
     """Fast heuristic mirror of recentered interval evaluation.
 
@@ -1059,9 +1065,8 @@ def transition_guarded_piece_polynomials():
     }
 
 
-def transition_guarded_middle_cover(max_nodes=5000, max_depth=100,
-                                     polar=False):
-    """Exact nonnegative OR-cover of the narrow overlap piece."""
+def transition_guarded_middle_chart(chart):
+    """Polynomials and box for one exact chart of the middle band."""
     certificate = transition_guarded_piece_polynomials()
     polynomials = [certificate["middle89"],
                    certificate["middleTransverse"],
@@ -1070,7 +1075,29 @@ def transition_guarded_middle_cover(max_nodes=5000, max_depth=100,
                    certificate["middleCombination"]]
     labels = ["family89", "familyTransverse", "familyNested", "familyWidth",
               "transverseNestedCombination"]
-    if polar:
+    if chart == "iterated":
+        # Resolve the only noncompact-looking polar corner a second time.
+        # With R = 500 rho and s = 1-u, the triangle R+s <= 1 is
+        # parameterized by R = sigma*q and s = sigma*(1-q).  Thus the
+        # collapsed corner rho=0,u=1 is an honest coordinate face instead
+        # of the limit of an infinite dyadic chain.
+        variables = [epoly_var(5, i) for i in range(5)]
+        one = epoly_const(5, TEXPR_ONE)
+        radial_scale = epoly_const(5, (Q(1, 500), Q(0), Q(0)))
+        rho = epoly_mul(radial_scale,
+                        epoly_mul(variables[0], variables[1]))
+        substitutions = [
+            epoly_mul(rho, variables[2]),
+            epoly_mul(rho, epoly_sub(one, variables[2])),
+            epoly_sub(one, epoly_mul(
+                variables[0], epoly_sub(one, variables[1]))),
+            variables[3], variables[4],
+        ]
+        polynomials = [epoly_compose(polynomial, substitutions)
+                       for polynomial in polynomials]
+        root = [(Q(0), Q(1)), (Q(0), Q(1)), (Q(0), Q(1)),
+                (Q(-16), Q(16)), (Q(-16), Q(16))]
+    elif chart == "polar":
         variables = [epoly_var(5, i) for i in range(5)]
         one = epoly_const(5, TEXPR_ONE)
         substitutions = [epoly_mul(variables[0], variables[1]),
@@ -1080,9 +1107,202 @@ def transition_guarded_middle_cover(max_nodes=5000, max_depth=100,
                        for polynomial in polynomials]
         root = [(Q(0), Q(1, 500)), (Q(0), Q(1)), (Q(0), Q(1)),
                 (Q(-16), Q(16)), (Q(-16), Q(16))]
-    else:
+    elif chart == "rectangular":
         root = [(Q(0), Q(1, 1000)), (Q(0), Q(2)), (Q(0), Q(1)),
                 (Q(-16), Q(16)), (Q(-16), Q(16))]
+    else:
+        raise ValueError(f"unknown middle chart: {chart}")
+    return labels, polynomials, root
+
+
+def transition_guarded_middle_profile(chart, samples=100000, seed=1):
+    """Cheap pointwise search for a genuine gap before box subdivision."""
+    labels, polynomials, root = transition_guarded_middle_chart(chart)
+    rng = random.Random(seed)
+    best_value = math.inf
+    best_point = None
+    best_values = None
+    label_counts = [0] * len(labels)
+
+    def inspect(point):
+        nonlocal best_value, best_point, best_values
+        values = [epoly_float_value(polynomial, point)
+                  for polynomial in polynomials]
+        label = max(range(len(values)), key=values.__getitem__)
+        label_counts[label] += 1
+        if values[label] < best_value:
+            best_value = values[label]
+            best_point = point
+            best_values = values
+
+    # Include every corner and the most important collapsed-coordinate
+    # faces, then use random interior points to hunt for an actual negative
+    # soft maximum.  This is discovery only; no point sample is a proof.
+    for bits in itertools.product((0, 1), repeat=5):
+        inspect([float(root[i][bits[i]]) for i in range(5)])
+    for _ in range(samples):
+        inspect([rng.uniform(float(lo), float(hi)) for lo, hi in root])
+    return {
+        "chart": chart,
+        "samples": samples + 32,
+        "minimum_envelope": best_value,
+        "minimum_point": best_point,
+        "values_at_minimum": dict(zip(labels, best_values)),
+        "label_counts": dict(zip(labels, label_counts)),
+    }
+
+
+def project_probability_simplex(values):
+    """Euclidean projection onto nonnegative vectors with sum one."""
+    ordered = sorted(values, reverse=True)
+    partial = 0.0
+    threshold = 0.0
+    for index, value in enumerate(ordered, 1):
+        partial += value
+        candidate = (partial - 1.0) / index
+        if index == len(ordered) or ordered[index] <= candidate:
+            threshold = candidate
+            break
+    return [max(value - threshold, 0.0) for value in values]
+
+
+def transition_guarded_middle_combination_profile(
+        chart="iterated", iterations=5000):
+    """Heuristically maximize the worst Bernstein coefficient of one OR.
+
+    A successful positive result can be rationalized and checked exactly;
+    a negative result only says that fixed scalar weights are insufficient.
+    """
+    labels, polynomials, root = transition_guarded_middle_chart(chart)
+    natural = [epoly_bernstein_coefficients(polynomial, root)[0]
+               for polynomial in polynomials]
+    degrees = tuple(max(row[axis] for row in natural)
+                    for axis in range(5))
+    tables = [epoly_bernstein_coefficients(
+        polynomial, root, degrees)[1] for polynomial in polynomials]
+    columns = [[texpr_float(value) for value in table.values()]
+               for table in tables]
+    scales = [max(abs(value) for value in column) for column in columns]
+    rows = list(zip(*[[value / scale for value in column]
+                      for column, scale in zip(columns, scales)]))
+    weights = [1.0 / len(labels)] * len(labels)
+    best = (-math.inf, None, None)
+    for iteration in range(1, iterations + 1):
+        worst_index, (worst, gradient) = min(enumerate(
+            (sum(weight * value for weight, value in zip(weights, row)), row)
+            for row in rows), key=lambda item: item[1][0])
+        if worst > best[0]:
+            best = (worst, list(weights), worst_index)
+        norm = math.sqrt(sum(value * value for value in gradient))
+        step = 0.5 / math.sqrt(iteration)
+        weights = project_probability_simplex([
+            weight + step * value / norm
+            for weight, value in zip(weights, gradient)])
+    physical_weights = [weight / scale
+                        for weight, scale in zip(best[1], scales)]
+    normalization = sum(physical_weights)
+    physical_weights = [weight / normalization for weight in physical_weights]
+    return {
+        "chart": chart,
+        "degrees": degrees,
+        "coefficient_count": len(rows),
+        "iterations": iterations,
+        "normalized_worst_coefficient": best[0],
+        "weights": dict(zip(labels, physical_weights)),
+        "worst_index": list(tables[0])[best[2]],
+        "worst_physical_coefficient": sum(
+            weight * columns[i][best[2]]
+            for i, weight in enumerate(physical_weights)),
+    }
+
+
+def transition_guarded_middle_float_cover(
+        chart="iterated", max_nodes=10000, max_depth=80,
+        acceptance_tolerance=1e-12):
+    """Discover a subdivision using floating de Casteljau arithmetic only."""
+    labels, polynomials, root = transition_guarded_middle_chart(chart)
+    root_tables = [epoly_bernstein_coefficients(polynomial, root)
+                   for polynomial in polynomials]
+    degrees = [item[0] for item in root_tables]
+    root_float = [bernstein_float_table(item[1]) for item in root_tables]
+    leaves = []
+    failures = []
+    node_count = 0
+    maximum_depth = 0
+    split_axis_counts = [0] * 5
+
+    class NodeLimit(Exception):
+        pass
+
+    def visit(tables, endpoints, depth, path):
+        nonlocal node_count, maximum_depth
+        if node_count >= max_nodes:
+            raise NodeLimit
+        node_count += 1
+        maximum_depth = max(maximum_depth, depth)
+        lowers = [min(table.values()) for table in tables]
+        label = max(range(len(labels)), key=lowers.__getitem__)
+        if lowers[label] >= -acceptance_tolerance:
+            leaves.append((path, label, lowers[label]))
+            return
+        if depth >= max_depth:
+            failures.append((path, lowers))
+            return
+
+        # Score coordinates using only the currently strongest family, then
+        # split the other tables once along the selected coordinate.  The
+        # older exact search split every family on every candidate axis and
+        # obscured the geometry under avoidable arithmetic cost.
+        candidates = []
+        for axis in range(5):
+            children = bernstein_split_float(tables[label], degrees[label], axis)
+            child_lowers = [min(child.values()) for child in children]
+            score = (sum(value >= -acceptance_tolerance
+                         for value in child_lowers),
+                     min(child_lowers), sum(child_lowers))
+            candidates.append((score, axis))
+        _, axis = max(candidates)
+        split_axis_counts[axis] += 1
+        split_tables = [bernstein_split_float(table, degree, axis)
+                        for table, degree in zip(tables, degrees)]
+        lo, hi = endpoints[axis]
+        mid = (lo + hi) / 2
+        for side, child_range in enumerate(((lo, mid), (mid, hi))):
+            child_endpoints = list(endpoints)
+            child_endpoints[axis] = child_range
+            visit([children[side] for children in split_tables],
+                  child_endpoints, depth + 1, path + [(axis, side)])
+
+    truncated = False
+    try:
+        visit(root_float, root, 0, [])
+    except NodeLimit:
+        truncated = True
+    return {
+        "chart": chart,
+        "degrees": degrees,
+        "node_count": node_count,
+        "maximum_depth": maximum_depth,
+        "split_axis_counts": split_axis_counts,
+        "truncated": truncated,
+        "leaf_count": len(leaves),
+        "failure_count": len(failures),
+        "label_leaf_counts": {
+            labels[i]: sum(label == i for _, label, _ in leaves)
+            for i in range(len(labels))
+        },
+        "minimum_leaf_lower": min((lower for _, _, lower in leaves),
+                                  default=None),
+        "failure_examples": failures[:3],
+        "leaves": leaves,
+    }
+
+
+def transition_guarded_middle_cover(max_nodes=5000, max_depth=100,
+                                     polar=False, iterated=False):
+    """Exact nonnegative OR-cover of the narrow overlap piece."""
+    chart = "iterated" if iterated else "polar" if polar else "rectangular"
+    labels, polynomials, root = transition_guarded_middle_chart(chart)
     root_tables = [epoly_bernstein_coefficients(polynomial, root)
                    for polynomial in polynomials]
     degrees = [item[0] for item in root_tables]
@@ -1150,7 +1370,7 @@ def transition_guarded_middle_cover(max_nodes=5000, max_depth=100,
     return {
         "root": root,
         "labels": labels,
-        "polar": polar,
+        "chart": chart,
         "degrees": degrees,
         "coefficient_counts": [len(table) for table in tables],
         "root_lowers": [bernstein_lower(table) for table in tables],
@@ -4421,6 +4641,31 @@ def main():
     guarded_middle_parser.add_argument("--max-nodes", type=int, default=5000)
     guarded_middle_parser.add_argument("--max-depth", type=int, default=100)
     guarded_middle_parser.add_argument("--polar", action="store_true")
+    guarded_middle_parser.add_argument("--iterated", action="store_true")
+    guarded_middle_profile_parser = sub.add_parser(
+        "projective-transition-guarded-middle-profile")
+    guarded_middle_profile_parser.add_argument(
+        "--chart", choices=("rectangular", "polar", "iterated"),
+        default="iterated")
+    guarded_middle_profile_parser.add_argument(
+        "--samples", type=int, default=100000)
+    guarded_middle_profile_parser.add_argument("--seed", type=int, default=1)
+    guarded_middle_combination_parser = sub.add_parser(
+        "projective-transition-guarded-middle-combination")
+    guarded_middle_combination_parser.add_argument(
+        "--chart", choices=("rectangular", "polar", "iterated"),
+        default="iterated")
+    guarded_middle_combination_parser.add_argument(
+        "--iterations", type=int, default=5000)
+    guarded_middle_float_parser = sub.add_parser(
+        "projective-transition-guarded-middle-float-cover")
+    guarded_middle_float_parser.add_argument(
+        "--chart", choices=("rectangular", "polar", "iterated"),
+        default="iterated")
+    guarded_middle_float_parser.add_argument(
+        "--max-nodes", type=int, default=10000)
+    guarded_middle_float_parser.add_argument(
+        "--max-depth", type=int, default=80)
     sub.add_parser("projective-transition-gap-profile")
     farkas_parser = sub.add_parser("projective-transition-farkas-search")
     farkas_parser.add_argument("--d", type=float, default=.0009525383113968972)
@@ -4563,12 +4808,24 @@ def main():
         print(json.dumps(qjson(summary), indent=2))
     elif args.command == "projective-transition-guarded-middle-cover":
         result = transition_guarded_middle_cover(
-            args.max_nodes, args.max_depth, args.polar)
+            args.max_nodes, args.max_depth, args.polar, args.iterated)
         summary = {key: value for key, value in result.items()
                    if key not in ("leaves", "failures")}
         summary["leaf_count"] = len(result["leaves"])
         summary["failure_count"] = len(result["failures"])
         summary["failure_examples"] = result["failures"][:3]
+        print(json.dumps(qjson(summary), indent=2))
+    elif args.command == "projective-transition-guarded-middle-profile":
+        print(json.dumps(transition_guarded_middle_profile(
+            args.chart, args.samples, args.seed), indent=2))
+    elif args.command == "projective-transition-guarded-middle-combination":
+        print(json.dumps(transition_guarded_middle_combination_profile(
+            args.chart, args.iterations), indent=2))
+    elif args.command == "projective-transition-guarded-middle-float-cover":
+        result = transition_guarded_middle_float_cover(
+            args.chart, args.max_nodes, args.max_depth)
+        summary = {key: value for key, value in result.items()
+                   if key != "leaves"}
         print(json.dumps(qjson(summary), indent=2))
     elif args.command == "projective-transition-gap-profile":
         print(json.dumps(qjson(transition_family_gap_profile()), indent=2))
