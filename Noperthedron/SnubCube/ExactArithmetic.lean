@@ -2,6 +2,7 @@ module
 
 public import Noperthedron.SnubCube.ProjectiveView
 public import Noperthedron.BalancedSupport.Rodrigues
+public import Noperthedron.Checker.RatBall
 
 @[expose] public section
 
@@ -18,6 +19,17 @@ the three-dimensional quotient basis `1,t,t²`, reducing with
 namespace Noperthedron.SnubCube
 
 open Noperthedron.BalancedSupport
+open Noperthedron.Checker
+
+/-- The certified decimal enclosure of the tribonacci root, packaged for
+executable interval arithmetic. -/
+def tribonacciBall : RatBall := RatBall.ofEndpoints
+  (1839286755214161 / 10 ^ 15) (1839286755214162 / 10 ^ 15)
+
+theorem tribonacciBall_holds : tribonacciBall.Holds tribonacci := by
+  apply RatBall.holds_of_mem_Icc
+  convert tribonacci_enclosure using 1
+  all_goals norm_num
 
 /-- A rational representative of an element of `ℚ[t]/(t³-t²-t-1)`. -/
 structure TribonacciExpr where
@@ -60,6 +72,25 @@ instance instMul : Mul TribonacciExpr := ⟨mul⟩
 
 noncomputable def eval (a : TribonacciExpr) : ℝ :=
   a.c0 + a.c1 * tribonacci + a.c2 * tribonacci ^ 2
+
+/-- Enclose an exact cubic-field coefficient only after reducing it to the
+basis `1,t,t²`.  In particular, coefficients that cancel symbolically incur
+no floating-point or vertex-approximation error. -/
+def evalBall (a : TribonacciExpr) : RatBall :=
+  RatBall.add
+    (RatBall.add (RatBall.const a.c0)
+      (RatBall.scale a.c1 tribonacciBall))
+    (RatBall.scale a.c2 (RatBall.mul tribonacciBall tribonacciBall))
+
+theorem evalBall_holds (a : TribonacciExpr) :
+    a.evalBall.Holds a.eval := by
+  have ht := tribonacciBall_holds
+  have ht2 := RatBall.holds_mul ht ht
+  have h0 := RatBall.holds_const a.c0
+  have h1 := RatBall.holds_scale a.c1 ht
+  have h2 := RatBall.holds_scale a.c2 ht2
+  simpa [evalBall, eval, pow_two] using
+    RatBall.holds_add (RatBall.holds_add h0 h1) h2
 
 @[simp] theorem eval_zero : eval 0 = 0 := by
   change eval zero = 0
@@ -134,6 +165,109 @@ theorem tribonacci_fourth :
           rw [tribonacci_cubic, tribonacci_fourth]
           ring
     _ = _ := by ring
+
+/-! ## Canonical polynomial arithmetic
+
+The executable representation is not merely a collection of exact-zero
+tests: it is the cubic quotient ring itself.  Exposing the ring structure
+allows `MvPolynomial` to collect transition expressions canonically before
+we enclose the real root. -/
+
+theorem ext {a b : TribonacciExpr} (h0 : a.c0 = b.c0)
+    (h1 : a.c1 = b.c1) (h2 : a.c2 = b.c2) : a = b := by
+  cases a
+  cases b
+  simp_all
+
+@[simp] theorem add_c0 (a b : TribonacciExpr) :
+    (a + b).c0 = a.c0 + b.c0 := rfl
+@[simp] theorem add_c1 (a b : TribonacciExpr) :
+    (a + b).c1 = a.c1 + b.c1 := rfl
+@[simp] theorem add_c2 (a b : TribonacciExpr) :
+    (a + b).c2 = a.c2 + b.c2 := rfl
+@[simp] theorem neg_c0 (a : TribonacciExpr) : (-a).c0 = -a.c0 := rfl
+@[simp] theorem neg_c1 (a : TribonacciExpr) : (-a).c1 = -a.c1 := rfl
+@[simp] theorem neg_c2 (a : TribonacciExpr) : (-a).c2 = -a.c2 := rfl
+@[simp] theorem zero_c0 : (0 : TribonacciExpr).c0 = 0 := rfl
+@[simp] theorem zero_c1 : (0 : TribonacciExpr).c1 = 0 := rfl
+@[simp] theorem zero_c2 : (0 : TribonacciExpr).c2 = 0 := rfl
+@[simp] theorem one_c0 : (1 : TribonacciExpr).c0 = 1 := rfl
+@[simp] theorem one_c1 : (1 : TribonacciExpr).c1 = 0 := rfl
+@[simp] theorem one_c2 : (1 : TribonacciExpr).c2 = 0 := rfl
+@[simp] theorem ofRat_c0 (q : ℚ) : (ofRat q).c0 = q := rfl
+@[simp] theorem ofRat_c1 (q : ℚ) : (ofRat q).c1 = 0 := rfl
+@[simp] theorem ofRat_c2 (q : ℚ) : (ofRat q).c2 = 0 := rfl
+@[simp] theorem mul_c0 (a b : TribonacciExpr) :
+    (a * b).c0 =
+      a.c0*b.c0 + (a.c1*b.c2+a.c2*b.c1) + a.c2*b.c2 := rfl
+@[simp] theorem mul_c1 (a b : TribonacciExpr) :
+    (a * b).c1 =
+      a.c0*b.c1+a.c1*b.c0 + (a.c1*b.c2+a.c2*b.c1) +
+        2*(a.c2*b.c2) := rfl
+@[simp] theorem mul_c2 (a b : TribonacciExpr) :
+    (a * b).c2 =
+      a.c0*b.c2+a.c1*b.c1+a.c2*b.c0 +
+        (a.c1*b.c2+a.c2*b.c1) + 2*(a.c2*b.c2) := rfl
+
+instance instAddCommGroup : AddCommGroup TribonacciExpr where
+  add := add
+  add_assoc := by intro a b c; apply ext <;> simp <;> ring
+  zero := zero
+  zero_add := by intro a; apply ext <;> simp
+  add_zero := by intro a; apply ext <;> simp
+  nsmul := nsmulRec
+  nsmul_zero := by intro; rfl
+  nsmul_succ := by intro n a; rfl
+  neg := neg
+  neg_add_cancel := by
+    intro a
+    apply ext
+    · change -a.c0 + a.c0 = 0; ring
+    · change -a.c1 + a.c1 = 0; ring
+    · change -a.c2 + a.c2 = 0; ring
+  zsmul := zsmulRec
+  add_comm := by intro a b; apply ext <;> simp <;> ring
+
+instance instCommMonoid : CommMonoid TribonacciExpr where
+  mul := mul
+  mul_assoc := by intro a b c; apply ext <;> simp <;> ring
+  one := one
+  one_mul := by intro a; apply ext <;> simp
+  mul_one := by intro a; apply ext <;> simp
+  npow := npowRec
+  npow_zero := by intro; rfl
+  npow_succ := by intro n a; rfl
+  mul_comm := by intro a b; apply ext <;> simp <;> ring
+
+instance instCommRing : CommRing TribonacciExpr where
+  __ := instAddCommGroup
+  __ := instCommMonoid
+  zero_mul := by intro a; apply ext <;> simp
+  mul_zero := by intro a; apply ext <;> simp
+  left_distrib := by intro a b c; apply ext <;> simp <;> ring
+  right_distrib := by intro a b c; apply ext <;> simp <;> ring
+  natCast := fun n => ofRat n
+  natCast_zero := by apply ext <;> simp [ofRat]
+  natCast_succ := by intro n; apply ext <;> simp [ofRat]
+  intCast := fun z => ofRat z
+  intCast_ofNat := by intro; rfl
+  intCast_negSucc := by
+    intro n
+    apply ext
+    · change ((Int.negSucc n : ℤ) : ℚ) = -((n + 1 : ℕ) : ℚ)
+      norm_num
+    · change (0 : ℚ) = 0
+      rfl
+    · change (0 : ℚ) = 0
+      rfl
+
+/-- Evaluation at the real tribonacci root as a ring homomorphism. -/
+noncomputable def evalRingHom : TribonacciExpr →+* ℝ where
+  toFun := eval
+  map_zero' := eval_zero
+  map_one' := eval_one
+  map_add' := eval_add
+  map_mul' := eval_mul
 
 @[simp] theorem eval_eq_zero_of_eq_zero {a : TribonacciExpr} (h : a = 0) :
     eval a = 0 := by simp [h]
