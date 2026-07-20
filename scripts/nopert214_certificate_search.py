@@ -117,6 +117,80 @@ def dot(left, right):
     return left[0] * right[0] + left[1] * right[1]
 
 
+def dot3(left, right):
+    return sum(x * y for x, y in zip(left, right))
+
+
+def cross3(left, right):
+    return (left[1] * right[2] - left[2] * right[1],
+            left[2] * right[0] - left[0] * right[2],
+            left[0] * right[1] - left[1] * right[0])
+
+
+def add3(*vectors):
+    return tuple(sum(vector[i] for vector in vectors) for i in range(3))
+
+
+def scale3(scale, vector):
+    return tuple(scale * value for value in vector)
+
+
+def norm3(vector):
+    return math.sqrt(dot3(vector, vector))
+
+
+def outer_lift(theta, phi, direction):
+    """Adjoint of ``rot_m``: lift a screen direction to world space."""
+    u, v = direction
+    st, ct = math.sin(theta), math.cos(theta)
+    sp, cp = math.sin(phi), math.cos(phi)
+    return (-st * u - ct * cp * v,
+            ct * u - st * cp * v,
+            sp * v)
+
+
+def solve_linear(matrix, rhs):
+    """Small dense Gaussian elimination, returning None if singular."""
+    augmented = [list(row) + [value] for row, value in zip(matrix, rhs)]
+    size = len(rhs)
+    for column in range(size):
+        pivot = max(range(column, size),
+                    key=lambda row: abs(augmented[row][column]))
+        if abs(augmented[pivot][column]) < 1e-12:
+            return None
+        augmented[column], augmented[pivot] = augmented[pivot], augmented[column]
+        divisor = augmented[column][column]
+        augmented[column] = [value / divisor
+                             for value in augmented[column]]
+        for row in range(size):
+            if row == column:
+                continue
+            multiplier = augmented[row][column]
+            augmented[row] = [left - multiplier * right for left, right in
+                              zip(augmented[row], augmented[column])]
+    return [augmented[row][-1] for row in range(size)]
+
+
+def tetrahedron_origin_margin(points):
+    """Radius of the origin-centered ball in a tetrahedron, or None."""
+    matrix = [[points[column][row] for column in range(4)]
+              for row in range(3)] + [[1.0] * 4]
+    barycentric = solve_linear(matrix, [0.0, 0.0, 0.0, 1.0])
+    if barycentric is None or min(barycentric) <= 1e-10:
+        return None
+    face_distances = []
+    for omitted in range(4):
+        face = [points[i] for i in range(4) if i != omitted]
+        ab = tuple(face[1][i] - face[0][i] for i in range(3))
+        ac = tuple(face[2][i] - face[0][i] for i in range(3))
+        normal = cross3(ab, ac)
+        length = norm3(normal)
+        if length < 1e-12:
+            return None
+        face_distances.append(abs(dot3(normal, face[0])) / length)
+    return min(face_distances), barycentric
+
+
 def rational_unit_direction(direction, denominator=10**6):
     """Nearby exact rational point on the unit circle."""
     x, y = direction
@@ -232,6 +306,151 @@ def balanced_certificate(pose):
     }
 
 
+def local_axis_candidates(theta, phi, cone_samples=1):
+    """Balanced equality-stratum triples for one outer viewing direction.
+
+    Directions are chosen strictly inside silhouette-vertex normal cones.
+    Each result stores the normalized first-variation vector A/B used by the
+    axis-free local theorem and its smallest (floating-point) support slack.
+    """
+    outer = [rot_m(theta, phi, vertex) for vertex in VERTICES]
+    cycle = convex_hull(outer)
+    edge_normals = []
+    for position, start in enumerate(cycle):
+        finish = cycle[(position + 1) % len(cycle)]
+        edge = (outer[finish][0] - outer[start][0],
+                outer[finish][1] - outer[start][1])
+        length = math.hypot(*edge)
+        edge_normals.append((edge[1] / length, -edge[0] / length))
+
+    contacts = []
+    for position, vertex_index in enumerate(cycle):
+        before = edge_normals[(position - 1) % len(cycle)]
+        after = edge_normals[position]
+        angle_before = math.atan2(before[1], before[0])
+        angle_after = math.atan2(after[1], after[0])
+        while angle_after <= angle_before:
+            angle_after += 2.0 * math.pi
+        for sample in range(cone_samples):
+            fraction = (sample + 1) / (cone_samples + 1)
+            angle = angle_before + fraction * (angle_after - angle_before)
+            direction = (math.cos(angle), math.sin(angle))
+            support = dot(direction, outer[vertex_index])
+            slack = min(support - dot(direction, outer[other])
+                        for other in range(len(outer))
+                        if other != vertex_index)
+            contacts.append({
+                "vertex": vertex_index,
+                "direction": direction,
+                "support_slack": slack,
+            })
+
+    candidates = []
+    for contact_indices in itertools.combinations(range(len(contacts)), 3):
+        selected = [contacts[index] for index in contact_indices]
+        directions = [contact["direction"] for contact in selected]
+        weights = [cross(directions[1], directions[2]),
+                   cross(directions[2], directions[0]),
+                   cross(directions[0], directions[1])]
+        if all(weight <= 1e-12 for weight in weights):
+            weights = [-weight for weight in weights]
+        if not all(weight > 1e-10 for weight in weights):
+            continue
+        total = sum(weights)
+        weights = [weight / total for weight in weights]
+        terms = []
+        for weight, contact in zip(weights, selected):
+            lift = outer_lift(theta, phi, contact["direction"])
+            terms.append(scale3(
+                weight, cross3(VERTICES[contact["vertex"]], lift)))
+        normalized_a = add3(*terms)  # B = sum weights = 1.
+        candidates.append({
+            "contacts": selected,
+            "weights": weights,
+            "normalized_a": normalized_a,
+            "support_slack": min(contact["support_slack"]
+                                 for contact in selected),
+        })
+    return cycle, candidates
+
+
+def best_local_tetrahedron(theta, phi, cone_samples=1,
+                           max_tetrahedra=100_000):
+    cycle, candidates = local_axis_candidates(theta, phi, cone_samples)
+    best = None
+    total_tetrahedra = math.comb(len(candidates), 4)
+    if total_tetrahedra <= max_tetrahedra:
+        tetrahedra = itertools.combinations(range(len(candidates)), 4)
+        searched_tetrahedra = total_tetrahedra
+    else:
+        # Discovery only: a deterministic broad sample is enough to measure
+        # whether healthy tetrahedra exist.  A selected certificate is later
+        # rationalized and checked exhaustively by Lean.
+        rng = random.Random(repr((theta, phi, cone_samples)))
+        sampled = set()
+        while len(sampled) < max_tetrahedra:
+            sampled.add(tuple(sorted(rng.sample(range(len(candidates)), 4))))
+        tetrahedra = sampled
+        searched_tetrahedra = len(sampled)
+    for indices in tetrahedra:
+        points = [candidates[index]["normalized_a"] for index in indices]
+        result = tetrahedron_origin_margin(points)
+        if result is None:
+            continue
+        margin, barycentric = result
+        support_slack = min(candidates[index]["support_slack"]
+                            for index in indices)
+        score = min(margin, support_slack)
+        key = (score, margin, support_slack)
+        if best is None or key > best[0]:
+            best = (key, indices, barycentric)
+    if best is None:
+        return {
+            "theta": theta,
+            "phi": phi,
+            "outer_hull": cycle,
+            "candidate_count": len(candidates),
+            "total_tetrahedra": total_tetrahedra,
+            "searched_tetrahedra": searched_tetrahedra,
+            "found": False,
+        }
+    (score, margin, support_slack), indices, barycentric = best
+    return {
+        "theta": theta,
+        "phi": phi,
+        "outer_hull": cycle,
+        "candidate_count": len(candidates),
+        "total_tetrahedra": total_tetrahedra,
+        "searched_tetrahedra": searched_tetrahedra,
+        "found": True,
+        "score": score,
+        "axis_ball_radius": margin,
+        "support_slack": support_slack,
+        "origin_barycentric": barycentric,
+        "certificates": [candidates[index] for index in indices],
+    }
+
+
+def local_random_profile(samples, seed, cone_samples=1):
+    rng = random.Random(seed)
+    minimum = None
+    failures = 0
+    for _ in range(samples):
+        theta = rng.uniform(-math.pi, math.pi)
+        phi = rng.uniform(0.0, math.pi)
+        result = best_local_tetrahedron(theta, phi, cone_samples)
+        if not result["found"]:
+            failures += 1
+            continue
+        if minimum is None or result["score"] < minimum["score"]:
+            minimum = result
+    return {
+        "samples": samples,
+        "failures": failures,
+        "minimum": minimum,
+    }
+
+
 def random_profile(samples, seed):
     rng = random.Random(seed)
     minimum = None
@@ -273,6 +492,13 @@ def main():
     rational = sub.add_parser("rational-certificate")
     rational.add_argument("values", help="theta1,phi1,theta2,phi2,alpha")
     rational.add_argument("--denominator", type=int, default=10**6)
+    local = sub.add_parser("local-view")
+    local.add_argument("values", help="theta2,phi2")
+    local.add_argument("--cone-samples", type=int, default=1)
+    local_profile = sub.add_parser("local-profile")
+    local_profile.add_argument("--samples", type=int, default=100)
+    local_profile.add_argument("--seed", type=int, default=1)
+    local_profile.add_argument("--cone-samples", type=int, default=1)
     args = parser.parse_args()
     if args.command == "profile":
         print(json.dumps(random_profile(args.samples, args.seed), indent=2))
@@ -283,6 +509,15 @@ def main():
         print(json.dumps(balanced_certificate(values), indent=2))
     elif args.command == "audit-stl":
         print(json.dumps(audit_stl(args.path), indent=2))
+    elif args.command == "local-view":
+        values = tuple(map(float, args.values.split(",")))
+        if len(values) != 2:
+            parser.error("local-view requires theta2,phi2")
+        print(json.dumps(best_local_tetrahedron(
+            *values, args.cone_samples), indent=2))
+    elif args.command == "local-profile":
+        print(json.dumps(local_random_profile(
+            args.samples, args.seed, args.cone_samples), indent=2))
     else:
         values = tuple(Q(value) for value in args.values.split(","))
         if len(values) != 5:
