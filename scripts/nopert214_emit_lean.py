@@ -98,6 +98,12 @@ def emit_row(row, chart, interval_ids, triangle_ids, edge_template_ids,
                 f"{row['coordinate']} ({iv}) ({region(row, triangle_ids)})")
     if kind == "radius":
         return f".radiusPrune {row_id} ({iv}) ({region(row, triangle_ids)})"
+    if kind == "fundamental_prune":
+        direction = ".positive" if row["direction"] == 1 else ".negative"
+        return (f".fundamentalPrune {row_id} "
+                f"{{ interval := {iv}, chart := {chart}, "
+                f"direction := {direction} }} "
+                f"({region(row, triangle_ids)})")
     if kind == "edge":
         certificate = row["certificate"]
         contacts = certificate["contacts"]

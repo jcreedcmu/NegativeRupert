@@ -1932,6 +1932,61 @@ def qpoly_box_lower(coefficients, centers, radii):
                qpoly_bernstein_lower(coefficients, centers, radii))
 
 
+@functools.lru_cache(maxsize=None)
+def atlas_fundamental_advantage_qpoly(chart, direction):
+    """Rational approximation to the fivefold trace advantage.
+
+    ``direction`` is +1 or -1 for right multiplication by the corresponding
+    72-degree z rotation.  The exact numerator is
+
+        (cos(2*pi/5)-1) * (R00+R11) + direction*sin(2*pi/5)*(R01-R10).
+
+    Here ``R`` is the charted Cayley numerator.  The approximations 0.309 and
+    0.951 are each within 0.001 of the exact trigonometric value.  On the
+    Cayley ball, the resulting total numerator error is at most 16/1000.
+    """
+    if direction not in (-1, 1):
+        raise ValueError("fivefold direction must be -1 or 1")
+    numerator = exact_certificate.CAYLEY_NUMERATOR_QPOLYS
+    signs = ATLAS_CHART_SIGNS[chart]
+    a = exact_certificate.qpoly_add(
+        exact_certificate.qpoly_scale(signs[0], numerator[0][0]),
+        exact_certificate.qpoly_scale(signs[1], numerator[1][1]))
+    b = exact_certificate.qpoly_add(
+        exact_certificate.qpoly_scale(signs[0], numerator[0][1]),
+        exact_certificate.qpoly_scale(-signs[1], numerator[1][0]))
+    return tuple(exact_certificate.qpoly_add(
+        exact_certificate.qpoly_scale(Q(-691, 1000), a),
+        exact_certificate.qpoly_scale(Q(direction*951, 1000), b)))
+
+
+FUNDAMENTAL_APPROXIMATION_ERROR = Q(2, 125)
+
+
+def atlas_fundamental_status(chart, centers, radii):
+    """Classify a Cayley box against the fivefold Dirichlet cell.
+
+    ``outside`` is an exact pruning certificate.  ``inside`` means both
+    defining trace inequalities hold strictly throughout the box.  The
+    remaining ``boundary`` boxes are preferentially subdivided before any
+    view-space work, preventing the same relative-rotation pruning from being
+    repeated under many projective triangles.
+    """
+    bounds = []
+    for direction in (-1, 1):
+        polynomial = atlas_fundamental_advantage_qpoly(chart, direction)
+        lower = qpoly_box_lower(polynomial, centers, radii)
+        upper = -qpoly_box_lower(tuple(-q for q in polynomial), centers, radii)
+        bounds.append((lower-FUNDAMENTAL_APPROXIMATION_ERROR,
+                       upper+FUNDAMENTAL_APPROXIMATION_ERROR))
+    for direction, (lower, _upper) in zip((-1, 1), bounds):
+        if lower > 0:
+            return "outside", direction, bounds
+    if all(upper <= 0 for _lower, upper in bounds):
+        return "inside", None, bounds
+    return "boundary", None, bounds
+
+
 def view_qpoly(view, component_polynomials):
     total = exact_certificate.qpoly_zero()
     for coefficient, polynomial in zip(view, component_polynomials):
@@ -2699,6 +2754,7 @@ def generate_atlas_projective_table(
                           failure["view_depth"], None))
         counts = saved["counts"]
         counts.setdefault("local", 0)
+        counts.setdefault("fundamental_prune", 0)
         failures = []
     else:
         rows = [None]
@@ -2717,7 +2773,7 @@ def generate_atlas_projective_table(
                    "center": root_center, "widths": root_widths}
         counts = {"view_root": 1, "view_split": 0, "relative_split": 0,
                   "edge": 0, "global": 0, "local": 0, "radius": 0,
-                  "exact_rejections": 0}
+                  "fundamental_prune": 0, "exact_rejections": 0}
         failures = []
 
     def allocate(count):
@@ -2746,6 +2802,36 @@ def generate_atlas_projective_table(
         if interval_outside_cayley_ball(center, widths):
             rows[row_id] = {**common, "kind": "radius"}
             counts["radius"] += 1
+            continue
+        fundamental_status, fundamental_direction, fundamental_bounds = \
+            atlas_fundamental_status(chart, center, widths)
+        if fundamental_status == "outside":
+            rows[row_id] = {**common, "kind": "fundamental_prune",
+                            "direction": fundamental_direction}
+            counts["fundamental_prune"] += 1
+            continue
+        # Resolve the relative-rotation fundamental domain before refining
+        # the independent projective view.  Only coordinates occurring in
+        # the chart's two trace-advantage quadratics need to be split.
+        fundamental_coordinates = (2,) if chart in (0, 3) else (0, 1)
+        fundamental_widest = max(
+            fundamental_coordinates, key=lambda i: widths[i])
+        if (fundamental_status == "boundary" and
+                widths[fundamental_widest] > Q(1, 64)):
+            children = allocate(2)
+            rows[row_id] = {**common, "kind": "relative_split",
+                            "coordinate": fundamental_widest+2,
+                            "children": children}
+            counts["relative_split"] += 1
+            child_widths = list(widths)
+            child_widths[fundamental_widest] /= 2
+            for direction, child in zip((-1, 1), children):
+                child_center = list(center)
+                child_center[fundamental_widest] += \
+                    direction*child_widths[fundamental_widest]
+                stack.append((child, tuple(child_center),
+                              tuple(child_widths), root, triangle,
+                              view_depth, None))
             continue
         edge_float = atlas_simplex_float_screen(
             chart, center, widths, triangle)

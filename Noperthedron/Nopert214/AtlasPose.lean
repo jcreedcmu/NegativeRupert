@@ -131,7 +131,7 @@ theorem matrixPoseWithOffset_outer_rotation_project (chart : ChartIndex)
 
 end AtlasPose
 
-private theorem matrixPose_ext_val {p q : MatrixPose}
+theorem matrixPose_ext_val {p q : MatrixPose}
     (hinner : p.innerRot.val = q.innerRot.val)
     (houter : p.outerRot.val = q.outerRot.val)
     (hoffset : p.innerOffset = q.innerOffset) : p = q := by

@@ -1,6 +1,7 @@
 module
 
 public import Noperthedron.Nopert214.AtlasProjectiveEdgeCertificate
+public import Noperthedron.Nopert214.AtlasFundamentalPrune
 public import Noperthedron.Nopert214.AtlasLocalCertificate
 public import Noperthedron.Nopert214.AtlasProjectiveLocalCertificate
 public import Noperthedron.Nopert214.AtlasProjectiveGlobalCertificate
@@ -37,7 +38,8 @@ def Region.Mem : Region → AtlasPose ℝ → Prop
 
 def NoRupert (chart : ChartIndex) (interval : Interval)
     (region : Region) : Prop :=
-  ¬ ∃ p ∈ interval.toReal, p.CayleyBounded ∧ p.InViewWedge ∧
+  ¬ ∃ p ∈ interval.toReal, p.CayleyBounded ∧
+    p.InFivefoldFundamentalDomain chart ∧ p.InViewWedge ∧
     ∃ offset : ℝ²,
     region.Mem p ∧
       RupertPose (p.matrixPoseWithOffset chart offset)
@@ -48,11 +50,11 @@ theorem noRupert_halves (chart : ChartIndex) (interval : Interval)
     (hlower : NoRupert chart (interval.lowerHalf coordinate) region)
     (hupper : NoRupert chart (interval.upperHalf coordinate) region) :
     NoRupert chart interval region := by
-  rintro ⟨p, hp, hbounded, hview, offset, hregion, hrupert⟩
+  rintro ⟨p, hp, hbounded, hfund, hview, offset, hregion, hrupert⟩
   rcases AtlasInterval.mem_imp_mem_lowerHalf_or_upperHalf coordinate hp with
     hl | hu
-  · exact hlower ⟨p, hl, hbounded, hview, offset, hregion, hrupert⟩
-  · exact hupper ⟨p, hu, hbounded, hview, offset, hregion, hrupert⟩
+  · exact hlower ⟨p, hl, hbounded, hfund, hview, offset, hregion, hrupert⟩
+  · exact hupper ⟨p, hu, hbounded, hfund, hview, offset, hregion, hrupert⟩
 
 def minAbsBound (lo hi : ℚ) : ℚ :=
   if lo ≤ 0 ∧ 0 ≤ hi then 0 else min |lo| |hi|
@@ -96,7 +98,7 @@ private theorem minAbsBound_le_abs {lo hi : ℚ} {x : ℝ}
 theorem noRupert_of_outsideCayleyBall (chart : ChartIndex)
     (interval : Interval) (region : Region)
     (h : interval.outsideCayleyBall) : NoRupert chart interval region := by
-  rintro ⟨p, hp, hbounded, -, offset, hregion, hrupert⟩
+  rintro ⟨p, hp, hbounded, -, -, offset, hregion, hrupert⟩
   have hmem := AtlasInterval.mem_toReal_iff.mp hp
   have hx := minAbsBound_le_abs (hmem 2)
   have hy := minAbsBound_le_abs (hmem 3)
@@ -135,11 +137,14 @@ inductive Row where
       (region : Region)
   | projectiveLocal (id : ℕ) (box : AtlasProjectiveLocalCertificate.Box)
   | radiusPrune (id : ℕ) (interval : Interval) (region : Region)
+  | fundamentalPrune (id : ℕ) (box : AtlasFundamentalPrune.Box)
+      (region : Region)
 
 def Row.id : Row → ℕ
   | .cayleySplit id .. | .viewRoot id .. | .viewSplit id .. |
       .projective id .. | .projectiveGlobal id .. |
-      .symmetryLocal id .. | .radiusPrune id .. => id
+      .symmetryLocal id .. | .radiusPrune id .. |
+      .fundamentalPrune id .. => id
   | .projectiveLocal id .. => id
 
 def Row.interval : Row → Interval
@@ -151,6 +156,7 @@ def Row.interval : Row → Interval
   | .symmetryLocal _ box _ => box.interval
   | .projectiveLocal _ box => box.interval
   | .radiusPrune _ interval _ => interval
+  | .fundamentalPrune _ box _ => box.interval
 
 def Row.region : Row → Region
   | .cayleySplit _ _ _ _ _ region => region
@@ -161,6 +167,7 @@ def Row.region : Row → Region
   | .symmetryLocal _ _ region => region
   | .projectiveLocal _ box => .triangle box.root box.triangle
   | .radiusPrune _ _ region => region
+  | .fundamentalPrune _ _ region => region
 
 instance : Inhabited Row where
   default := .viewRoot 0 (fun _ => 0) (AtlasPose.rootInterval ℚ)
@@ -189,6 +196,7 @@ def Row.ValidAt (chart : ChartIndex) (get : ℕ → Row)
   | .symmetryLocal _ box _ => box.chart = chart ∧ box.Valid
   | .projectiveLocal _ box => box.chart = chart ∧ box.Valid
   | .radiusPrune _ interval _ => interval.outsideCayleyBall
+  | .fundamentalPrune _ box _ => box.chart = chart ∧ box.Valid
 
 instance (chart : ChartIndex) (get : ℕ → Row) (size : ℕ) (row : Row) :
     Decidable (row.ValidAt chart get size) := by
@@ -243,27 +251,27 @@ theorem valid_imp_noRupert_ix (chart : ChartIndex) (get : ℕ → Row)
   cases row with
   | projective id box =>
       unfold NoRupert
-      rintro ⟨p, hp, hbounded, -, offset, hregion, hrupert⟩
+      rintro ⟨p, hp, hbounded, -, -, offset, hregion, hrupert⟩
       obtain ⟨hchart, hbox⟩ := hvalid
       subst hchart
       exact box.valid_imp_not_translated_rupert hbox hp hbounded offset
         hregion.1 hregion.2 hrupert
   | projectiveGlobal id box =>
       unfold NoRupert
-      rintro ⟨p, hp, hbounded, -, offset, hregion, hrupert⟩
+      rintro ⟨p, hp, hbounded, -, -, offset, hregion, hrupert⟩
       obtain ⟨hchart, hbox⟩ := hvalid
       subst hchart
       exact box.valid_imp_not_translated_rupert hbox p hp hbounded
         hregion.1 hregion.2 offset hrupert
   | symmetryLocal id box region =>
       unfold NoRupert
-      rintro ⟨p, hp, -, -, offset, -, hrupert⟩
+      rintro ⟨p, hp, -, -, -, offset, -, hrupert⟩
       obtain ⟨hchart, hbox⟩ := hvalid
       subst hchart
       exact box.valid_imp_not_translated_rupert hbox p hp offset hrupert
   | projectiveLocal id box =>
       unfold NoRupert
-      rintro ⟨p, hp, -, -, offset, hregion, hrupert⟩
+      rintro ⟨p, hp, -, -, -, offset, hregion, hrupert⟩
       obtain ⟨hchart, hbox⟩ := hvalid
       subst hchart
       exact box.valid_imp_not_translated_rupert hbox hp offset
@@ -280,28 +288,34 @@ theorem valid_imp_noRupert_ix (chart : ChartIndex) (get : ℕ → Row)
           upperChild hupperSize
   | viewRoot id children interval =>
       unfold NoRupert
-      rintro ⟨p, hp, hbounded, hview, offset, -, hrupert⟩
+      rintro ⟨p, hp, hbounded, hfund, hview, offset, -, hrupert⟩
       obtain ⟨root, hscale, hmem⟩ := exists_wedgeRoot p hview
       obtain ⟨hforward, hchildSize, hchildInterval, hchildRegion⟩ :=
         hvalid root
       have hchild := valid_imp_noRupert_ix chart get size rowsValid
         (children root) hchildSize
       rw [hchildInterval, hchildRegion] at hchild
-      exact hchild ⟨p, hp, hbounded, hview, offset,
+      exact hchild ⟨p, hp, hbounded, hfund, hview, offset,
         ⟨hscale, hmem⟩, hrupert⟩
   | viewSplit id children interval root triangle =>
       unfold NoRupert
-      rintro ⟨p, hp, hbounded, hview, offset, hregion, hrupert⟩
+      rintro ⟨p, hp, hbounded, hfund, hview, offset, hregion, hrupert⟩
       obtain ⟨child, hchildMem⟩ := mem_split hregion.2
       obtain ⟨hforward, hchildSize, hchildInterval, hchildRegion⟩ :=
         hvalid child
       have hchild := valid_imp_noRupert_ix chart get size rowsValid
         (children child) hchildSize
       rw [hchildInterval, hchildRegion] at hchild
-      exact hchild ⟨p, hp, hbounded, hview, offset,
+      exact hchild ⟨p, hp, hbounded, hfund, hview, offset,
         ⟨hregion.1, hchildMem⟩, hrupert⟩
   | radiusPrune id interval region =>
       exact noRupert_of_outsideCayleyBall chart interval region hvalid
+  | fundamentalPrune id box region =>
+      unfold NoRupert
+      rintro ⟨p, hp, hbounded, hfund, -, offset, -, hrupert⟩
+      obtain ⟨hchart, hbox⟩ := hvalid
+      subst hchart
+      exact box.valid_imp_not_inFundamentalDomain hbox hp hbounded hfund
 termination_by size - i
 decreasing_by
   all_goals
@@ -326,7 +340,8 @@ instance (table : Table) : Decidable table.Valid := by
 theorem Table.valid_imp_no_chart_translated_pose
     (table : Table) (h : table.Valid) :
     ¬ ∃ p ∈ AtlasPose.rootInterval ℝ,
-      p.CayleyBounded ∧ p.InViewWedge ∧ ∃ offset : ℝ²,
+      p.CayleyBounded ∧ p.InFivefoldFundamentalDomain table.chart ∧
+      p.InViewWedge ∧ ∃ offset : ℝ²,
       RupertPose (p.matrixPoseWithOffset table.chart offset)
         exactPolyhedron.hull := by
   obtain ⟨hnonempty, hrows, hrootInterval, hrootRegion⟩ := h
@@ -342,11 +357,14 @@ theorem no_matrixPose_of_valid_tables
     (hchart : ∀ chart, (table chart).chart = chart)
     (hvalid : ∀ chart, (table chart).Valid) :
     ¬ ∃ p : MatrixPose, RupertPose p exactPolyhedron.hull := by
-  apply no_matrixPose_of_no_bounded_atlas_translated_pose
-  rintro ⟨chart, p, hp, hbounded, hview, offset, hrupert⟩
+  rintro ⟨p, hrupert⟩
+  obtain ⟨δ, chart, q, offset, hq, hbounded, hview, hfund, heq⟩ :=
+    AtlasFundamentalPrune.exists_fundamental_atlas_translated_pose p
   have hno := (table chart).valid_imp_no_chart_translated_pose (hvalid chart)
   rw [hchart chart] at hno
-  exact hno ⟨p, hp, hbounded, hview, offset, hrupert⟩
+  have hrot : RupertPose (p.rotateBy δ) exactPolyhedron.hull :=
+    (MatrixPose.RupertPose_rotateBy_iff p δ exactPolyhedron.hull).mpr hrupert
+  exact hno ⟨q, hq, hbounded, hfund, hview, offset, heq.mpr hrot⟩
 
 end Noperthedron.Nopert214.AtlasProjectiveSolutionTree
 

@@ -85,6 +85,37 @@ theorem rotate_hull :
   congr 1
   simpa using rotate_vertices
 
+/-- Every nonnegative power of the generating fivefold rotation preserves
+the exact hull. -/
+theorem rotate_hull_iterated_nat (n : ℕ) :
+    RzL ((n : ℝ) * (2 * π / 5)) '' exactPolyhedron.hull =
+      exactPolyhedron.hull := by
+  induction n with
+  | zero =>
+      have hzero : RzL 0 = ContinuousLinearMap.id ℝ ℝ³ := by
+        apply ContinuousLinearMap.ext
+        intro v
+        ext i
+        fin_cases i <;>
+          simp [RzL, Rz_mat, Matrix.toLpLin_apply,
+            dotProduct, Fin.sum_univ_three]
+      rw [Nat.cast_zero, zero_mul, hzero]
+      exact Set.image_id _
+  | succ n ih =>
+      have hangle : ((n + 1 : ℕ) : ℝ) * (2 * π / 5) =
+          2 * π / 5 + (n : ℝ) * (2 * π / 5) := by
+        push_cast
+        ring
+      have hmap : RzL (((n + 1 : ℕ) : ℝ) * (2 * π / 5)) =
+          RzL (2 * π / 5) ∘L RzL ((n : ℝ) * (2 * π / 5)) := by
+        rw [hangle]
+        apply ContinuousLinearMap.ext
+        intro v
+        exact RzL_apply_add _ _ v
+      rw [hmap]
+      push_cast
+      rw [Set.image_comp, ih, rotate_hull]
+
 /-- A single symmetry step does not change the shadow at fixed inclination. -/
 theorem rotM_add_fifth (θ φ : ℝ) :
     rotM (θ + 2 * π / 5) φ '' exactPolyhedron.hull =
