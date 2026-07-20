@@ -62,6 +62,29 @@ def orbitIndex (i : VertexIndex) : OrbitIndex :=
 def seedIndex (i : VertexIndex) : SeedIndex :=
   ⟨i.val % 4, Nat.mod_lt _ (by omega)⟩
 
+/-- The STL ordering is rotation-major: four seeds for each of five orbits. -/
+def indexEquiv : VertexIndex ≃ OrbitIndex × SeedIndex where
+  toFun i := (orbitIndex i, seedIndex i)
+  invFun ks := ⟨4 * ks.1.val + ks.2.val, by omega⟩
+  left_inv i := by
+    apply Fin.ext
+    simp [orbitIndex, seedIndex]
+    omega
+  right_inv ks := by
+    rcases ks with ⟨k, s⟩
+    apply Prod.ext <;> apply Fin.ext <;> simp [orbitIndex, seedIndex] <;> omega
+
+def vertexIndex (k : OrbitIndex) (s : SeedIndex) : VertexIndex :=
+  indexEquiv.symm (k, s)
+
+@[simp] theorem orbitIndex_vertexIndex (k : OrbitIndex) (s : SeedIndex) :
+    orbitIndex (vertexIndex k s) = k := by
+  exact congrArg Prod.fst (indexEquiv.apply_symm_apply (k, s))
+
+@[simp] theorem seedIndex_vertexIndex (k : OrbitIndex) (s : SeedIndex) :
+    seedIndex (vertexIndex k s) = s := by
+  exact congrArg Prod.snd (indexEquiv.apply_symm_apply (k, s))
+
 /-- A rational trigonometric approximation to the intended exact orbit vertex.
 Angles in the second half of the orbit are reduced modulo `2π`, keeping their
 absolute values below `π`. -/
@@ -82,6 +105,15 @@ noncomputable def exactVertex (i : VertexIndex) : ℝ³ :=
 
 noncomputable def exactPolyhedron : Polyhedron VertexIndex ℝ³ :=
   ⟨exactVertex⟩
+
+noncomputable def exactVerts : Finset ℝ³ :=
+  Finset.image exactVertex Finset.univ
+
+theorem exactPolyhedron_hull :
+    exactPolyhedron.hull = convexHull ℝ exactVerts := by
+  simp only [Polyhedron.hull, exactPolyhedron, exactVerts, Finset.coe_image,
+    Finset.coe_univ, Set.image_univ]
+  congr 1
 
 @[simp] theorem exactPolyhedron_vertex (i : VertexIndex) :
     exactPolyhedron.v i = exactVertex i := rfl
