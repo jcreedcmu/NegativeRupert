@@ -24,6 +24,7 @@ public import Noperthedron.Nopert214.AtlasProjectiveGlobalCertificate
 public import Noperthedron.Nopert214.AtlasProjectiveGlobalCertificateSmoke
 public import Noperthedron.Nopert214.AtlasProjectiveSolutionTree
 public import Noperthedron.Nopert214.FundamentalChart3
+public import Noperthedron.Nopert214.IsNotRupert
 public import Noperthedron.BalancedSupport.UniversalDomain
 
 public section
