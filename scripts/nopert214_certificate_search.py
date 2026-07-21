@@ -3220,11 +3220,13 @@ def atlas_projective_state_action(task):
         if fundamental_status == "outside":
             return answer("terminal", row_kind="fundamental_prune",
                           extra={"direction": fundamental_direction})
+    near_chart0_local_tube = False
     if (chart == 0 and chart0_origin_tube_radii is not None and
             shared_index is not None):
         chart0_origin_tube_radius = chart0_origin_tube_radii[shared_index]
         mismatch_radius = atlas_projective_mismatch_radius(
             chart, 0, center, widths)[0]
+        near_chart0_local_tube = mismatch_radius < Q(1, 20)
         if mismatch_radius <= chart0_origin_tube_radius:
             return answer("terminal", row_kind="symmetry_tube", extra={
                 "symmetry_index": 0,
@@ -3269,9 +3271,9 @@ def atlas_projective_state_action(task):
     # At view depth one, a still-wide pose box rarely benefits from the
     # larger candidate pools.  Once the pose box is narrow, however, live
     # chart-2 cells are already certified exactly without another split.
-    allow_global_audit = (view_depth >= 2 or
-                          (view_depth >= 1 and
-                           max(widths) <= Q(1, 256)))
+    allow_global_audit = (not near_chart0_local_tube and
+        (view_depth >= 2 or
+         (view_depth >= 1 and max(widths) <= Q(1, 256))))
     if (allow_global_audit and
             (global_float is None or
              global_float["lower_bound"] <= 1e-8)):
@@ -3329,12 +3331,7 @@ def atlas_projective_state_action(task):
         count_deltas["exact_rejections"] += 1
 
     center_requires_view = False
-    # The chart-0 symmetry-tube frontier has microscopic pose boxes long
-    # before view depth eight.  Exact local certificates already close every
-    # sampled depth-seven cell and half of the sampled depth-six cells; a
-    # failed attempt safely falls through to the existing view split.
-    local_attempt_depth = 6 if chart0_origin_tube_radii is not None else 8
-    center_view_depth = min(max_view_depth, local_attempt_depth)
+    center_view_depth = min(max_view_depth, 8)
     if view_depth < center_view_depth:
         center_edge = atlas_simplex_float_screen(
             chart, center, (Q(0), Q(0), Q(0)), triangle,
@@ -3361,28 +3358,25 @@ def atlas_projective_state_action(task):
         mismatch_radius, symmetry_index = mismatch_candidates[0]
         if mismatch_radius < Q(1, 20):
             if max(widths) <= Q(1, 2048):
-                early_tube_attempt = (
-                    chart0_origin_tube_radii is not None and
-                    view_depth < 8)
                 local = atlas_projective_local_triangle(
                     chart, center, widths, root, triangle,
                     symmetry_index, cone_samples=4, trials=10_000)
-                if local is None and not early_tube_attempt:
+                if local is None:
                     local = atlas_projective_local_triangle(
                         chart, center, widths, root, triangle,
                         symmetry_index, cone_samples=4, trials=1000,
                         include_boundaries=True)
-                if local is None and not early_tube_attempt:
+                if local is None:
                     local = atlas_projective_local_triangle(
                         chart, center, widths, root, triangle,
                         symmetry_index, cone_samples=5, trials=1000,
                         include_boundaries=True)
-                if local is None and not early_tube_attempt:
+                if local is None:
                     local = atlas_projective_local_triangle(
                         chart, center, widths, root, triangle,
                         symmetry_index, cone_samples=6, trials=1000,
                         include_boundaries=True)
-                if local is None and not early_tube_attempt:
+                if local is None:
                     local = atlas_projective_local_triangle(
                         chart, center, widths, root, triangle,
                         symmetry_index, cone_samples=5, trials=50_000)
@@ -3750,12 +3744,14 @@ def generate_atlas_projective_table(
                                 "direction": fundamental_direction}
                 counts["fundamental_prune"] += 1
                 continue
+        near_chart0_local_tube = False
         if (chart == 0 and chart0_origin_tube_radii is not None and
                 shared_index is not None):
             chart0_origin_tube_radius = \
                 chart0_origin_tube_radii[shared_index]
             mismatch_radius = atlas_projective_mismatch_radius(
                 chart, 0, center, widths)[0]
+            near_chart0_local_tube = mismatch_radius < Q(1, 20)
             if mismatch_radius <= chart0_origin_tube_radius:
                 rows[row_id] = {**common, "kind": "symmetry_tube",
                                 "symmetry_index": 0,
@@ -3849,9 +3845,9 @@ def generate_atlas_projective_table(
         global_float = atlas_projective_global_float_screen(
             chart, center, widths, triangle, candidate_limit=1,
             candidates=inherited_global_candidates)
-        allow_global_audit = (view_depth >= 2 or
-                              (view_depth >= 1 and
-                               max(widths) <= Q(1, 256)))
+        allow_global_audit = (not near_chart0_local_tube and
+            (view_depth >= 2 or
+             (view_depth >= 1 and max(widths) <= Q(1, 256))))
         if (allow_global_audit and
                 (global_float is None or
                  global_float["lower_bound"] <= 1e-8)):
@@ -3904,8 +3900,7 @@ def generate_atlas_projective_table(
             counts["exact_rejections"] += 1
 
         center_requires_view = False
-        local_attempt_depth = 6 if chart0_origin_tube_radii is not None else 8
-        center_view_depth = min(max_view_depth, local_attempt_depth)
+        center_view_depth = min(max_view_depth, 8)
         if view_depth < center_view_depth:
             center_edge = atlas_simplex_float_screen(
                 chart, center, (Q(0), Q(0), Q(0)), triangle,
@@ -3938,28 +3933,25 @@ def generate_atlas_projective_table(
             mismatch_radius, symmetry_index = mismatch_candidates[0]
             if mismatch_radius < Q(1, 20):
                 if max(widths) <= Q(1, 2048):
-                    early_tube_attempt = (
-                        chart0_origin_tube_radii is not None and
-                        view_depth < 8)
                     local = atlas_projective_local_triangle(
                         chart, center, widths, root, triangle,
                         symmetry_index, cone_samples=4, trials=10_000)
-                    if local is None and not early_tube_attempt:
+                    if local is None:
                         local = atlas_projective_local_triangle(
                             chart, center, widths, root, triangle,
                             symmetry_index, cone_samples=4, trials=1000,
                             include_boundaries=True)
-                    if local is None and not early_tube_attempt:
+                    if local is None:
                         local = atlas_projective_local_triangle(
                             chart, center, widths, root, triangle,
                             symmetry_index, cone_samples=5, trials=1000,
                             include_boundaries=True)
-                    if local is None and not early_tube_attempt:
+                    if local is None:
                         local = atlas_projective_local_triangle(
                             chart, center, widths, root, triangle,
                             symmetry_index, cone_samples=6, trials=1000,
                             include_boundaries=True)
-                    if local is None and not early_tube_attempt:
+                    if local is None:
                         local = atlas_projective_local_triangle(
                             chart, center, widths, root, triangle,
                             symmetry_index, cone_samples=5, trials=50_000)
