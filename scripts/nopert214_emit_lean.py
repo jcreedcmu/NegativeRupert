@@ -35,7 +35,15 @@ def kernel_interval_definitions(rows, interval_ids):
     definitions = [None] * len(interval_ids)
     root_key = interval_key(rows[0])
     root_id = interval_ids[root_key]
-    definitions[root_id] = "AtlasPose.rootInterval ℚ"
+    # Generated searches may use either the full Cayley cube or the smaller
+    # chart-specific rational superset of the fivefold fundamental domain.
+    # Reconstruct the actual saved root instead of silently replacing it by
+    # the historical full cube.  Descendants are still expressed through
+    # `lowerHalf`/`upperHalf`, so split equalities remain definitional for the
+    # kernel checker.
+    root_center, root_widths = root_key
+    definitions[root_id] = (
+        f"relativeInterval {vector(root_center)} {vector(root_widths)}")
     for row in rows:
         if row["kind"] != "relative_split":
             continue
