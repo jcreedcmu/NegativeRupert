@@ -3681,6 +3681,14 @@ def generate_projective_local_view_table(
                        "counts": counts, "failures": failures}, output,
                       default=str)
         os.replace(temporary_path, output_path)
+        print(json.dumps({
+            "output": output_path,
+            "complete": complete,
+            "rows": len(rows),
+            "pending": len(stack),
+            "failures": len(failures),
+            "counts": counts,
+        }), flush=True)
 
     processed_since_checkpoint = 0
     while stack and len(rows) < max_nodes and not failures:
