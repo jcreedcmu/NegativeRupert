@@ -15,9 +15,8 @@ open Noperthedron.Nopert214
 open Noperthedron.Nopert214.AtlasProjectiveLocalViewTree
 open Noperthedron.Nopert214.NativeExecutable
 
-/-- Fine-grained chunks keep the native worker pool balanced across exact
-rational rows with very different checking costs. -/
-private def taskCount : Nat := 512
+/-- Keep this aligned with the empirically faster full constructor setting. -/
+private def taskCount : Nat := 64
 
 def main (args : List String) : IO Unit := do
   let path ← match args with

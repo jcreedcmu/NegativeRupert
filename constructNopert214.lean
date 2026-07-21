@@ -15,11 +15,9 @@ open Noperthedron.Nopert214
 open Noperthedron.Nopert214.AtlasProjectiveSolutionTree
 open Noperthedron.Nopert214.NativeExecutable
 
-/-- Use substantially more work chunks than runtime worker threads.  Exact
-rational certificate rows have uneven costs, so this mirrors
-`constructValidTable`'s 512-way subdivision and avoids leaving cores idle
-behind one unusually expensive chunk. -/
-private def taskCount : Nat := 512
+/-- A completed local-table audit found 64 chunks materially faster than 512
+for these comparatively expensive exact-rational rows. -/
+private def taskCount : Nat := 64
 
 private def readArtifact (directory name : String) : IO String :=
   IO.FS.readFile s!"{directory}/{name}"
