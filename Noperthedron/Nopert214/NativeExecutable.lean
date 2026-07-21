@@ -83,6 +83,78 @@ theorem CheckedChartTables.notRupert (checked : CheckedChartTables) :
     ¬ IsRupert exactVerts :=
   not_rupert_of_valid_tables checked.tables checked.charts checked.valid
 
+/-- Check all certificate data and construct the final non-Rupert proof.
+
+Generated global data is supplied as a function of the checked shared-local
+tables. The two equations prevent an executable wrapper from accidentally
+checking the right rows under the wrong chart or shared-local environment. -/
+def constructProof (taskCount : Nat)
+    (localTables : Fin 4 → AtlasProjectiveLocalViewTree.Table)
+    (globalTables : AtlasProjectiveSolutionTree.SharedLocalTables →
+      CayleyAtlas.ChartIndex → AtlasProjectiveSolutionTree.Table)
+    (hchart : ∀ shared chart, (globalTables shared chart).chart = chart)
+    (hshared : ∀ shared chart,
+      (globalTables shared chart).sharedLocal = shared) :
+    IO (PLift (¬ IsRupert exactVerts)) := do
+  let local0 ← checkLocal "0" taskCount (localTables 0)
+  let local1 ← checkLocal "1" taskCount (localTables 1)
+  let local2 ← checkLocal "2" taskCount (localTables 2)
+  let local3 ← checkLocal "3" taskCount (localTables 3)
+  let checkedLocal : CheckedLocalTables := {
+    tables := localTables
+    valid := by
+      intro index
+      fin_cases index
+      · exact local0.down
+      · exact local1.down
+      · exact local2.down
+      · exact local3.down }
+  let shared := checkedLocal.shared
+  have sharedValid : AtlasProjectiveSolutionTree.SharedLocalValid shared :=
+    checkedLocal.sharedValid
+  let table0 := globalTables shared 0
+  let table1 := globalTables shared 1
+  let table2 := globalTables shared 2
+  let table3 := globalTables shared 3
+  have shared0 : AtlasProjectiveSolutionTree.SharedLocalValid
+      table0.sharedLocal := by
+    rw [hshared shared 0]
+    exact sharedValid
+  have shared1 : AtlasProjectiveSolutionTree.SharedLocalValid
+      table1.sharedLocal := by
+    rw [hshared shared 1]
+    exact sharedValid
+  have shared2 : AtlasProjectiveSolutionTree.SharedLocalValid
+      table2.sharedLocal := by
+    rw [hshared shared 2]
+    exact sharedValid
+  have shared3 : AtlasProjectiveSolutionTree.SharedLocalValid
+      table3.sharedLocal := by
+    rw [hshared shared 3]
+    exact sharedValid
+  let valid0 ← checkGlobal "0" taskCount table0 shared0
+  let valid1 ← checkGlobal "1" taskCount table1 shared1
+  let valid2 ← checkGlobal "2" taskCount table2 shared2
+  let valid3 ← checkGlobal "3" taskCount table3 shared3
+  let checkedCharts : CheckedChartTables := {
+    tables := ![table0, table1, table2, table3]
+    charts := by
+      intro chart
+      fin_cases chart
+      · exact hchart shared 0
+      · exact hchart shared 1
+      · exact hchart shared 2
+      · exact hchart shared 3
+    valid := by
+      intro chart
+      fin_cases chart
+      · exact valid0.down
+      · exact valid1.down
+      · exact valid2.down
+      · exact valid3.down }
+  log "constructed proof: exact Nopert #214 is not Rupert"
+  pure ⟨checkedCharts.notRupert⟩
+
 end Noperthedron.Nopert214.NativeExecutable
 
 end
