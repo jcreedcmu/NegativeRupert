@@ -61,7 +61,7 @@ def emit_row(row, triangle_ids, local_template_ids):
       triangle := %s
       chart := 0
       symmetryIndex := %d
-      certificate := localCert%d
+      certificate := localCert %d
       c := %s
       δ := %s
       r := %s }""" % (
@@ -212,15 +212,24 @@ def main():
             output.write(
                 f"def triDef{triangle_id} : "
                 f"AtlasProjectiveView.Triangle ℚ :=\n  {value}\n\n")
-        for axis_id, value in enumerate(axis_values):
-            output.write(
-                f"def axis{axis_id} : AxisCertificate := {axis_certificate(value)}\n\n")
-        for template_id, keys in enumerate(template_values):
+        # These tables usually have almost no reusable certificate data: a
+        # few thousand leaves produce tens of thousands of distinct axes.
+        # Emitting one top-level declaration per axis makes Lean elaborate an
+        # enormous declaration environment before `native_decide` even runs.
+        # Chunked lookup functions retain kernel-reducible exact data while
+        # reducing the number of declarations by roughly `chunk_size`.
+        emit_function_lookup(
+            output, "axis", "AxisCertificate",
+            [axis_certificate(value) for value in axis_values],
+            args.chunk_size, axis_certificate(axis_values[0]))
+        certificate_terms = []
+        for keys in template_values:
             selected = [axis_ids[key] for key in keys]
-            output.write(
-                f"def localCert{template_id} : Fin 4 → AxisCertificate := "
-                f"{vector([f'axis{index}' for index in selected])}\n")
-        output.write("\n")
+            certificate_terms.append(
+                vector([f"axis {index}" for index in selected]))
+        emit_function_lookup(
+            output, "localCert", "Fin 4 → AxisCertificate",
+            certificate_terms, args.chunk_size, certificate_terms[0])
         terms = [emit_row(row, triangle_ids, template_ids) for row in rows]
         emit_function_lookup(output, "getRow", "Row", terms,
                              args.chunk_size, "default")
