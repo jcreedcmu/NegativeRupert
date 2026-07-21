@@ -66,12 +66,14 @@ def encode_row(row, paths):
 DATA_HEADER = """module
 
 public import Noperthedron.Nopert214.PackedLocalViewTree
+public import Noperthedron.Nopert214.SparseLocalViewTree
 
 @[expose] public section
 
 namespace Noperthedron.Nopert214.{namespace}Data
 
 open AtlasProjectiveLocalViewTree
+open SparseLocalViewTree
 open PackedLocalViewTree
 
 """
@@ -147,9 +149,10 @@ public meta import Noperthedron.Nopert214.{data_namespace}
 namespace Noperthedron.Nopert214.{part_namespace}
 
 open AtlasProjectiveLocalViewTree
+open SparseLocalViewTree
 
 theorem rows_valid :
-    RowsValidRangeAt {symmetry_index} {radius_lean}
+    SparseRowsValidRangeAt {symmetry_index} {radius_lean}
       {data_namespace}.table.get {len(rows)} {start} {count} := by
   native_decide
 
@@ -169,6 +172,7 @@ end
 namespace Noperthedron.Nopert214.{args.namespace}
 
 open AtlasProjectiveLocalViewTree
+open SparseLocalViewTree
 
 abbrev table : Table := {data_namespace}.table
 
@@ -181,19 +185,23 @@ abbrev table : Table := {data_namespace}.table
             if previous is None:
                 proof = f"{part_namespace}.rows_valid"
             else:
-                proof = (f"rowsValidRange_append {previous} "
+                proof = (f"sparseRowsValidRange_append {previous} "
                          f"{part_namespace}.rows_valid")
             output.write(f"""private theorem {theorem_name} :
-    RowsValidRangeAt {symmetry_index} {radius_lean}
+    SparseRowsValidRangeAt {symmetry_index} {radius_lean}
       table.get {len(rows)} 0 {accumulated} :=
   {proof}
 
 """)
             previous = theorem_name
-        output.write(f"""theorem table_valid_native : table.Valid := by
-  refine ⟨by native_decide, rowsValidAt_of_range {previous}, ?_, ?_⟩
+        output.write(f"""theorem table_sparse_valid_native :
+    SparseTableValid table := by
+  refine ⟨by native_decide, sparseRowsValidAt_of_range {previous}, ?_, ?_⟩
   · native_decide
   · native_decide
+
+theorem table_valid_native : table.Valid :=
+  Table.Valid.of_sparse table_sparse_valid_native
 
 end Noperthedron.Nopert214.{args.namespace}
 

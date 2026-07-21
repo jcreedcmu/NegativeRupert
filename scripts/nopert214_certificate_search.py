@@ -3709,6 +3709,21 @@ def generate_projective_local_view_table(
             result = atlas_projective_local_triangle(
                 0, (Q(0), Q(0), Q(0)), (Q(0), Q(0), Q(0)),
                 0, triangle, 0, cone_samples=6, trials=10_000)
+        if ((result is None or result["c"] < target_c) and depth >= 10):
+            # A tiny triangle can still straddle a silhouette-cycle change.
+            # In that case its centroid exposes only one of the adjacent
+            # candidate families, even though a balanced tetrahedron using
+            # both families is uniformly valid on the whole triangle.  The
+            # corner-enriched search merges those families before the exact
+            # triangle-wide audit.  This closes transition cells without an
+            # artificial depth chase.
+            corner_result = atlas_projective_local_triangle(
+                0, (Q(0), Q(0), Q(0)), (Q(0), Q(0), Q(0)),
+                0, triangle, 0, cone_samples=4, trials=100_000,
+                include_boundaries=True, include_corner_cycles=True)
+            if (corner_result is not None and
+                    (result is None or corner_result["c"] > result["c"])):
+                result = corner_result
         if result is not None and result["c"] < target_c:
             counts["weak_rejections"] += 1
             stronger = None
