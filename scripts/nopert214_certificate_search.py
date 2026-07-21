@@ -3856,6 +3856,11 @@ def generate_atlas_projective_table(
                     if local is None:
                         local = atlas_projective_local_triangle(
                             chart, center, widths, root, triangle,
+                            symmetry_index, cone_samples=4, trials=1000,
+                            include_boundaries=True)
+                    if local is None:
+                        local = atlas_projective_local_triangle(
+                            chart, center, widths, root, triangle,
                             symmetry_index, cone_samples=5, trials=50_000)
                     if local is not None and local["accepted"]:
                         rows[row_id] = {**common, "kind": "local",
@@ -3945,7 +3950,12 @@ def generate_atlas_projective_table(
             if mismatch_radius < Q(1, 20):
                 local = atlas_projective_local_triangle(
                     chart, center, widths, root, triangle, symmetry_index,
-                    cone_samples=5, trials=500_000)
+                    cone_samples=5, trials=10_000,
+                    include_boundaries=True)
+                if local is None:
+                    local = atlas_projective_local_triangle(
+                        chart, center, widths, root, triangle,
+                        symmetry_index, cone_samples=5, trials=500_000)
                 if local is not None and local["accepted"]:
                     rows[row_id] = {**common, "kind": "local",
                         "certificate": {
