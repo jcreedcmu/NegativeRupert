@@ -51,6 +51,33 @@ def coefficient (vars : Fin 3 → RatBall) (q : RatQuadratic3)
     (if k = 2 then azz else 0) +
     u*v*axy + u*w*axz + v*w*ayz
 
+@[simp] theorem coefficient_add (vars : Fin 3 → RatBall)
+    (a b : RatQuadratic3) (i j k : Fin 3) :
+    coefficient vars (a + b) i j k =
+      coefficient vars a i j k + coefficient vars b i j k := by
+  simp [coefficient, RatQuadratic3.evalQ]
+  split_ifs <;> ring
+
+@[simp] theorem coefficient_scale (vars : Fin 3 → RatBall)
+    (s : ℚ) (q : RatQuadratic3) (i j k : Fin 3) :
+    coefficient vars (RatQuadratic3.scale s q) i j k =
+      s * coefficient vars q i j k := by
+  simp [coefficient, RatQuadratic3.evalQ]
+  split_ifs <;> ring
+
+@[simp] theorem coefficient_neg (vars : Fin 3 → RatBall)
+    (q : RatQuadratic3) (i j k : Fin 3) :
+    coefficient vars (-q) i j k = -coefficient vars q i j k := by
+  simp [coefficient, RatQuadratic3.evalQ]
+  split_ifs <;> ring
+
+@[simp] theorem coefficient_sub (vars : Fin 3 → RatBall)
+    (a b : RatQuadratic3) (i j k : Fin 3) :
+    coefficient vars (a - b) i j k =
+      coefficient vars a i j k - coefficient vars b i j k := by
+  simp [coefficient, RatQuadratic3.evalQ]
+  split_ifs <;> ring
+
 def lower (vars : Fin 3 → RatBall) (q : RatQuadratic3) : ℚ :=
   min3 fun i => min3 fun j => min3 fun k => coefficient vars q i j k
 

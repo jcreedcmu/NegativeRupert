@@ -56,6 +56,50 @@ theorem valid_kernel : box.Valid := by decide +kernel
 
 theorem valid_native : box.Valid := by native_decide
 
+/-! A substantially larger row which fails the old nested interval bound but
+is closed by the view-simplex × relative-box Bernstein bound. -/
+
+def bernsteinInterval : AtlasInterval ℚ :=
+  AtlasInterval.mk
+    { θ := 0, φ := 0
+      x := -5 / 16, y := 71 / 128, z := 97 / 128 }
+    { θ := 0, φ := 0
+      x := -29 / 96, y := 9 / 16, z := 49 / 64 }
+    (by rw [AtlasPose.le_iff]; norm_num)
+
+def bernsteinTriangle : AtlasProjectiveView.Triangle ℚ := ![
+  ![265 / 656, 93 / 328, 5 / 16],
+  ![37 / 82, 155 / 656, 5 / 16],
+  ![153 / 328, 93 / 328, 1 / 4]]
+
+def bernsteinCertificate : AxisCertificate where
+  edgeStart := ![3, 5, 17]
+  edgeFinish := ![7, 9, 18]
+  edgeStart₂ := ![7, 9, 18]
+  edgeFinish₂ := ![6, 8, 19]
+  mix := ![800, 800, 600]
+  index := ![7, 9, 18]
+  nonzeroWitness := ![12, 19, 5]
+  B := 838405353 / 1000000000
+
+def bernsteinBox : AtlasProjectiveGlobalCertificate.Box where
+  interval := bernsteinInterval
+  root := 0
+  triangle := bernsteinTriangle
+  chart := 2
+  certificate := bernsteinCertificate
+  innerIndex := ![5, 17, 11]
+  ballMultiplier := 0
+
+theorem bernstein_old_interval_fails :
+    bernsteinBox.adjustedDisplacementBall.center -
+      bernsteinBox.adjustedDisplacementBall.radius < 0 := by
+  native_decide
+
+theorem bernstein_valid_kernel : bernsteinBox.Valid := by decide +kernel
+
+theorem bernstein_valid_native : bernsteinBox.Valid := by native_decide
+
 theorem excludes_triangle_kernel {p : AtlasPose ℝ}
     (hp : p ∈ interval.toReal) (offset : ℝ²)
     (hbounded : p.CayleyBounded)

@@ -2,6 +2,7 @@ module
 
 public import Noperthedron.Nopert214.AtlasProjectiveGlobalRigidity
 public import Noperthedron.Nopert214.AtlasProjectiveLocalCertificate
+public import Noperthedron.Nopert214.QuadraticBernstein
 
 @[expose] public section
 
@@ -144,6 +145,57 @@ def Box.cayleyConstraintBall (box : Box) : RatBall :=
       (RatBall.mul z z))
     (RatBall.const 3)
 
+/-- The exact rational weight polynomial at a projective view. -/
+def Box.weightQ (box : Box) (n : VectorQ) (i : Fin 3) : ℚ :=
+  dotQ n (box.certificate.weightCoefficient i)
+
+def Box.viewToReal (_box : Box) (n : VectorQ) : Fin 3 → ℝ :=
+  fun c => (n c : ℝ)
+
+/-- For a fixed rational projective view, collect one contact's three vector
+components into its relative-coordinate quadratic. -/
+def Box.viewContactQuadratic (box : Box) (n : VectorQ)
+    (i : Fin 3) : RatQuadratic3 :=
+  RatQuadratic3.scale (n 0) (box.contactQuadratic i 0) +
+    RatQuadratic3.scale (n 1) (box.contactQuadratic i 1) +
+    RatQuadratic3.scale (n 2) (box.contactQuadratic i 2)
+
+/-- The balanced displacement as one relative-coordinate quadratic at a
+fixed rational projective view. -/
+def Box.viewDisplacementQuadratic (box : Box) (n : VectorQ) :
+    RatQuadratic3 :=
+  RatQuadratic3.scale (box.weightQ n 0) (box.viewContactQuadratic n 0) +
+    RatQuadratic3.scale (box.weightQ n 1) (box.viewContactQuadratic n 1) +
+    RatQuadratic3.scale (box.weightQ n 2) (box.viewContactQuadratic n 2)
+
+def Box.cayleyConstraintQuadratic (_box : Box) : RatQuadratic3 :=
+  ⟨-3, 0, 0, 0, 1, 0, 0, 1, 0, 1⟩
+
+def Box.adjustedViewDisplacementQuadratic (box : Box) (n : VectorQ) :
+    RatQuadratic3 :=
+  box.viewDisplacementQuadratic n +
+    RatQuadratic3.scale box.ballMultiplier box.cayleyConstraintQuadratic
+
+/-- Degree-two simplex Bernstein control quadratic for an ordered pair of
+view-triangle vertices.  Off-diagonal controls are duplicated; their ordered
+weights are `w i * w j`, so all nine weights sum to one. -/
+def Box.viewControlQuadratic (box : Box) (i j : Fin 3) : RatQuadratic3 :=
+  if i = j then box.adjustedViewDisplacementQuadratic (box.triangle i)
+  else
+    RatQuadratic3.scale 2
+        (box.adjustedViewDisplacementQuadratic
+          (Noperthedron.SnubCube.ProjectiveView.midpoint
+            (box.triangle i) (box.triangle j))) -
+      RatQuadratic3.scale (1 / 2)
+        (box.adjustedViewDisplacementQuadratic (box.triangle i) +
+          box.adjustedViewDisplacementQuadratic (box.triangle j))
+
+/-- Tensor Bernstein lower bound: degree two on the projective triangle and
+degree `(2,2,2)` on the relative Cayley box. -/
+def Box.bernsteinDisplacementLower (box : Box) : ℚ :=
+  min3 fun i => min3 fun j =>
+    QuadraticBernstein.lower box.relativeBalls (box.viewControlQuadratic i j)
+
 /-- An S-procedure strengthening, with the Cayley constraint folded into the
 quadratic coefficients *before* interval evaluation.  This preserves the
 correlation that cancels radial variation near the boundary of the Cayley
@@ -185,6 +237,11 @@ def Box.adjustedDisplacementBall (box : Box) : RatBall :=
       (RatBall.mul byz (RatBall.mul y z)))
     (RatBall.mul bzz (RatBall.mul z z))
 
+def Box.certifiedDisplacementLower (box : Box) : ℚ :=
+  max (box.adjustedDisplacementBall.center -
+      box.adjustedDisplacementBall.radius)
+    box.bernsteinDisplacementLower
+
 def Box.dBound (box : Box) : ℚ :=
   1 + AtlasEdgeCertificate.endpointAbsBound
         box.interval.min.x box.interval.max.x ^ 2 +
@@ -205,8 +262,7 @@ structure Box.Valid (box : Box) : Prop where
     box.supportUpper i (box.certificate.nonzeroWitness i) < 0
   ball_multiplier_nonneg : 0 ≤ box.ballMultiplier
   displacement : box.displacementError ≤
-    box.adjustedDisplacementBall.center -
-      box.adjustedDisplacementBall.radius - box.dBound * box.totalDefect
+    box.certifiedDisplacementLower - box.dBound * box.totalDefect
 
 instance (box : Box) : Decidable box.Valid :=
   decidable_of_iff _ (Box.valid_iff box).symm
@@ -438,6 +494,30 @@ noncomputable def Box.reconstructedDisplacement (box : Box)
     value RatQuadratic3.cxz*(x*z) + value RatQuadratic3.cyy*(y*y) +
     value RatQuadratic3.cyz*(y*z) + value RatQuadratic3.czz*(z*z)
 
+noncomputable def Box.viewDisplacementValue (box : Box)
+    (n : Fin 3 → ℝ) (x y z : ℝ) : ℝ :=
+  ∑ i, box.certificate.approxWeight n i *
+    linearValue n (fun c => (box.contactQuadratic i c).evalReal x y z)
+
+theorem Box.reconstructedDisplacement_eq_viewValue (box : Box)
+    (n : Fin 3 → ℝ) (x y z : ℝ) :
+    box.reconstructedDisplacement n x y z =
+      box.viewDisplacementValue n x y z := by
+  simp only [Box.reconstructedDisplacement]
+  rw [box.eval_viewCoefficientQuadratic RatQuadratic3.c0 n,
+    box.eval_viewCoefficientQuadratic RatQuadratic3.cx n,
+    box.eval_viewCoefficientQuadratic RatQuadratic3.cy n,
+    box.eval_viewCoefficientQuadratic RatQuadratic3.cz n,
+    box.eval_viewCoefficientQuadratic RatQuadratic3.cxx n,
+    box.eval_viewCoefficientQuadratic RatQuadratic3.cxy n,
+    box.eval_viewCoefficientQuadratic RatQuadratic3.cxz n,
+    box.eval_viewCoefficientQuadratic RatQuadratic3.cyy n,
+    box.eval_viewCoefficientQuadratic RatQuadratic3.cyz n,
+    box.eval_viewCoefficientQuadratic RatQuadratic3.czz n]
+  simp [Box.viewDisplacementValue, linearValue, Fin.sum_univ_three,
+    RatQuadratic3.evalReal]
+  ring
+
 theorem Box.displacementBall_holds_reconstructed (box : Box)
     {p : AtlasPose ℝ}
     (hp : p ∈ box.interval.toReal)
@@ -515,6 +595,219 @@ theorem Box.reconstructedDisplacement_eq_approx (box : Box)
     ← box.eval_contactQuadratic p 2 2]
   simp only [RatQuadratic3.evalReal]
   ring
+
+theorem Box.viewDisplacementQuadratic_eval (box : Box) (n : VectorQ)
+    (x y z : ℝ) :
+    (box.viewDisplacementQuadratic n).evalReal x y z =
+      box.reconstructedDisplacement (box.viewToReal n) x y z := by
+  simp only [Box.reconstructedDisplacement]
+  rw [box.eval_viewCoefficientQuadratic RatQuadratic3.c0
+        (box.viewToReal n),
+    box.eval_viewCoefficientQuadratic RatQuadratic3.cx
+      (box.viewToReal n),
+    box.eval_viewCoefficientQuadratic RatQuadratic3.cy
+      (box.viewToReal n),
+    box.eval_viewCoefficientQuadratic RatQuadratic3.cz
+      (box.viewToReal n),
+    box.eval_viewCoefficientQuadratic RatQuadratic3.cxx
+      (box.viewToReal n),
+    box.eval_viewCoefficientQuadratic RatQuadratic3.cxy
+      (box.viewToReal n),
+    box.eval_viewCoefficientQuadratic RatQuadratic3.cxz
+      (box.viewToReal n),
+    box.eval_viewCoefficientQuadratic RatQuadratic3.cyy
+      (box.viewToReal n),
+    box.eval_viewCoefficientQuadratic RatQuadratic3.cyz
+      (box.viewToReal n),
+    box.eval_viewCoefficientQuadratic RatQuadratic3.czz
+      (box.viewToReal n)]
+  simp [Box.viewDisplacementQuadratic, Box.viewContactQuadratic,
+    Box.weightQ, Box.viewToReal, AxisCertificate.approxWeight, dotQ, linearValue,
+    Fin.sum_univ_three, RatQuadratic3.evalReal]
+  ring
+
+@[simp] theorem Box.cayleyConstraintQuadratic_eval (box : Box)
+    (x y z : ℝ) :
+    box.cayleyConstraintQuadratic.evalReal x y z =
+      x ^ 2 + y ^ 2 + z ^ 2 - 3 := by
+  simp [Box.cayleyConstraintQuadratic, RatQuadratic3.evalReal]
+  ring
+
+@[simp] theorem Box.adjustedViewDisplacementQuadratic_eval
+    (box : Box) (n : VectorQ) (x y z : ℝ) :
+    (box.adjustedViewDisplacementQuadratic n).evalReal x y z =
+      box.viewDisplacementValue (box.viewToReal n) x y z +
+        (box.ballMultiplier : ℝ) * (x ^ 2 + y ^ 2 + z ^ 2 - 3) := by
+  rw [Box.adjustedViewDisplacementQuadratic,
+    RatQuadratic3.evalReal_add, RatQuadratic3.evalReal_scale,
+    box.viewDisplacementQuadratic_eval,
+    box.reconstructedDisplacement_eq_viewValue,
+    box.cayleyConstraintQuadratic_eval]
+
+noncomputable def bilinearControl
+    (triangle : Noperthedron.SnubCube.ProjectiveView.Triangle ℝ)
+    (a b : Noperthedron.SnubCube.ProjectiveView.Vector ℝ)
+    (i j : Fin 3) : ℝ :=
+  (linearValue (triangle i) a * linearValue (triangle j) b +
+    linearValue (triangle j) a * linearValue (triangle i) b) / 2
+
+theorem bilinearControl_sum
+    (triangle : Noperthedron.SnubCube.ProjectiveView.Triangle ℝ)
+    (weight : Fin 3 → ℝ)
+    (a b : Noperthedron.SnubCube.ProjectiveView.Vector ℝ) :
+    (∑ i, ∑ j, weight i * weight j * bilinearControl triangle a b i j) =
+      linearValue (affinePoint triangle weight) a *
+        linearValue (affinePoint triangle weight) b := by
+  simp [Fin.sum_univ_three, bilinearControl, linearValue, affinePoint]
+  ring
+
+noncomputable def Box.contactCoefficientValue (box : Box)
+    (i : Fin 3) (x y z : ℝ) :
+    Noperthedron.SnubCube.ProjectiveView.Vector ℝ :=
+  fun c => (box.contactQuadratic i c).evalReal x y z
+
+noncomputable def Box.viewControlValue (box : Box) (i j : Fin 3)
+    (x y z : ℝ) : ℝ :=
+  if i = j then box.viewDisplacementValue (box.viewToReal (box.triangle i)) x y z
+  else
+    2 * box.viewDisplacementValue
+        (box.viewToReal (Noperthedron.SnubCube.ProjectiveView.midpoint
+          (box.triangle i) (box.triangle j))) x y z -
+      (box.viewDisplacementValue (box.viewToReal (box.triangle i)) x y z +
+        box.viewDisplacementValue (box.viewToReal (box.triangle j)) x y z) / 2
+
+theorem Box.viewControlValue_eq_sum_bilinear (box : Box) (i j : Fin 3)
+    (x y z : ℝ) :
+    box.viewControlValue i j x y z =
+      ∑ k, bilinearControl (toReal box.triangle)
+        (fun c => (box.certificate.weightCoefficient k c : ℝ))
+        (box.contactCoefficientValue k x y z) i j := by
+  by_cases hij : i = j
+  · subst j
+    simp [Box.viewControlValue, Box.viewDisplacementValue,
+      Box.contactCoefficientValue, bilinearControl,
+      Box.viewToReal, AxisCertificate.approxWeight,
+      linearValue, toReal, Fin.sum_univ_three]
+  · simp [Box.viewControlValue, Box.viewDisplacementValue,
+      Box.contactCoefficientValue, bilinearControl, hij,
+      Box.viewToReal, AxisCertificate.approxWeight,
+      linearValue, toReal, Fin.sum_univ_three,
+      Noperthedron.SnubCube.ProjectiveView.midpoint]
+    ring
+
+theorem Box.viewControlQuadratic_eval (box : Box) (i j : Fin 3)
+    (x y z : ℝ) :
+    (box.viewControlQuadratic i j).evalReal x y z =
+      box.viewControlValue i j x y z +
+        (box.ballMultiplier : ℝ) * (x ^ 2 + y ^ 2 + z ^ 2 - 3) := by
+  by_cases hij : i = j
+  · subst j
+    simp [Box.viewControlQuadratic, Box.viewControlValue]
+  · simp [Box.viewControlQuadratic, Box.viewControlValue, hij,
+      RatQuadratic3.evalReal_sub, RatQuadratic3.evalReal_add,
+      RatQuadratic3.evalReal_scale]
+    ring
+
+theorem Box.viewControlValue_sum (box : Box) (weight : Fin 3 → ℝ)
+    (_hsum : ∑ i, weight i = 1) (x y z : ℝ) :
+    (∑ i, ∑ j, weight i * weight j * box.viewControlValue i j x y z) =
+      box.viewDisplacementValue
+        (affinePoint (toReal box.triangle) weight) x y z := by
+  simp_rw [box.viewControlValue_eq_sum_bilinear]
+  rw [show (∑ i, ∑ j, weight i * weight j *
+      ∑ k, bilinearControl (toReal box.triangle)
+        (fun c => (box.certificate.weightCoefficient k c : ℝ))
+        (box.contactCoefficientValue k x y z) i j) =
+      ∑ k, ∑ i, ∑ j, weight i * weight j *
+        bilinearControl (toReal box.triangle)
+          (fun c => (box.certificate.weightCoefficient k c : ℝ))
+          (box.contactCoefficientValue k x y z) i j by
+        simp [Fin.sum_univ_three]; ring]
+  simp_rw [bilinearControl_sum]
+  simp [Box.viewDisplacementValue, AxisCertificate.approxWeight]
+  rfl
+
+theorem Box.viewControl_sum (box : Box) (weight : Fin 3 → ℝ)
+    (hsum : ∑ i, weight i = 1) (x y z : ℝ) :
+    (∑ i, ∑ j, weight i * weight j *
+        (box.viewControlQuadratic i j).evalReal x y z) =
+      box.viewDisplacementValue
+          (affinePoint (toReal box.triangle) weight) x y z +
+        (box.ballMultiplier : ℝ) * (x ^ 2 + y ^ 2 + z ^ 2 - 3) := by
+  simp_rw [box.viewControlQuadratic_eval]
+  calc
+    _ = (∑ i, ∑ j, weight i * weight j *
+          box.viewControlValue i j x y z) +
+        (∑ i, weight i) * (∑ j, weight j) *
+          ((box.ballMultiplier : ℝ) * (x ^ 2 + y ^ 2 + z ^ 2 - 3)) := by
+      simp [Fin.sum_univ_three]
+      ring
+    _ = box.viewDisplacementValue
+          (affinePoint (toReal box.triangle) weight) x y z +
+        1 * 1 * ((box.ballMultiplier : ℝ) *
+          (x ^ 2 + y ^ 2 + z ^ 2 - 3)) := by
+      rw [box.viewControlValue_sum weight hsum x y z, hsum]
+    _ = _ := by ring
+
+private theorem lower_le_weighted_sum {ι : Type} [Fintype ι]
+    (weight value : ι → ℝ) (lower : ℝ)
+    (hweight : ∀ i, 0 ≤ weight i) (hsum : ∑ i, weight i = 1)
+    (hlower : ∀ i, lower ≤ value i) :
+    lower ≤ ∑ i, weight i * value i := by
+  calc
+    lower = ∑ i, weight i * lower := by
+      rw [← Finset.sum_mul, hsum, one_mul]
+    _ ≤ ∑ i, weight i * value i := by
+      apply Finset.sum_le_sum
+      intro i _
+      exact mul_le_mul_of_nonneg_left (hlower i) (hweight i)
+
+theorem Box.bernsteinDisplacementLower_le_control (box : Box)
+    (i j : Fin 3) :
+    box.bernsteinDisplacementLower ≤
+      QuadraticBernstein.lower box.relativeBalls
+        (box.viewControlQuadratic i j) := by
+  exact (min3_le (fun i => min3 fun j =>
+    QuadraticBernstein.lower box.relativeBalls
+      (box.viewControlQuadratic i j)) i).trans
+    (min3_le (fun j => QuadraticBernstein.lower box.relativeBalls
+      (box.viewControlQuadratic i j)) j)
+
+theorem Box.bernsteinDisplacementLower_le_adjusted (box : Box)
+    {p : AtlasPose ℝ} (hp : p ∈ box.interval.toReal)
+    (hmem : InTriangle (toReal box.triangle)
+      (AtlasProjectiveView.normalizedView box.root p)) :
+    (box.bernsteinDisplacementLower : ℝ) ≤
+      box.approxClearedDisplacement p +
+        (box.ballMultiplier : ℝ) *
+          (p.x ^ 2 + p.y ^ 2 + p.z ^ 2 - 3) := by
+  obtain ⟨weight, hweight, hsum, hpoint⟩ := hmem
+  have hcontrol (i j : Fin 3) :
+      (box.bernsteinDisplacementLower : ℝ) ≤
+        (box.viewControlQuadratic i j).evalReal p.x p.y p.z := by
+    have hmin : (box.bernsteinDisplacementLower : ℝ) ≤
+        (QuadraticBernstein.lower box.relativeBalls
+          (box.viewControlQuadratic i j) : ℚ) := by
+      exact_mod_cast box.bernsteinDisplacementLower_le_control i j
+    exact hmin.trans (QuadraticBernstein.lower_le_evalReal
+      (box.relativeBalls_hold hp) (box.viewControlQuadratic i j))
+  have hweighted :
+      (box.bernsteinDisplacementLower : ℝ) ≤
+        ∑ i, ∑ j, weight i * weight j *
+          (box.viewControlQuadratic i j).evalReal p.x p.y p.z := by
+    have houter := lower_le_weighted_sum weight
+      (fun i => ∑ j, weight j *
+        (box.viewControlQuadratic i j).evalReal p.x p.y p.z)
+      (box.bernsteinDisplacementLower : ℝ) hweight hsum (fun i =>
+        lower_le_weighted_sum weight
+          (fun j => (box.viewControlQuadratic i j).evalReal p.x p.y p.z)
+          (box.bernsteinDisplacementLower : ℝ) hweight hsum
+          (hcontrol i))
+    simpa only [Finset.mul_sum, mul_assoc] using houter
+  rw [box.viewControl_sum weight hsum p.x p.y p.z] at hweighted
+  rw [← hpoint, ← box.reconstructedDisplacement_eq_viewValue,
+    box.reconstructedDisplacement_eq_approx] at hweighted
+  exact hweighted
 
 theorem Box.displacementBall_holds (box : Box) {p : AtlasPose ℝ}
     (hp : p ∈ box.interval.toReal)
@@ -999,11 +1292,19 @@ theorem Box.valid_exactClearedDisplacement (box : Box) (h : box.Valid)
     box.approxClearedDisplacement p + (box.ballMultiplier : ℝ) *
       (p.x ^ 2 + p.y ^ 2 + p.z ^ 2 - 3) at hlower
   push_cast at hlower
+  have hbernstein := box.bernsteinDisplacementLower_le_adjusted hp hmem
+  have hcertified : (box.certifiedDisplacementLower : ℝ) ≤
+      box.approxClearedDisplacement p + (box.ballMultiplier : ℝ) *
+        (p.x ^ 2 + p.y ^ 2 + p.z ^ 2 - 3) := by
+    unfold Box.certifiedDisplacementLower
+    push_cast
+    exact max_le hlower hbernstein
   have hchecked : (box.displacementError : ℝ) ≤
-      (box.adjustedDisplacementBall.center : ℝ) -
-        (box.adjustedDisplacementBall.radius : ℝ) -
+      (box.certifiedDisplacementLower : ℝ) -
         (box.dBound : ℝ) * (box.totalDefect : ℝ) := by
-    exact_mod_cast h.displacement
+    have hcast := (Rat.cast_le (K := ℝ)).mpr h.displacement
+    push_cast at hcast
+    exact hcast
   have hconstraint : p.x ^ 2 + p.y ^ 2 + p.z ^ 2 - 3 ≤ 0 := by
     unfold AtlasPose.CayleyBounded at hbounded
     linarith

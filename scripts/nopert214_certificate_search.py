@@ -1247,8 +1247,12 @@ def atlas_projective_global_triangle(
         error = 300 * d_bound * exact_certificate.KAPPA
         total_support_defect = row["diagnostics"]["total_support_defect"]
         defect_penalty = d_bound * total_support_defect
-        lower = (displacement_ball[0] - displacement_ball[1] -
-                 defect_penalty - error)
+        interval_lower = displacement_ball[0] - displacement_ball[1]
+        bernstein_lower = atlas_projective_global_simplex_bernstein_lower(
+            chart, relative_center, relative_radii, triangle, candidate,
+            inner_indices, ball_multiplier)
+        certified_lower = max(interval_lower, bernstein_lower)
+        lower = certified_lower - defect_penalty - error
         result = {
             "accepted": lower >= 0,
             "chart": chart,
@@ -1263,6 +1267,9 @@ def atlas_projective_global_triangle(
                 "feasible_candidates": len(candidates),
                 "coefficient_balls": coefficient_balls,
                 "displacement_ball": displacement_ball,
+                "interval_lower": interval_lower,
+                "bernstein_lower": bernstein_lower,
+                "certified_lower": certified_lower,
                 "d_bound": d_bound,
                 "total_support_defect": total_support_defect,
                 "defect_penalty": defect_penalty,
@@ -1462,7 +1469,13 @@ def atlas_projective_global_float_screen(
         total_support_defect = sum(
             upper * contact.get("support_defect", 0.0)
             for upper, contact in zip(weight_upper, contacts))
-        lower = (total[0] - total[1] - d_bound*total_support_defect -
+        bernstein_lower = \
+            atlas_projective_global_simplex_bernstein_lower_float(
+                chart, relative_center_f, relative_radii_f, triangle_f,
+                candidate, [center_data(contact)[1]
+                            for contact in contacts], ball_multiplier)
+        certified_lower = max(total[0]-total[1], bernstein_lower)
+        lower = (certified_lower - d_bound*total_support_defect -
                  300*d_bound*float(exact_certificate.KAPPA))
         if best is None or lower > best[0]:
             best = (lower, candidate, ball_multiplier)
@@ -2121,8 +2134,8 @@ def qpoly_centered_lower_tight(coefficients, centers, radii):
     return lower
 
 
-def qpoly_bernstein_lower(coefficients, centers, radii):
-    """Exact tensor-degree-(2,2,2) Bernstein lower bound on a box."""
+def qpoly_bernstein_control(coefficients, centers, radii, i, j, k):
+    """One exact tensor-degree-(2,2,2) Bernstein control value."""
     lx, ly, lz = [c-r for c, r in zip(centers, radii)]
     wx, wy, wz = [2*r for r in radii]
     c = coefficients
@@ -2134,20 +2147,70 @@ def qpoly_bernstein_lower(coefficients, centers, radii):
     az = wz*(c[3]+c[6]*lx+c[8]*ly+2*c[9]*lz)
     axx, ayy, azz = c[4]*wx*wx, c[7]*wy*wy, c[9]*wz*wz
     axy, axz, ayz = c[5]*wx*wy, c[6]*wx*wz, c[8]*wy*wz
-    result = None
+    u, v, w = Q(i, 2), Q(j, 2), Q(k, 2)
+    return (a0+u*ax+v*ay+w*az+
+            (axx if i == 2 else 0)+(ayy if j == 2 else 0)+
+            (azz if k == 2 else 0)+u*v*axy+u*w*axz+v*w*ayz)
+
+
+def qpoly_bernstein_lower(coefficients, centers, radii):
+    """Exact tensor-degree-(2,2,2) Bernstein lower bound on a box."""
+    return min(qpoly_bernstein_control(
+        coefficients, centers, radii, i, j, k)
+        for i in range(3) for j in range(3) for k in range(3))
+
+
+def atlas_projective_global_simplex_bernstein_lower(
+        chart, centers, radii, triangle, candidate, inner_indices,
+        multiplier):
+    """Exact degree-two view-simplex × relative-box Bernstein bound."""
+    edges = [projective_mixed_edge_q(contact)
+             for contact in candidate["contacts"]]
+    weight_coefficients = [cross3(edges[1], edges[2]),
+                           cross3(edges[2], edges[0]),
+                           cross3(edges[0], edges[1])]
+
+    def polynomial_at_view(view):
+        total = exact_certificate.qpoly_zero()
+        for i, (contact, edge, inner) in enumerate(
+                zip(candidate["contacts"], edges, inner_indices)):
+            components = atlas_mixed_contact_qpolys(
+                chart, tuple(edge), inner, contact["vertex"])
+            scalar = exact_certificate.qpoly_zero()
+            for coefficient, component in zip(view, components):
+                scalar = exact_certificate.qpoly_add(
+                    scalar, exact_certificate.qpoly_scale(
+                        coefficient, component))
+            weight = exact_certificate.qdot(view, weight_coefficients[i])
+            total = exact_certificate.qpoly_add(
+                total, exact_certificate.qpoly_scale(weight, scalar))
+        constraint = (Q(-3), Q(0), Q(0), Q(0), Q(1), Q(0), Q(0),
+                      Q(1), Q(0), Q(1))
+        return exact_certificate.qpoly_add(
+            total, exact_certificate.qpoly_scale(multiplier, constraint))
+
+    corner_polynomials = [polynomial_at_view(view) for view in triangle]
+    midpoint_polynomials = {}
     for i in range(3):
-        u = Q(i, 2)
-        for j in range(3):
-            v = Q(j, 2)
-            for k in range(3):
-                w = Q(k, 2)
-                value = (a0+u*ax+v*ay+w*az+
-                         (axx if i == 2 else 0)+
-                         (ayy if j == 2 else 0)+
-                         (azz if k == 2 else 0)+
-                         u*v*axy+u*w*axz+v*w*ayz)
-                result = value if result is None else min(result, value)
-    return result
+        for j in range(i+1, 3):
+            midpoint = tuple((a+b)/2 for a, b in
+                             zip(triangle[i], triangle[j]))
+            midpoint_polynomials[(i, j)] = polynomial_at_view(midpoint)
+    answer = None
+    for relative_index in itertools.product(range(3), repeat=3):
+        corner = [qpoly_bernstein_control(
+            polynomial, centers, radii, *relative_index)
+            for polynomial in corner_polynomials]
+        controls = list(corner)
+        for i in range(3):
+            for j in range(i+1, 3):
+                middle = qpoly_bernstein_control(
+                    midpoint_polynomials[(i, j)], centers, radii,
+                    *relative_index)
+                controls.append(2*middle-(corner[i]+corner[j])/2)
+        value = min(controls)
+        answer = value if answer is None else min(answer, value)
+    return answer
 
 
 def qpoly_box_lower(coefficients, centers, radii):
@@ -2531,7 +2594,7 @@ def qpoly_centered_lower_tight_float(coefficients, centers, radii):
     return lower
 
 
-def qpoly_bernstein_lower_float(coefficients, centers, radii):
+def qpoly_bernstein_control_float(coefficients, centers, radii, i, j, k):
     lx, ly, lz = [c-r for c, r in zip(centers, radii)]
     wx, wy, wz = [2*r for r in radii]
     c = coefficients
@@ -2543,12 +2606,64 @@ def qpoly_bernstein_lower_float(coefficients, centers, radii):
     az = wz*(c[3]+c[6]*lx+c[8]*ly+2*c[9]*lz)
     axx, ayy, azz = c[4]*wx*wx, c[7]*wy*wy, c[9]*wz*wz
     axy, axz, ayz = c[5]*wx*wy, c[6]*wx*wz, c[8]*wy*wz
-    return min(
-        a0+(i/2)*ax+(j/2)*ay+(k/2)*az+
+    return (a0+(i/2)*ax+(j/2)*ay+(k/2)*az+
         (axx if i == 2 else 0)+(ayy if j == 2 else 0)+
         (azz if k == 2 else 0)+(i*j/4)*axy+(i*k/4)*axz+
-        (j*k/4)*ayz
+        (j*k/4)*ayz)
+
+
+def qpoly_bernstein_lower_float(coefficients, centers, radii):
+    return min(qpoly_bernstein_control_float(
+        coefficients, centers, radii, i, j, k)
         for i in range(3) for j in range(3) for k in range(3))
+
+
+def atlas_projective_global_simplex_bernstein_lower_float(
+        chart, centers, radii, triangle, candidate, inner_indices,
+        multiplier):
+    edges_q = [projective_mixed_edge_q(contact)
+               for contact in candidate["contacts"]]
+    edges = [tuple(map(float, edge)) for edge in edges_q]
+    weight_coefficients = [cross3(edges[1], edges[2]),
+                           cross3(edges[2], edges[0]),
+                           cross3(edges[0], edges[1])]
+
+    def polynomial_at_view(view):
+        total = [0.0]*10
+        for i, (contact, edge_q, inner) in enumerate(
+                zip(candidate["contacts"], edges_q, inner_indices)):
+            components = atlas_mixed_contact_qpolys(
+                chart, tuple(edge_q), inner, contact["vertex"])
+            scalar = [sum(float(view[c])*float(components[c][coefficient])
+                          for c in range(3))
+                      for coefficient in range(10)]
+            weight = dot3(view, weight_coefficients[i])
+            total = [a+weight*b for a, b in zip(total, scalar)]
+        total[0] -= 3*multiplier
+        for index in (4, 7, 9):
+            total[index] += multiplier
+        return total
+
+    corner_polynomials = [polynomial_at_view(view) for view in triangle]
+    midpoint_polynomials = {}
+    for i in range(3):
+        for j in range(i+1, 3):
+            midpoint = tuple((a+b)/2 for a, b in
+                             zip(triangle[i], triangle[j]))
+            midpoint_polynomials[(i, j)] = polynomial_at_view(midpoint)
+    answer = math.inf
+    for relative_index in itertools.product(range(3), repeat=3):
+        corner = [qpoly_bernstein_control_float(
+            polynomial, centers, radii, *relative_index)
+            for polynomial in corner_polynomials]
+        answer = min(answer, *corner)
+        for i in range(3):
+            for j in range(i+1, 3):
+                middle = qpoly_bernstein_control_float(
+                    midpoint_polynomials[(i, j)], centers, radii,
+                    *relative_index)
+                answer = min(answer, 2*middle-(corner[i]+corner[j])/2)
+    return answer
 
 
 def qpoly_box_lower_float(coefficients, centers, radii):
