@@ -4,6 +4,7 @@ public import Noperthedron.Nopert214.AtlasProjectiveEdgeCertificate
 public import Noperthedron.Nopert214.AtlasFundamentalPrune
 public import Noperthedron.Nopert214.AtlasLocalCertificate
 public import Noperthedron.Nopert214.AtlasProjectiveLocalCertificate
+public import Noperthedron.Nopert214.AtlasProjectiveLocalViewTree
 public import Noperthedron.Nopert214.AtlasProjectiveGlobalCertificate
 
 @[expose] public section
@@ -24,6 +25,14 @@ open Noperthedron.SnubCube.ProjectiveView
 
 abbrev Interval := AtlasInterval ℚ
 abbrev Triangle := AtlasProjectiveView.Triangle ℚ
+
+def SharedLocalValid : Option AtlasProjectiveLocalViewTree.Table → Prop
+  | none => True
+  | some table => table.Valid
+
+instance (shared : Option AtlasProjectiveLocalViewTree.Table) :
+    Decidable (SharedLocalValid shared) := by
+  cases shared <;> simp only [SharedLocalValid] <;> infer_instance
 
 inductive Region where
   | sphere
@@ -139,6 +148,8 @@ inductive Row where
   | symmetryLocal (id : ℕ) (box : AtlasLocalCertificate.Box)
       (region : Region)
   | projectiveLocal (id : ℕ) (box : AtlasProjectiveLocalCertificate.Box)
+  | symmetryTube (id : ℕ) (tube : AtlasProjectiveLocalViewTree.Tube)
+      (region : Region)
   | radiusPrune (id : ℕ) (interval : Interval) (region : Region)
   | fundamentalPrune (id : ℕ) (box : AtlasFundamentalPrune.Box)
       (region : Region)
@@ -147,7 +158,7 @@ def Row.id : Row → ℕ
   | .cayleySplit id .. | .viewRoot id .. | .viewSplit id .. |
       .projective id .. | .projectiveGlobal id .. |
       .symmetryLocal id .. | .radiusPrune id .. |
-      .fundamentalPrune id .. => id
+      .fundamentalPrune id .. | .symmetryTube id .. => id
   | .projectiveLocal id .. => id
 
 def Row.interval : Row → Interval
@@ -158,6 +169,7 @@ def Row.interval : Row → Interval
   | .projectiveGlobal _ box => box.interval
   | .symmetryLocal _ box _ => box.interval
   | .projectiveLocal _ box => box.interval
+  | .symmetryTube _ tube _ => tube.interval
   | .radiusPrune _ interval _ => interval
   | .fundamentalPrune _ box _ => box.interval
 
@@ -169,6 +181,7 @@ def Row.region : Row → Region
   | .projectiveGlobal _ box => .triangle box.root box.triangle
   | .symmetryLocal _ _ region => region
   | .projectiveLocal _ box => .triangle box.root box.triangle
+  | .symmetryTube _ _ region => region
   | .radiusPrune _ _ region => region
   | .fundamentalPrune _ _ region => region
 
@@ -176,7 +189,7 @@ instance : Inhabited Row where
   default := .viewRoot 0 0 (AtlasPose.rootInterval ℚ)
 
 def Row.ValidAt (chart : ChartIndex) (get : ℕ → Row)
-    (size : ℕ) : Row → Prop
+    (size : ℕ) (shared : Option AtlasProjectiveLocalViewTree.Table) : Row → Prop
   | .cayleySplit id lowerChild upperChild coordinate interval region =>
       id < lowerChild ∧ id < upperChild ∧
       lowerChild < size ∧ upperChild < size ∧
@@ -197,41 +210,55 @@ def Row.ValidAt (chart : ChartIndex) (get : ℕ → Row)
   | .projectiveGlobal _ box => box.chart = chart ∧ box.Valid
   | .symmetryLocal _ box _ => box.chart = chart ∧ box.Valid
   | .projectiveLocal _ box => box.chart = chart ∧ box.Valid
+  | .symmetryTube _ tube _ =>
+      tube.chart = chart ∧ tube.Valid ∧
+        match shared with
+        | none => False
+        | some table =>
+            tube.symmetryIndex = table.symmetryIndex ∧ tube.r = table.r
   | .radiusPrune _ interval _ => interval.outsideCayleyBall
   | .fundamentalPrune _ box _ => box.chart = chart ∧ box.Valid
 
-instance (chart : ChartIndex) (get : ℕ → Row) (size : ℕ) (row : Row) :
-    Decidable (row.ValidAt chart get size) := by
-  cases row <;> simp only [Row.ValidAt] <;> infer_instance
+instance (chart : ChartIndex) (get : ℕ → Row) (size : ℕ)
+    (shared : Option AtlasProjectiveLocalViewTree.Table) (row : Row) :
+    Decidable (row.ValidAt chart get size shared) := by
+  cases row <;> simp only [Row.ValidAt] <;>
+    try { cases shared <;> simp only <;> infer_instance } <;>
+    infer_instance
 
 def RowsValidAt (chart : ChartIndex) (get : ℕ → Row)
-    (size : ℕ) : Prop :=
-  ∀ i : Fin size, (get i).id = i ∧ (get i).ValidAt chart get size
+    (size : ℕ) (shared : Option AtlasProjectiveLocalViewTree.Table) : Prop :=
+  ∀ i : Fin size,
+    (get i).id = i ∧ (get i).ValidAt chart get size shared
 
-instance (chart : ChartIndex) (get : ℕ → Row) (size : ℕ) :
-    Decidable (RowsValidAt chart get size) := by
+instance (chart : ChartIndex) (get : ℕ → Row) (size : ℕ)
+    (shared : Option AtlasProjectiveLocalViewTree.Table) :
+    Decidable (RowsValidAt chart get size shared) := by
   unfold RowsValidAt
   infer_instance
 
 /-- A kernel-checkable slice of `RowsValidAt`.  Generated tables prove small
 slices independently and join them with `rowsValidRange_append`, avoiding one
 enormous reduction in the kernel evaluator. -/
-def RowsValidRangeAt (chart : ChartIndex) (get : ℕ → Row) (size start count : ℕ) :
+def RowsValidRangeAt (chart : ChartIndex) (get : ℕ → Row) (size start count : ℕ)
+    (shared : Option AtlasProjectiveLocalViewTree.Table) :
     Prop :=
   start + count ≤ size ∧ ∀ j : Fin count,
     (get (start + j.val)).id = start + j.val ∧
-      (get (start + j.val)).ValidAt chart get size
+      (get (start + j.val)).ValidAt chart get size shared
 
-instance (chart : ChartIndex) (get : ℕ → Row) (size start count : ℕ) :
-    Decidable (RowsValidRangeAt chart get size start count) := by
+instance (chart : ChartIndex) (get : ℕ → Row) (size start count : ℕ)
+    (shared : Option AtlasProjectiveLocalViewTree.Table) :
+    Decidable (RowsValidRangeAt chart get size start count shared) := by
   unfold RowsValidRangeAt
   infer_instance
 
 theorem rowsValidRange_append {chart : ChartIndex} {get : ℕ → Row}
     {size start left right : ℕ}
-    (hleft : RowsValidRangeAt chart get size start left)
-    (hright : RowsValidRangeAt chart get size (start + left) right) :
-    RowsValidRangeAt chart get size start (left + right) := by
+    {shared : Option AtlasProjectiveLocalViewTree.Table}
+    (hleft : RowsValidRangeAt chart get size start left shared)
+    (hright : RowsValidRangeAt chart get size (start + left) right shared) :
+    RowsValidRangeAt chart get size start (left + right) shared := by
   unfold RowsValidRangeAt at hleft hright ⊢
   constructor
   · omega
@@ -244,13 +271,16 @@ theorem rowsValidRange_append {chart : ChartIndex} {get : ℕ → Row}
       simpa [hi] using hr
 
 theorem rowsValidAt_of_range {chart : ChartIndex} {get : ℕ → Row} {size : ℕ}
-    (h : RowsValidRangeAt chart get size 0 size) :
-    RowsValidAt chart get size := by
+    {shared : Option AtlasProjectiveLocalViewTree.Table}
+    (h : RowsValidRangeAt chart get size 0 size shared) :
+    RowsValidAt chart get size shared := by
   intro i
   simpa using h.2 ⟨i.val, i.isLt⟩
 
 theorem valid_imp_noRupert_ix (chart : ChartIndex) (get : ℕ → Row)
-    (size : ℕ) (rowsValid : RowsValidAt chart get size)
+    (size : ℕ) (shared : Option AtlasProjectiveLocalViewTree.Table)
+    (sharedValid : SharedLocalValid shared)
+    (rowsValid : RowsValidAt chart get size shared)
     (i : ℕ) (hi : i < size) :
     NoRupert chart (get i).interval (get i).region := by
   obtain ⟨hid, hvalid⟩ := rowsValid ⟨i, hi⟩
@@ -283,22 +313,40 @@ theorem valid_imp_noRupert_ix (chart : ChartIndex) (get : ℕ → Row)
       subst hchart
       exact box.valid_imp_not_translated_rupert hbox hp offset
         hregion.1 hregion.2 hrupert
+  | symmetryTube id tube region =>
+      unfold NoRupert
+      rintro ⟨p, hp, -, -, hview, hupper, offset, -, hrupert⟩
+      obtain ⟨hchart, htube, hmatch⟩ := hvalid
+      subst hchart
+      cases hshared : shared with
+      | none =>
+          have : False := by simpa [hshared] using hmatch
+          contradiction
+      | some table =>
+          have htable : table.Valid := by
+            simpa [SharedLocalValid, hshared] using sharedValid
+          have hmatch' :
+              tube.symmetryIndex = table.symmetryIndex ∧ tube.r = table.r := by
+            simpa [hshared] using hmatch
+          obtain ⟨hsymmetry, hradius⟩ := hmatch'
+          exact table.valid_imp_not_translated_rupert htable tube
+            hsymmetry hradius htube hp hview hupper offset hrupert
   | cayleySplit id lowerChild upperChild coordinate interval region =>
       obtain ⟨hlower, hupper, hlowerSize, hupperSize,
         hlowerInterval, hupperInterval, hlowerRegion, hupperRegion⟩ := hvalid
       apply noRupert_halves chart interval region coordinate
       · rw [← hlowerInterval, ← hlowerRegion]
-        exact valid_imp_noRupert_ix chart get size rowsValid
+        exact valid_imp_noRupert_ix chart get size shared sharedValid rowsValid
           lowerChild hlowerSize
       · rw [← hupperInterval, ← hupperRegion]
-        exact valid_imp_noRupert_ix chart get size rowsValid
+        exact valid_imp_noRupert_ix chart get size shared sharedValid rowsValid
           upperChild hupperSize
   | viewRoot id child interval =>
       unfold NoRupert
       rintro ⟨p, hp, hbounded, hfund, hview, hupper, offset, -, hrupert⟩
       obtain ⟨hscale, hmem⟩ := upperView_mem_wedgeTriangle p hview hupper
       obtain ⟨hforward, hchildSize, hchildInterval, hchildRegion⟩ := hvalid
-      have hchild := valid_imp_noRupert_ix chart get size rowsValid
+      have hchild := valid_imp_noRupert_ix chart get size shared sharedValid rowsValid
         child hchildSize
       rw [hchildInterval, hchildRegion] at hchild
       exact hchild ⟨p, hp, hbounded, hfund, hview, hupper, offset,
@@ -309,7 +357,7 @@ theorem valid_imp_noRupert_ix (chart : ChartIndex) (get : ℕ → Row)
       obtain ⟨child, hchildMem⟩ := mem_split hregion.2
       obtain ⟨hforward, hchildSize, hchildInterval, hchildRegion⟩ :=
         hvalid child
-      have hchild := valid_imp_noRupert_ix chart get size rowsValid
+      have hchild := valid_imp_noRupert_ix chart get size shared sharedValid rowsValid
         (children child) hchildSize
       rw [hchildInterval, hchildRegion] at hchild
       exact hchild ⟨p, hp, hbounded, hfund, hview, hupper, offset,
@@ -332,13 +380,15 @@ structure Table where
   chart : ChartIndex
   get : ℕ → Row
   size : ℕ
+  sharedLocal : Option AtlasProjectiveLocalViewTree.Table := none
 
 def Table.Valid (table : Table) : Prop :=
   0 < table.size ∧
-    RowsValidAt table.chart table.get table.size ∧
+    RowsValidAt table.chart table.get table.size table.sharedLocal ∧
     (table.get 0).interval =
       AtlasFundamentalPrune.restrictedRootInterval table.chart ∧
-    (table.get 0).region = .sphere
+    (table.get 0).region = .sphere ∧
+    SharedLocalValid table.sharedLocal
 
 instance (table : Table) : Decidable table.Valid := by
   unfold Table.Valid
@@ -351,9 +401,9 @@ theorem Table.valid_imp_no_chart_translated_pose
       p.InViewWedge ∧ p.InUpperView ∧ ∃ offset : ℝ²,
       RupertPose (p.matrixPoseWithOffset table.chart offset)
         exactPolyhedron.hull := by
-  obtain ⟨hnonempty, hrows, hrootInterval, hrootRegion⟩ := h
+  obtain ⟨hnonempty, hrows, hrootInterval, hrootRegion, hshared⟩ := h
   have hchecked := valid_imp_noRupert_ix table.chart table.get table.size
-    hrows 0 hnonempty
+    table.sharedLocal hshared hrows 0 hnonempty
   rw [hrootInterval, hrootRegion] at hchecked
   rintro ⟨p, hp, hbounded, hfund, hview, hupper, offset, hrupert⟩
   exact hchecked ⟨p,

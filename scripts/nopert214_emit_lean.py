@@ -215,6 +215,15 @@ def emit_row(row, chart, interval_ids, triangle_ids, edge_template_ids,
             certificate["symmetry_index"], template_id,
             q(certificate["c"]), q(certificate["delta"]),
             q(certificate["r"]))
+    if kind == "symmetry_tube":
+        return """.symmetryTube %d {
+      interval := %s
+      chart := %d
+      symmetryIndex := %d
+      r := %s }
+      (%s)""" % (
+            row_id, iv, chart, row["symmetry_index"], q(row["radius"]),
+            region(row, triangle_ids))
     raise ValueError(f"unsupported row kind: {kind}")
 
 
@@ -222,6 +231,7 @@ HEADER = """module
 
 public import Noperthedron.Nopert214.AtlasProjectiveSolutionTree
 public meta import Noperthedron.Nopert214.AtlasProjectiveSolutionTree
+{shared_import}
 
 @[expose] public section
 
@@ -260,6 +270,7 @@ def table : AtlasProjectiveSolutionTree.Table where
   chart := {chart}
   get := getRow
   size := {size}
+{shared_field}
 
 {validity}
 {audit}
@@ -323,7 +334,7 @@ def kernel_internal_range_proof(kind):
     · {valid}"""
 
 
-def kernel_range_validity(chart, rows, range_size):
+def kernel_range_validity(chart, rows, range_size, shared):
     """Emit local kernel checks and a balanced proof joining their ranges.
 
     Leaf runs are decided in chunks.  Internal rows are singleton ranges with
@@ -351,7 +362,7 @@ def kernel_range_validity(chart, rows, range_size):
             proof = "by\n  decide +kernel"
         name = f"rowsValidRange0_{block_id}"
         declarations.append(f"""private theorem {name} :
-    RowsValidRangeAt {chart} getRow {size} {start} {count} := {proof}
+    RowsValidRangeAt {chart} getRow {size} {start} {count} {shared} := {proof}
 """)
         nodes.append((name, start, count))
         start += count
@@ -370,7 +381,7 @@ def kernel_range_validity(chart, rows, range_size):
             name = f"rowsValidRange{level}_{pair_id // 2}"
             count = left[2] + right[2]
             declarations.append(f"""private theorem {name} :
-    RowsValidRangeAt {chart} getRow {size} {left[1]} {count} :=
+    RowsValidRangeAt {chart} getRow {size} {left[1]} {count} {shared} :=
   rowsValidRange_append {left[0]} {right[0]}
 """)
             next_nodes.append((name, left[1], count))
@@ -379,9 +390,10 @@ def kernel_range_validity(chart, rows, range_size):
     if len(nodes) != 1 or nodes[0][1:] != (0, size):
         raise ValueError("kernel validity ranges do not cover the table")
     declarations.append(f"""theorem table_valid_kernel : table.Valid := by
-  refine ⟨by decide, rowsValidAt_of_range {nodes[0][0]}, ?_, ?_⟩
+  refine ⟨by decide, rowsValidAt_of_range {nodes[0][0]}, ?_, ?_, ?_⟩
   · decide +kernel
   · decide +kernel
+  · {"trivial" if shared == "none" else "exact GeneratedLocalView.table_valid_kernel"}
 """)
     return "\n".join(declarations)
 
@@ -400,6 +412,8 @@ def main():
                         help="emit equation-function data and chunked kernel proofs")
     parser.add_argument("--kernel-range-size", type=int, default=32,
                         help="rows checked by each kernel proof")
+    parser.add_argument("--shared-local-view", action="store_true",
+                        help="attach GeneratedLocalView.table for symmetry-tube rows")
     args = parser.parse_args()
 
     with open(args.input, "r", encoding="utf-8") as source:
@@ -413,6 +427,10 @@ def main():
     if any(row is None for row in rows):
         raise SystemExit("table contains unfilled rows")
     chart = data["chart"]
+    has_tube = any(row is not None and row["kind"] == "symmetry_tube"
+                   for row in rows)
+    if has_tube and not args.shared_local_view:
+        raise SystemExit("symmetry-tube rows require --shared-local-view")
 
     interval_values = []
     interval_ids = {}
@@ -469,7 +487,11 @@ def main():
 
     destination = Path(args.output)
     with destination.open("w", encoding="utf-8") as output:
-        output.write(HEADER.format(chart=chart))
+        output.write(HEADER.format(
+            chart=chart,
+            shared_import=(
+                "public import Noperthedron.Nopert214.GeneratedLocalView"
+                if args.shared_local_view else "")))
         if args.kernel_friendly:
             interval_definitions = kernel_interval_definitions(
                 rows, interval_ids)
@@ -568,21 +590,26 @@ def main():
             if first_local is None:
                 raise SystemExit("no projective-local row available to audit")
             audit = f"""theorem first_local_valid :
-    (getRow {first_local}).ValidAt {chart} getRow {len(rows)} := by
+    (getRow {first_local}).ValidAt {chart} getRow {len(rows)} none := by
   native_decide
 
 theorem first_local_valid_kernel :
-    (getRow {first_local}).ValidAt {chart} getRow {len(rows)} := by
+    (getRow {first_local}).ValidAt {chart} getRow {len(rows)} none := by
   decide +kernel"""
         if args.kernel_friendly:
+            shared = ("some GeneratedLocalView.table"
+                      if args.shared_local_view else "none")
+            shared_field = ("  sharedLocal := some GeneratedLocalView.table"
+                            if args.shared_local_view else "")
             output.write(f"""def table : AtlasProjectiveSolutionTree.Table where
   chart := {chart}
   get := getRow
   size := {len(rows)}
+{shared_field}
 
 theorem table_valid_native : table.Valid := by native_decide
 
-{kernel_range_validity(chart, rows, args.kernel_range_size)}
+{kernel_range_validity(chart, rows, args.kernel_range_size, shared)}
 {audit}
 
 end Noperthedron.Nopert214.GeneratedChart{chart}
@@ -592,7 +619,10 @@ end
         else:
             output.write(FOOTER.format(
                 chart=chart, validity=validity, audit=audit,
-                chunk_size=args.chunk_size, size=len(rows)))
+                chunk_size=args.chunk_size, size=len(rows),
+                shared_field=(
+                    "  sharedLocal := some GeneratedLocalView.table"
+                    if args.shared_local_view else "")))
 
 
 if __name__ == "__main__":
