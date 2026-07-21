@@ -167,6 +167,35 @@ def decodeTable (initialChild symmetryIndex : Nat) (r : Rat)
     size := count
   }
 
+structure Decoded where
+  symmetryIndex : Nat
+  r : Rat
+  count : Nat
+  rows : Array Row
+
+def readDecoded (base : AtlasProjectiveView.Triangle Rat) :
+    Decoder Decoded := do
+  let count ← readNat
+  let symmetryIndex ← readNat
+  let r ← readRat
+  let rows ← readRows base count #[]
+  pure { symmetryIndex, r, count, rows }
+
+/-- Decode a self-describing packed local-table artifact. The initial projective
+root child is supplied by its position in the four-table atlas. -/
+def decodePackedTable (initialChild : Nat) (packed : String) : Table :=
+  let base := split upperWedgeTriangle (fin4 initialChild)
+  let decoded :=
+    (readDecoded base { data := packed.toUTF8 }).1
+  {
+    symmetryIndex := fin5 decoded.symmetryIndex
+    r := decoded.r
+    root := 0
+    triangle := base
+    get := fun i => decoded.rows[i]!
+    size := decoded.count
+  }
+
 end Noperthedron.Nopert214.PackedLocalViewTree
 
 end

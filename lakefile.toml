@@ -60,8 +60,8 @@ name = "checkNopert214Local2"
 root = "checkNopert214Local2"
 buildType = "release"
 
-# Full native proof constructor for Nopert #214. Its large generated data
-# modules are intentionally ignored and this target is built on demand.
+# Full native proof constructor for Nopert #214. It reads large ignored packed
+# certificate artifacts at runtime, so this target is built on demand.
 [[lean_exe]]
 name = "constructNopert214"
 root = "constructNopert214"

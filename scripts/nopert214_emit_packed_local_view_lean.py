@@ -90,7 +90,14 @@ def main():
     parser.add_argument("--proof-part-size", type=int, default=256)
     parser.add_argument("--data-only", action="store_true",
                         help="emit only the packed table data module")
+    parser.add_argument("--raw-output",
+                        help="also write a self-describing runtime artifact")
+    parser.add_argument("--raw-only", action="store_true",
+                        help="write only --raw-output, not Lean modules")
     args = parser.parse_args()
+
+    if args.raw_only and not args.raw_output:
+        parser.error("--raw-only requires --raw-output")
 
     with open(args.input, "r", encoding="utf-8") as source:
         data = json.load(source)
@@ -116,6 +123,16 @@ def main():
     radius = Fraction(str(data["tube_radius"]))
     radius_lean = (str(radius.numerator) if radius.denominator == 1 else
                    f"({radius.numerator} / {radius.denominator})")
+
+    if args.raw_output:
+        raw_values = [len(rows), int(symmetry_index),
+                      *encoded_rat(radius), *values]
+        raw_packed = ",".join(str(value) for value in raw_values) + ","
+        Path(args.raw_output).write_text(raw_packed, encoding="utf-8")
+        if args.raw_only:
+            print(f"encoded {len(rows)} rows as {len(raw_values)} naturals, "
+                  f"{len(raw_packed)} bytes, raw only")
+            return
 
     destination = Path(args.output)
     data_namespace = f"{args.namespace}Data"
