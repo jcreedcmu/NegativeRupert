@@ -3272,6 +3272,14 @@ def generate_atlas_projective_table(
                        "counts": counts,
                        "failures": failures}, output, default=str)
         os.replace(temporary_path, checkpoint_path)
+        print(json.dumps({
+            "output": checkpoint_path,
+            "complete": complete,
+            "rows": len(rows),
+            "pending": len(stack),
+            "failures": len(failures),
+            "counts": counts,
+        }), flush=True)
 
     while stack and len(rows) < max_nodes:
         state = stack.pop()
