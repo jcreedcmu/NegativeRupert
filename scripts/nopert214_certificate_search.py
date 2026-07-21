@@ -4003,6 +4003,22 @@ def projective_local_candidate(task):
         if (corner_result is not None and
                 (result is None or corner_result["c"] > result["c"])):
             result = corner_result
+    if ((result is None or result["c"] < target_c) and depth >= 22):
+        # Exceptionally thin transition bands can need a mixed edge between
+        # the seven-sample cone directions.  At this depth an eight-sample
+        # endpoint-enriched pool is cheap, and the deterministic balanced-hull
+        # seed normally finds the useful tetrahedron without a large random
+        # search.  Zero-error screening only nominates the four axes; the
+        # returned row is still rebuilt and audited with the formal support
+        # error in `projective_local_axis_row_mixed`.
+        dense_boundary_result = atlas_projective_local_triangle(
+            0, (Q(0), Q(0), Q(0)), (Q(0), Q(0), Q(0)),
+            0, triangle, 0, cone_samples=8, trials=1000,
+            include_boundaries=True, screen_support_error=Q(0))
+        if (dense_boundary_result is not None and
+                (result is None or
+                 dense_boundary_result["c"] > result["c"])):
+            result = dense_boundary_result
     if ((result is None or result["c"] < target_c) and depth >= 10):
         # The floating hull heuristic normalizes each candidate by an error-
         # inflated remainder budget.  On an exceptionally thin balanced
