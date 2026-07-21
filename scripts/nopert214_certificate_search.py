@@ -954,7 +954,11 @@ def projective_local_float_candidates(triangle, cone_samples=4,
     return feasible
 
 
-@functools.lru_cache(maxsize=256)
+# A depth-first local search only revisits the handful of parameter variants
+# for its current triangle.  Retaining hundreds of completed triangles keeps
+# their very large candidate lists alive in every worker without buying cache
+# hits, and eventually exhausts memory during a long table generation.
+@functools.lru_cache(maxsize=16)
 def choose_projective_local_tetrahedron(triangle, cone_samples=4,
                                          trials=200_000, seed=214,
                                          include_boundaries=False,
@@ -1027,7 +1031,7 @@ def choose_projective_local_tetrahedron(triangle, cone_samples=4,
     return best, candidates
 
 
-@functools.lru_cache(maxsize=256)
+@functools.lru_cache(maxsize=16)
 def projective_local_geometry(triangle, symmetry_index,
                               cone_samples=4, trials=200_000,
                               include_boundaries=False,
@@ -1499,7 +1503,10 @@ def atlas_projective_global_float_screen(
             "candidates": candidates}
 
 
-@functools.lru_cache(maxsize=None)
+# Relative-box descendants reuse the current view triangle heavily, but the
+# depth-first traversal never returns to an unbounded history of old view
+# triangles.  Each cached value can contain thousands of candidate triples.
+@functools.lru_cache(maxsize=16)
 def projective_global_float_candidates(
         triangle, cone_samples=4, allow_support_defect=True):
     """Triangle-valid balanced triples without local-variation calculations.
@@ -1562,7 +1569,7 @@ def projective_global_float_candidates(
     return feasible
 
 
-@functools.lru_cache(maxsize=None)
+@functools.lru_cache(maxsize=2048)
 def atlas_mixed_contact_qpolys(chart, edge, inner_index, outer_index):
     """Three Cayley quadratics for ``edge × (C*N*P - d*Q)``."""
     inner = VERTICES_Q[inner_index]
@@ -2076,7 +2083,7 @@ def atlas_global_profile(samples, seed, half_widths, direction_count=24):
             "minimum_margin": minimum, "worst": worst}
 
 
-@functools.lru_cache(maxsize=None)
+@functools.lru_cache(maxsize=2048)
 def atlas_edge_contact_qpolys(chart, q0, q1, inner_index):
     """Vector polynomial for one moving silhouette-edge contact."""
     edge = [a-b for a, b in zip(VERTICES_Q[q1], VERTICES_Q[q0])]
