@@ -4235,7 +4235,8 @@ def compact_projective_local_rows(rows):
 def generate_projective_local_view_table(
         output_path, max_nodes=20_000, max_depth=12,
         target_c=Q(1, 10_000), tube_radius=Q(1, 10_000),
-        checkpoint_every=100, resume=False, initial_child=None, workers=1):
+        checkpoint_every=100, resume=False, initial_child=None, workers=1,
+        seed_checkpoint=None):
     """Generate the shared chart-0 symmetry-local projective-view atlas."""
     lock = open(output_path + ".lock", "w", encoding="utf-8")
     try:
@@ -4276,6 +4277,7 @@ def generate_projective_local_view_table(
                      for failure in failures)
         failures = []
         counts = saved["counts"]
+        counts.setdefault("reused_certificates", 0)
     else:
         rows = [None]
         if initial_child is None:
@@ -4288,7 +4290,28 @@ def generate_projective_local_view_table(
         stack = [(0, initial_triangle, initial_depth)]
         failures = []
         counts = {"view_split": 0, "certificate": 0,
-                  "weak_rejections": 0}
+                  "weak_rejections": 0, "reused_certificates": 0}
+
+    seed_results = {}
+    if seed_checkpoint is not None:
+        with open(seed_checkpoint, "r", encoding="utf-8") as source:
+            seed = json.load(source)
+        if seed.get("initial_child") != initial_child:
+            raise ValueError("seed checkpoint initial child does not match")
+        for row in seed["rows"]:
+            if row is None or row.get("kind") != "view_local":
+                continue
+            c = Q(row["c"])
+            if (c < target_c or tube_radius*tube_radius*(1+c*c) >
+                    4*c*c):
+                continue
+            triangle = tuple(tuple(map(Q, corner))
+                             for corner in row["triangle"])
+            seed_results[triangle] = {
+                "certificates": row["certificate"],
+                "c": c,
+                "delta": Q(row["delta"]),
+            }
 
     def allocate(count):
         children = list(range(len(rows), len(rows)+count))
@@ -4334,9 +4357,22 @@ def generate_projective_local_view_table(
             batch = [stack.pop() for _ in range(batch_size)]
             tasks = [(triangle, depth, target_c)
                      for _, triangle, depth in batch]
-            evaluated = ([projective_local_candidate(task) for task in tasks]
-                         if pool is None else pool.map(
-                             projective_local_candidate, tasks))
+            evaluated = [None] * len(tasks)
+            search_indices = []
+            search_tasks = []
+            for index, task in enumerate(tasks):
+                seed_result = seed_results.get(task[0])
+                if seed_result is None:
+                    search_indices.append(index)
+                    search_tasks.append(task)
+                else:
+                    evaluated[index] = (seed_result, False)
+                    counts["reused_certificates"] += 1
+            searched = ([projective_local_candidate(task)
+                         for task in search_tasks] if pool is None else
+                        pool.map(projective_local_candidate, search_tasks))
+            for index, result in zip(search_indices, searched):
+                evaluated[index] = result
             # `batch[0]` was the first (highest-priority) DFS state popped.
             # Apply the other workers first so any children of that state are
             # pushed last and remain at the top of the stack.  This mirrors
@@ -4972,6 +5008,10 @@ def main():
                                      choices=range(4))
     generate_local_view.add_argument("--workers", type=int, default=1,
                                      help="parallel triangle-search processes")
+    generate_local_view.add_argument(
+        "--seed-checkpoint",
+        help="reuse individually qualifying exact leaves with identical "
+             "projective triangles")
     explore = sub.add_parser("explore-cover")
     explore.add_argument("--max-nodes", type=int, default=200000)
     explore.add_argument("--directions", type=int, default=24)
@@ -5123,7 +5163,8 @@ def main():
         result = generate_projective_local_view_table(
             args.output, args.max_nodes, args.max_depth,
             Q(args.target_c), Q(args.tube_radius), args.checkpoint_every,
-            args.resume, args.initial_child, args.workers)
+            args.resume, args.initial_child, args.workers,
+            args.seed_checkpoint)
         print(json.dumps({"complete": result["complete"],
                           "row_count": len(result["rows"]),
                           "pending_count": len(result["pending"]),
