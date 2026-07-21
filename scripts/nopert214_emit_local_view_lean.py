@@ -163,6 +163,9 @@ def main():
     parser.add_argument("--native-only", action="store_true")
     parser.add_argument("--table-index", type=int, choices=range(4),
                         help="emit GeneratedLocalViewN for first view child N")
+    parser.add_argument("--namespace",
+                        help="override the generated namespace (for example, "
+                             "GeneratedLocalView2Native)")
     args = parser.parse_args()
 
     with open(args.input, "r", encoding="utf-8") as source:
@@ -177,8 +180,9 @@ def main():
         raise SystemExit(
             f"--table-index {args.table_index} does not match "
             f"input initial_child {initial_child}")
-    namespace = ("GeneratedLocalView" if args.table_index is None else
-                 f"GeneratedLocalView{args.table_index}")
+    namespace = (args.namespace or
+                 ("GeneratedLocalView" if args.table_index is None else
+                  f"GeneratedLocalView{args.table_index}"))
 
     triangle_ids = {}
     axis_ids = {}
