@@ -3193,7 +3193,7 @@ def atlas_projective_state_action(task):
      chart0_origin_tube_radii) = task
     count_deltas = {"exact_rejections": 0,
                     "global_audit8": 0, "global_audit64": 0,
-                    "global_cone5": 0}
+                    "global_cone5": 0, "global_cone6": 0}
 
     def answer(kind, **fields):
         return {"action": kind, "count_deltas": count_deltas, **fields}
@@ -3282,16 +3282,26 @@ def atlas_projective_state_action(task):
             chart, center, widths, triangle, candidate_limit=64,
             candidates=None if global_float is None else
                 global_float["candidates"])
-    if (view_depth >= 8 and max(widths) <= Q(1, 256) and
+    if (view_depth >= 2 and max(widths) <= Q(1, 256) and
             (global_float is None or
              global_float["lower_bound"] <= 1e-8)):
         # A four-sample normal cone can miss a robust mixed silhouette edge
-        # in a narrow transition band.  Generating the larger pool globally
-        # is expensive, but on capped cells its top-ranked candidate often
-        # closes the entire box with orders of magnitude more margin.
+        # in a narrow transition band.  Pose-box narrowness, rather than a
+        # deep-view requirement, is the useful cost gate: live depth-3 and
+        # depth-4 survivors close in about 0.2 seconds with 1e-3 margins.
         count_deltas["global_cone5"] += 1
         global_float = atlas_projective_global_float_screen(
             chart, center, widths, triangle, cone_samples=5,
+            candidate_limit=8, candidates=None)
+    if (view_depth >= 2 and max(widths) <= Q(1, 256) and
+            (global_float is None or
+             global_float["lower_bound"] <= 1e-8)):
+        # Six samples close the narrow chart-1 transition cells that remain
+        # just outside every five-sample cone.  On a live frontier sample,
+        # this certified all 19 such cells exactly (and cost about 0.1 s).
+        count_deltas["global_cone6"] += 1
+        global_float = atlas_projective_global_float_screen(
+            chart, center, widths, triangle, cone_samples=6,
             candidate_limit=8, candidates=None)
     if (global_float is not None and
             global_float["lower_bound"] > 1e-8):
@@ -3508,6 +3518,7 @@ def generate_atlas_projective_table(
         counts.setdefault("global_audit8", 0)
         counts.setdefault("global_audit64", 0)
         counts.setdefault("global_cone5", 0)
+        counts.setdefault("global_cone6", 0)
         failures = []
     else:
         rows = [None]
@@ -3528,7 +3539,8 @@ def generate_atlas_projective_table(
                   "edge": 0, "global": 0, "local": 0, "radius": 0,
                   "fundamental_prune": 0, "symmetry_tube": 0,
                   "exact_rejections": 0, "global_audit8": 0,
-                  "global_audit64": 0, "global_cone5": 0}
+                  "global_audit64": 0, "global_cone5": 0,
+                  "global_cone6": 0}
         failures = []
 
     def allocate(count):
@@ -3832,12 +3844,19 @@ def generate_atlas_projective_table(
                 chart, center, widths, triangle, candidate_limit=64,
                 candidates=None if global_float is None else
                     global_float["candidates"])
-        if (view_depth >= 8 and max(widths) <= Q(1, 256) and
+        if (view_depth >= 2 and max(widths) <= Q(1, 256) and
                 (global_float is None or
                  global_float["lower_bound"] <= 1e-8)):
             counts["global_cone5"] += 1
             global_float = atlas_projective_global_float_screen(
                 chart, center, widths, triangle, cone_samples=5,
+                candidate_limit=8, candidates=None)
+        if (view_depth >= 2 and max(widths) <= Q(1, 256) and
+                (global_float is None or
+                 global_float["lower_bound"] <= 1e-8)):
+            counts["global_cone6"] += 1
+            global_float = atlas_projective_global_float_screen(
+                chart, center, widths, triangle, cone_samples=6,
                 candidate_limit=8, candidates=None)
         if (global_float is not None and
                 global_float["lower_bound"] > 1e-8):
