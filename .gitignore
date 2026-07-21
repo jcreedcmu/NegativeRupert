@@ -14,6 +14,10 @@
 /Noperthedron/Nopert214/GeneratedChart0.lean
 /Noperthedron/Nopert214/GeneratedChart1.lean
 /Noperthedron/Nopert214/GeneratedChart2.lean
+/Noperthedron/Nopert214/GeneratedChart0Native.lean
+/Noperthedron/Nopert214/GeneratedChart1Native.lean
+/Noperthedron/Nopert214/GeneratedChart2Native.lean
+/Noperthedron/Nopert214/GeneratedProofNative.lean
 
 # full solution table (240 MB), expected at the repo root by the
 # NativeCaseAnalysis/KernelCaseAnalysis builds; not committed

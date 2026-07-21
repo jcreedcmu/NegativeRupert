@@ -244,7 +244,7 @@ public meta import Noperthedron.Nopert214.AtlasProjectiveSolutionTree
 
 @[expose] public section
 
-namespace Noperthedron.Nopert214.GeneratedChart{chart}
+namespace Noperthedron.Nopert214.{namespace}
 
 open AtlasProjectiveSolutionTree AtlasProjectiveView
 open AtlasProjectiveEdgeCertificate AtlasProjectiveGlobalCertificate
@@ -284,15 +284,15 @@ def table : AtlasProjectiveSolutionTree.Table where
 {validity}
 {audit}
 
-end Noperthedron.Nopert214.GeneratedChart{chart}
+end Noperthedron.Nopert214.{namespace}
 
 end
 """
 
 
-def native_table_validity(shared):
+def native_table_validity(shared_valid_theorem):
     shared_proof = (
-        "exact GeneratedLocalViews.tables_valid_native" if shared else
+        f"exact {shared_valid_theorem}" if shared_valid_theorem else
         "intro index\n    fin_cases index <;> trivial")
     return f"""theorem table_valid_native : table.Valid := by
   refine ⟨by decide, ?_, by native_decide, by native_decide, ?_⟩
@@ -432,8 +432,15 @@ def main():
                         help="emit equation-function data and chunked kernel proofs")
     parser.add_argument("--kernel-range-size", type=int, default=32,
                         help="rows checked by each kernel proof")
-    parser.add_argument("--shared-local-view", action="store_true",
-                        help="attach GeneratedLocalViews.tables for symmetry-tube rows")
+    shared_group = parser.add_mutually_exclusive_group()
+    shared_group.add_argument("--shared-local-view", action="store_true",
+                              help="attach kernel-capable "
+                                   "GeneratedLocalViews.tables")
+    shared_group.add_argument("--shared-local-view-native", action="store_true",
+                              help="attach native-only "
+                                   "GeneratedLocalViewsNative.tables")
+    parser.add_argument("--namespace",
+                        help="override the generated chart namespace")
     args = parser.parse_args()
 
     with open(args.input, "r", encoding="utf-8") as source:
@@ -447,10 +454,24 @@ def main():
     if any(row is None for row in rows):
         raise SystemExit("table contains unfilled rows")
     chart = data["chart"]
+    namespace = args.namespace or f"GeneratedChart{chart}"
+    has_shared = args.shared_local_view or args.shared_local_view_native
+    shared_module = (
+        "Noperthedron.Nopert214.GeneratedLocalViewsNative"
+        if args.shared_local_view_native else
+        "Noperthedron.Nopert214.GeneratedLocalViews")
+    shared_namespace = (
+        "GeneratedLocalViewsNative" if args.shared_local_view_native else
+        "GeneratedLocalViews")
+    shared_valid_native = (
+        f"{shared_namespace}.tables_valid" if args.shared_local_view_native else
+        f"{shared_namespace}.tables_valid_native")
     has_tube = any(row is not None and row["kind"] == "symmetry_tube"
                    for row in rows)
-    if has_tube and not args.shared_local_view:
-        raise SystemExit("symmetry-tube rows require --shared-local-view")
+    if has_tube and not has_shared:
+        raise SystemExit("symmetry-tube rows require a shared local view")
+    if args.kernel_friendly and args.shared_local_view_native:
+        raise SystemExit("kernel-friendly output requires --shared-local-view")
 
     interval_values = []
     interval_ids = {}
@@ -508,10 +529,9 @@ def main():
     destination = Path(args.output)
     with destination.open("w", encoding="utf-8") as output:
         output.write(HEADER.format(
-            chart=chart,
+            chart=chart, namespace=namespace,
             shared_import=(
-                "public import Noperthedron.Nopert214.GeneratedLocalViews"
-                if args.shared_local_view else "")))
+                f"public import {shared_module}" if has_shared else "")))
         if args.kernel_friendly:
             interval_definitions = kernel_interval_definitions(
                 rows, interval_ids)
@@ -600,7 +620,8 @@ def main():
                          "(Array AtlasProjectiveSolutionTree.Row) := #[")
             output.write(", ".join(chunk_names))
             output.write("]\n")
-        validity = (native_table_validity(args.shared_local_view)
+        validity = (native_table_validity(
+                        shared_valid_native if has_shared else None)
                     if args.unchecked_prefix is None else "")
         audit = ""
         if args.audit_first_local:
@@ -619,10 +640,10 @@ theorem first_local_valid_kernel :
       (fun _ => none) := by
   decide +kernel"""
         if args.kernel_friendly:
-            shared = ("GeneratedLocalViews.tables"
-                      if args.shared_local_view else "(fun _ => none)")
-            shared_field = ("  sharedLocal := GeneratedLocalViews.tables"
-                            if args.shared_local_view else "")
+            shared = (f"{shared_namespace}.tables"
+                      if has_shared else "(fun _ => none)")
+            shared_field = (f"  sharedLocal := {shared_namespace}.tables"
+                            if has_shared else "")
             shared_valid_proof = (
                 "exact GeneratedLocalViews.tables_valid_kernel"
                 if args.shared_local_view else
@@ -633,23 +654,24 @@ theorem first_local_valid_kernel :
   size := {len(rows)}
 {shared_field}
 
-{native_table_validity(args.shared_local_view)}
+{native_table_validity(shared_valid_native if has_shared else None)}
 
 {kernel_range_validity(chart, rows, args.kernel_range_size, shared,
                        shared_valid_proof)}
 {audit}
 
-end Noperthedron.Nopert214.GeneratedChart{chart}
+end Noperthedron.Nopert214.{namespace}
 
 end
 """)
         else:
             output.write(FOOTER.format(
                 chart=chart, validity=validity, audit=audit,
+                namespace=namespace,
                 chunk_size=args.chunk_size, size=len(rows),
                 shared_field=(
-                    "  sharedLocal := GeneratedLocalViews.tables"
-                    if args.shared_local_view else "")))
+                    f"  sharedLocal := {shared_namespace}.tables"
+                    if has_shared else "")))
 
 
 if __name__ == "__main__":
