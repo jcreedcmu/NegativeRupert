@@ -181,7 +181,7 @@ theorem Box.SparseViewValid.support_all {box : Box}
           ring
         _ ≤ -supportError := by
           have herror : 0 < supportError := by
-            norm_num [supportError, RationalApprox.κℚ]
+            norm_num [supportError, tightVertexErrorQ]
           nlinarith [hselected.2.1]
     simp only [Box.supportUpper, Box.exactSupportTie, if_neg htie']
     have hmax :

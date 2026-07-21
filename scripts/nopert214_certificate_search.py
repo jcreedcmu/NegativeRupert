@@ -653,7 +653,13 @@ def projective_axis_contacts(view, cone_samples=4):
 
 
 PROJECTIVE_CERTIFICATE_DENOMINATOR = 10**9
-PROJECTIVE_SUPPORT_ERROR = 10 * exact_certificate.KAPPA
+# The published orbit coordinates are much closer to the exact fivefold
+# construction than the generic 1e-10 checker allowance.  The Lean-side
+# tight orbit approximation proves a 5e-16 vertex error, so the cross-product
+# support allowance is 10 times that bound.  Keeping the larger generic kappa
+# for variation/displacement estimates remains conservative.
+PROJECTIVE_LOCAL_VERTEX_ERROR = Q(5, 10**16)
+PROJECTIVE_SUPPORT_ERROR = 10 * PROJECTIVE_LOCAL_VERTEX_ERROR
 PROJECTIVE_VARIATION_ERROR = 150 * exact_certificate.KAPPA
 
 
@@ -3550,7 +3556,11 @@ def generate_atlas_projective_table(
 
         processed_since_checkpoint = 0
         try:
-            while (stack and len(rows) < max_nodes and not failures):
+            # Keep draining the independent frontier after recording a hard
+            # cell.  A later resume automatically requeues every failure
+            # under refined caps; stopping the whole pool at the first one
+            # only hid how many exceptional cells actually needed refinement.
+            while stack and len(rows) < max_nodes:
                 remaining = max_nodes-len(rows)
                 batch_size = min(
                     workers, len(stack), max(1, (remaining+3)//4))
@@ -3965,6 +3975,18 @@ def projective_local_candidate(task):
         if (corner_result is not None and
                 (result is None or corner_result["c"] > result["c"])):
             result = corner_result
+    if ((result is None or result["c"] < target_c) and depth >= 10):
+        # The tight rational support allowance exposes additional narrow
+        # cone families at a silhouette transition.  Seven cone samples are
+        # expensive, so reserve this deterministic hull search for the tiny
+        # set of cells that defeated all cheaper variants.
+        fine_boundary_result = atlas_projective_local_triangle(
+            0, (Q(0), Q(0), Q(0)), (Q(0), Q(0), Q(0)),
+            0, triangle, 0, cone_samples=7, trials=200_000,
+            include_boundaries=True, include_corner_cycles=True)
+        if (fine_boundary_result is not None and
+                (result is None or fine_boundary_result["c"] > result["c"])):
+            result = fine_boundary_result
     weak_rejection = result is not None and result["c"] < target_c
     if weak_rejection:
         stronger = None

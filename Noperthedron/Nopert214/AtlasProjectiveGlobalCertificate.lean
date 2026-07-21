@@ -370,7 +370,7 @@ theorem Box.weightUpper_nonneg (box : Box) (h : box.Valid) (i : Fin 3) :
   have hmax := le_max3 (fun corner => box.localShell.weightAt 0 corner i) 0
   have herr : 0 ≤ AtlasProjectiveLocalCertificate.supportError := by
     norm_num [AtlasProjectiveLocalCertificate.supportError,
-      RationalApprox.κℚ]
+      tightVertexErrorQ]
   have hnonneg := h.weight_nonneg i
   unfold Box.weightLower at hnonneg
   unfold Box.weightUpper
@@ -986,7 +986,7 @@ theorem Box.exactWeight_mul_exactSupport_le_contactDefect
           box.certificate.exactSupport box.localShell p i k :=
         lt_of_not_ge hsNonpos
       obtain ⟨weight, hweight, hsum, hpoint⟩ := hmem
-      have hwError := box.certificate.exactWeight_sub_approx_abs_le
+      have hwError := box.certificate.exactWeight_sub_approx_tight_abs_le
         box.localShell hscale i
       have hsError := box.certificate.exactSupport_sub_approx_abs_le
         box.localShell hscale i k
@@ -996,17 +996,17 @@ theorem Box.exactWeight_mul_exactSupport_le_contactDefect
             box.certificate.approxWeight
                 (AtlasProjectiveView.normalizedView box.root p) i +
               (AtlasProjectiveLocalCertificate.supportError : ℝ) := by
-        have herrorEq : 10 * RationalApprox.κ =
+        have herrorEq : 10 * (tightVertexErrorQ : ℝ) =
             (AtlasProjectiveLocalCertificate.supportError : ℝ) := by
           norm_num [AtlasProjectiveLocalCertificate.supportError,
-            RationalApprox.κ, RationalApprox.κℚ]
+            tightVertexErrorQ]
         have herr :
             box.certificate.exactWeight box.localShell p i -
               box.certificate.approxWeight
                 (AtlasProjectiveView.normalizedView box.root p) i ≤
               (AtlasProjectiveLocalCertificate.supportError : ℝ) := by
           calc
-            _ ≤ 10 * RationalApprox.κ := by
+            _ ≤ 10 * (tightVertexErrorQ : ℝ) := by
               simpa only [Box.localShell] using hwError.2
             _ = _ := herrorEq
         linarith only [herr]

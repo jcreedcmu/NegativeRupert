@@ -3,6 +3,7 @@ module
 public import Noperthedron.Nopert214.AtlasLocalCertificate
 public import Noperthedron.Nopert214.AtlasProjectiveLocalRigidity
 public import Noperthedron.Nopert214.AtlasProjectiveEdgeCertificate
+public import Noperthedron.Nopert214.TightApproximation
 public import Noperthedron.SnubCube.ProjectiveLocalCertificate
 
 @[expose] public section
@@ -148,7 +149,7 @@ instance (box : Box) (j : Fin 4) (i : Fin 3) (k : VertexIndex) :
   unfold Box.exactSupportTie
   infer_instance
 
-def supportError : ℚ := 10 * RationalApprox.κℚ
+def supportError : ℚ := 10 * tightVertexErrorQ
 
 def Box.supportUpper (box : Box) (j : Fin 4) (i : Fin 3)
     (k : VertexIndex) : ℚ :=
@@ -546,6 +547,90 @@ theorem AxisCertificate.exactEdge_sub_approx_norm_le
         (mul_le_mul_of_nonneg_left hsecond h1lambda)
     _ = 2 * RationalApprox.κ := by ring
 
+/-- The support checker uses the actual orbit-rounding error, which is much
+smaller than the generic approximation allowance used by variation bounds. -/
+theorem AxisCertificate.exactEdge_sub_approx_tight_norm_le
+    (cert : AxisCertificate) (i : Fin 3) :
+    ‖cert.exactEdge i - cert.approxEdge i‖ ≤
+      2 * (tightVertexErrorQ : ℝ) := by
+  have hlambdaQ := cert.mixQ_nonneg i
+  have hlambdaQ' := cert.mixQ_le_one i
+  have hlambda : (0 : ℝ) ≤ (cert.mixQ i : ℝ) := by exact_mod_cast hlambdaQ
+  have h1lambda : (0 : ℝ) ≤ 1 - (cert.mixQ i : ℝ) := by
+    exact sub_nonneg.mpr (by exact_mod_cast hlambdaQ')
+  rw [cert.approxEdge_eq]
+  have hrearrange :
+      cert.exactEdge i -
+          ((cert.mixQ i : ℝ) •
+              (toR3 (rationalVertex (cert.edgeStart i)) -
+                toR3 (rationalVertex (cert.edgeFinish i))) +
+            (1 - (cert.mixQ i : ℝ)) •
+              (toR3 (rationalVertex (cert.edgeStart₂ i)) -
+                toR3 (rationalVertex (cert.edgeFinish₂ i)))) =
+        (cert.mixQ i : ℝ) •
+            ((exactVertex (cert.edgeStart i) -
+                toR3 (rationalVertex (cert.edgeStart i))) -
+              (exactVertex (cert.edgeFinish i) -
+                toR3 (rationalVertex (cert.edgeFinish i)))) +
+          (1 - (cert.mixQ i : ℝ)) •
+            ((exactVertex (cert.edgeStart₂ i) -
+                toR3 (rationalVertex (cert.edgeStart₂ i))) -
+              (exactVertex (cert.edgeFinish₂ i) -
+                toR3 (rationalVertex (cert.edgeFinish₂ i)))) := by
+    unfold AxisCertificate.exactEdge
+    simp only [smul_sub]
+    abel
+  rw [hrearrange]
+  have hfirst :
+      ‖(exactVertex (cert.edgeStart i) -
+            toR3 (rationalVertex (cert.edgeStart i))) -
+          (exactVertex (cert.edgeFinish i) -
+            toR3 (rationalVertex (cert.edgeFinish i)))‖ ≤
+        2 * (tightVertexErrorQ : ℝ) := by
+    calc
+      _ ≤ ‖exactVertex (cert.edgeStart i) -
+            toR3 (rationalVertex (cert.edgeStart i))‖ +
+          ‖exactVertex (cert.edgeFinish i) -
+            toR3 (rationalVertex (cert.edgeFinish i))‖ := norm_sub_le _ _
+      _ ≤ (tightVertexErrorQ : ℝ) + (tightVertexErrorQ : ℝ) := add_le_add
+        (vertex_close_tight (cert.edgeStart i))
+        (vertex_close_tight (cert.edgeFinish i))
+      _ = 2 * (tightVertexErrorQ : ℝ) := by ring
+  have hsecond :
+      ‖(exactVertex (cert.edgeStart₂ i) -
+            toR3 (rationalVertex (cert.edgeStart₂ i))) -
+          (exactVertex (cert.edgeFinish₂ i) -
+            toR3 (rationalVertex (cert.edgeFinish₂ i)))‖ ≤
+        2 * (tightVertexErrorQ : ℝ) := by
+    calc
+      _ ≤ ‖exactVertex (cert.edgeStart₂ i) -
+            toR3 (rationalVertex (cert.edgeStart₂ i))‖ +
+          ‖exactVertex (cert.edgeFinish₂ i) -
+            toR3 (rationalVertex (cert.edgeFinish₂ i))‖ := norm_sub_le _ _
+      _ ≤ (tightVertexErrorQ : ℝ) + (tightVertexErrorQ : ℝ) := add_le_add
+        (vertex_close_tight (cert.edgeStart₂ i))
+        (vertex_close_tight (cert.edgeFinish₂ i))
+      _ = 2 * (tightVertexErrorQ : ℝ) := by ring
+  calc
+    _ ≤ ‖(cert.mixQ i : ℝ) •
+          ((exactVertex (cert.edgeStart i) -
+              toR3 (rationalVertex (cert.edgeStart i))) -
+            (exactVertex (cert.edgeFinish i) -
+              toR3 (rationalVertex (cert.edgeFinish i))))‖ +
+        ‖(1 - (cert.mixQ i : ℝ)) •
+          ((exactVertex (cert.edgeStart₂ i) -
+              toR3 (rationalVertex (cert.edgeStart₂ i))) -
+            (exactVertex (cert.edgeFinish₂ i) -
+              toR3 (rationalVertex (cert.edgeFinish₂ i))))‖ := norm_add_le _ _
+    _ = (cert.mixQ i : ℝ) * _ + (1 - (cert.mixQ i : ℝ)) * _ := by
+      rw [norm_smul, norm_smul, Real.norm_eq_abs, Real.norm_eq_abs,
+        abs_of_nonneg hlambda, abs_of_nonneg h1lambda]
+    _ ≤ (cert.mixQ i : ℝ) * (2 * (tightVertexErrorQ : ℝ)) +
+        (1 - (cert.mixQ i : ℝ)) * (2 * (tightVertexErrorQ : ℝ)) :=
+      add_le_add (mul_le_mul_of_nonneg_left hfirst hlambda)
+        (mul_le_mul_of_nonneg_left hsecond h1lambda)
+    _ = 2 * (tightVertexErrorQ : ℝ) := by ring
+
 theorem AxisCertificate.exactSelectedVertex_norm_le_one (box : Box)
     (cert : AxisCertificate) (i : Fin 3) :
     ‖cert.exactSelectedVertex box i‖ ≤ 1 :=
@@ -616,6 +701,65 @@ theorem AxisCertificate.exactDelta_sub_approx_norm_le (box : Box)
       (exactApproximation.approx k)
       (exactApproximation.approx (cert.supportIndex box i))
     _ = 2 * RationalApprox.κ := by ring
+
+theorem AxisCertificate.exactDelta_sub_approx_tight_norm_le (box : Box)
+    (cert : AxisCertificate) (i : Fin 3) (k : VertexIndex) :
+    ‖cert.exactDelta box i k - cert.approxDelta box i k‖ ≤
+      2 * (tightVertexErrorQ : ℝ) := by
+  rw [cert.approxDelta_eq]
+  have hrearrange : cert.exactDelta box i k -
+        (toR3 (rationalVertex k) -
+          toR3 (rationalVertex (cert.supportIndex box i))) =
+      (exactVertex k - toR3 (rationalVertex k)) -
+        (exactVertex (cert.supportIndex box i) -
+          toR3 (rationalVertex (cert.supportIndex box i))) := by
+    unfold AxisCertificate.exactDelta AxisCertificate.exactSelectedVertex
+    abel
+  rw [hrearrange]
+  calc
+    _ ≤ ‖exactVertex k - toR3 (rationalVertex k)‖ +
+        ‖exactVertex (cert.supportIndex box i) -
+          toR3 (rationalVertex (cert.supportIndex box i))‖ := norm_sub_le _ _
+    _ ≤ (tightVertexErrorQ : ℝ) + (tightVertexErrorQ : ℝ) := add_le_add
+      (vertex_close_tight k)
+      (vertex_close_tight (cert.supportIndex box i))
+    _ = 2 * (tightVertexErrorQ : ℝ) := by ring
+
+theorem AxisCertificate.supportCross_tight_error (box : Box)
+    (cert : AxisCertificate) (i : Fin 3) (k : VertexIndex) :
+    ‖cross3 (cert.exactEdge i) (cert.exactDelta box i k) -
+        cross3 (cert.approxEdge i) (cert.approxDelta box i k)‖ ≤
+      10 * (tightVertexErrorQ : ℝ) := by
+  have hdecomp :
+      cross3 (cert.exactEdge i) (cert.exactDelta box i k) -
+          cross3 (cert.approxEdge i) (cert.approxDelta box i k) =
+        cross3 (cert.exactEdge i - cert.approxEdge i)
+            (cert.exactDelta box i k) +
+          cross3 (cert.approxEdge i)
+            (cert.exactDelta box i k - cert.approxDelta box i k) := by
+    ext coordinate
+    fin_cases coordinate <;> simp [cross3, cross_apply] <;> ring
+  rw [hdecomp]
+  calc
+    _ ≤ ‖cross3 (cert.exactEdge i - cert.approxEdge i)
+          (cert.exactDelta box i k)‖ +
+        ‖cross3 (cert.approxEdge i)
+          (cert.exactDelta box i k - cert.approxDelta box i k)‖ :=
+      norm_add_le _ _
+    _ ≤ (2 * (tightVertexErrorQ : ℝ)) * 2 +
+        (2 * (1 + RationalApprox.κ)) *
+          (2 * (tightVertexErrorQ : ℝ)) := by
+      exact add_le_add
+        ((cross3_norm_le _ _).trans (mul_le_mul
+          (cert.exactEdge_sub_approx_tight_norm_le i)
+          (cert.exactDelta_norm_le_two box i k) (norm_nonneg _)
+          (by norm_num [tightVertexErrorQ])))
+        ((cross3_norm_le _ _).trans (mul_le_mul
+          (cert.approxEdge_norm_le i)
+          (cert.exactDelta_sub_approx_tight_norm_le box i k) (norm_nonneg _)
+          (by norm_num [RationalApprox.κ, tightVertexErrorQ])))
+    _ ≤ 10 * (tightVertexErrorQ : ℝ) := by
+      norm_num [RationalApprox.κ, tightVertexErrorQ]
 
 theorem AxisCertificate.supportCross_error (box : Box)
     (cert : AxisCertificate) (i : Fin 3) (k : VertexIndex) :
@@ -714,14 +858,14 @@ theorem AxisCertificate.exactSupport_sub_approx_abs_le (box : Box)
         ‖cross3 (cert.exactEdge i) (cert.exactDelta box i k) -
           cross3 (cert.approxEdge i) (cert.approxDelta box i k)‖ :=
       abs_real_inner_le_norm _ _
-    _ ≤ 10 * RationalApprox.κ := by
-      exact (mul_le_mul_of_nonneg_left (cert.supportCross_error box i k)
+    _ ≤ 10 * (tightVertexErrorQ : ℝ) := by
+      exact (mul_le_mul_of_nonneg_left (cert.supportCross_tight_error box i k)
         (norm_nonneg _)).trans
           (mul_le_of_le_one_left
-            (by norm_num [RationalApprox.κ])
+            (by norm_num [tightVertexErrorQ])
             (normalizedView3_norm_le_one box p hscale))
     _ = (supportError : ℝ) := by
-      norm_num [supportError, RationalApprox.κ, RationalApprox.κℚ]
+      norm_num [supportError, tightVertexErrorQ]
 
 theorem Box.exactSupport_eq_zero_of_tie (box : Box) {p : AtlasPose ℝ}
     (j : Fin 4) (i : Fin 3) (k : VertexIndex)
@@ -875,6 +1019,41 @@ theorem AxisCertificate.crossEdge_error (cert : AxisCertificate)
     _ ≤ 10 * RationalApprox.κ := by
       norm_num [RationalApprox.κ]
 
+theorem AxisCertificate.crossEdge_tight_error (cert : AxisCertificate)
+    (i j : Fin 3) :
+    ‖cross3 (cert.exactEdge i) (cert.exactEdge j) -
+        cross3 (cert.approxEdge i) (cert.approxEdge j)‖ ≤
+      10 * (tightVertexErrorQ : ℝ) := by
+  have hdecomp :
+      cross3 (cert.exactEdge i) (cert.exactEdge j) -
+          cross3 (cert.approxEdge i) (cert.approxEdge j) =
+        cross3 (cert.exactEdge i - cert.approxEdge i)
+            (cert.exactEdge j) +
+          cross3 (cert.approxEdge i)
+            (cert.exactEdge j - cert.approxEdge j) := by
+    ext coordinate
+    fin_cases coordinate <;> simp [cross3, cross_apply] <;> ring
+  rw [hdecomp]
+  calc
+    _ ≤ ‖cross3 (cert.exactEdge i - cert.approxEdge i)
+          (cert.exactEdge j)‖ +
+        ‖cross3 (cert.approxEdge i)
+          (cert.exactEdge j - cert.approxEdge j)‖ := norm_add_le _ _
+    _ ≤ (2 * (tightVertexErrorQ : ℝ)) * 2 +
+        (2 * (1 + RationalApprox.κ)) *
+          (2 * (tightVertexErrorQ : ℝ)) := by
+      exact add_le_add
+        ((cross3_norm_le _ _).trans (mul_le_mul
+          (cert.exactEdge_sub_approx_tight_norm_le i)
+          (cert.exactEdge_norm_le_two j) (norm_nonneg _)
+          (by norm_num [tightVertexErrorQ])))
+        ((cross3_norm_le _ _).trans (mul_le_mul
+          (cert.approxEdge_norm_le i)
+          (cert.exactEdge_sub_approx_tight_norm_le j) (norm_nonneg _)
+          (by norm_num [RationalApprox.κ, tightVertexErrorQ])))
+    _ ≤ 10 * (tightVertexErrorQ : ℝ) := by
+      norm_num [RationalApprox.κ, tightVertexErrorQ]
+
 theorem AxisCertificate.exactWeight_sub_approx_abs_le (box : Box)
     (cert : AxisCertificate) {p : AtlasPose ℝ}
     (hscale : 1 ≤ viewScale box.root p) (i : Fin 3) :
@@ -896,6 +1075,28 @@ theorem AxisCertificate.exactWeight_sub_approx_abs_le (box : Box)
         (norm_nonneg _)).trans
           (mul_le_of_le_one_left
             (by norm_num [RationalApprox.κ]) hn))
+
+theorem AxisCertificate.exactWeight_sub_approx_tight_abs_le (box : Box)
+    (cert : AxisCertificate) {p : AtlasPose ℝ}
+    (hscale : 1 ≤ viewScale box.root p) (i : Fin 3) :
+    |cert.exactWeight box p i - cert.approxWeight
+        (AtlasProjectiveView.normalizedView box.root p) i| ≤
+      10 * (tightVertexErrorQ : ℝ) := by
+  have hn := normalizedView3_norm_le_one box p hscale
+  fin_cases i
+  all_goals
+    simp [AxisCertificate.exactWeight, weight,
+      AxisCertificate.approxWeight]
+    rw [linearValue_eq_inner_toLp, linearValue_cast_eq_inner_toR3]
+    change |⟪normalizedView3 box p, _⟫ -
+      ⟪normalizedView3 box p, toR3 (cert.weightCoefficient _)⟫| ≤ _
+    rw [cert.approxWeightVector_eq]
+    rw [← inner_sub_right]
+    exact (abs_real_inner_le_norm _ _).trans
+      ((mul_le_mul_of_nonneg_left (cert.crossEdge_tight_error _ _)
+        (norm_nonneg _)).trans
+          (mul_le_of_le_one_left
+            (by norm_num [tightVertexErrorQ]) hn))
 
 theorem Box.weightAt_cast (box : Box) (j : Fin 4)
     (corner : Fin 3) (i : Fin 3) :
@@ -922,11 +1123,12 @@ theorem Box.weightLower_le_exact (box : Box)
       (box.certificate j).approxWeight (toReal box.triangle corner) i
     rw [← box.weightAt_cast j corner i]
     exact_mod_cast min3_le (fun c => box.weightAt j c i) corner
-  have herr := (box.certificate j).exactWeight_sub_approx_abs_le
+  have herr := (box.certificate j).exactWeight_sub_approx_tight_abs_le
     box hscale i
   rw [abs_le] at herr
-  have herrorEq : (10 * RationalApprox.κ : ℝ) = (supportError : ℝ) := by
-    norm_num [supportError, RationalApprox.κ, RationalApprox.κℚ]
+  have herrorEq : (10 * (tightVertexErrorQ : ℝ)) =
+      (supportError : ℝ) := by
+    norm_num [supportError, tightVertexErrorQ]
   simp only [Box.weightLower]
   push_cast
   rw [herrorEq] at herr
@@ -951,11 +1153,12 @@ theorem Box.exactWeight_le_upper (box : Box)
       (toReal box.triangle corner) i ≤ _
     rw [← box.weightAt_cast j corner i]
     exact_mod_cast le_max3 (fun c => box.weightAt j c i) corner
-  have herr := (box.certificate j).exactWeight_sub_approx_abs_le
+  have herr := (box.certificate j).exactWeight_sub_approx_tight_abs_le
     box hscale i
   rw [abs_le] at herr
-  have herrorEq : (10 * RationalApprox.κ : ℝ) = (supportError : ℝ) := by
-    norm_num [supportError, RationalApprox.κ, RationalApprox.κℚ]
+  have herrorEq : (10 * (tightVertexErrorQ : ℝ)) =
+      (supportError : ℝ) := by
+    norm_num [supportError, tightVertexErrorQ]
   simp only [Box.weightUpper]
   push_cast
   rw [herrorEq] at herr
