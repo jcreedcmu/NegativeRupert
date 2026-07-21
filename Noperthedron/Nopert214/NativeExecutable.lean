@@ -37,17 +37,29 @@ def checkLocal (label : String) (taskCount : Nat)
   let chunkSize := table.size / taskCount + 1
   let tasks := sparseTableTasks table taskCount
   let total := tasks.length
-  for (task, index) in tasks.zipIdx do
-    unless task.get do
+  let progressEvery := max 1 (total / 16)
+  let mut pending := tasks.zipIdx.map fun (task, index) =>
+    task.map (sync := true) fun valid => (index, valid)
+  let mut completed := 0
+  let mut checkedRows := 0
+  while h : 0 < pending.length do
+    let ((index, valid), remaining) ← IO.waitAny' pending h
+    pending := remaining
+    unless valid do
       let first := index * chunkSize
       let afterLast := min table.size (first + chunkSize)
       throw (IO.userError (s!"local table {label} is invalid in rows " ++
         s!"[{first}, {afterLast})"))
-    let completed := index + 1
-    if completed % 4 = 0 || completed = total then
-      let checkedRows := min table.size (completed * chunkSize)
+    let first := index * chunkSize
+    let rowCount := if first < table.size then
+      min chunkSize (table.size - first)
+    else 0
+    completed := completed + 1
+    checkedRows := checkedRows + rowCount
+    if completed % progressEvery = 0 || completed = total then
       let now ← IO.monoNanosNow
-      log (s!"local {label}: {checkedRows}/{table.size} rows joined " ++
+      log (s!"local {label}: {checkedRows}/{table.size} rows checked " ++
+        s!"in {completed}/{total} completed tasks " ++
         s!"({(now - start) / 1000000} ms)")
   if h : sparseTableValidWithTasksB table taskCount tasks = true then
     let finish ← IO.monoNanosNow
@@ -86,17 +98,29 @@ def checkGlobal (label : String) (taskCount : Nat)
   let chunkSize := table.size / taskCount + 1
   let tasks := AtlasProjectiveSolutionTree.tableCoreTasks table taskCount
   let total := tasks.length
-  for (task, index) in tasks.zipIdx do
-    unless task.get do
+  let progressEvery := max 1 (total / 16)
+  let mut pending := tasks.zipIdx.map fun (task, index) =>
+    task.map (sync := true) fun valid => (index, valid)
+  let mut completed := 0
+  let mut checkedRows := 0
+  while h : 0 < pending.length do
+    let ((index, valid), remaining) ← IO.waitAny' pending h
+    pending := remaining
+    unless valid do
       let first := index * chunkSize
       let afterLast := min table.size (first + chunkSize)
       throw (IO.userError (s!"chart {label} is invalid in rows " ++
         s!"[{first}, {afterLast})"))
-    let completed := index + 1
-    if completed % 4 = 0 || completed = total then
-      let checkedRows := min table.size (completed * chunkSize)
+    let first := index * chunkSize
+    let rowCount := if first < table.size then
+      min chunkSize (table.size - first)
+    else 0
+    completed := completed + 1
+    checkedRows := checkedRows + rowCount
+    if completed % progressEvery = 0 || completed = total then
       let now ← IO.monoNanosNow
-      log (s!"chart {label}: {checkedRows}/{table.size} rows joined " ++
+      log (s!"chart {label}: {checkedRows}/{table.size} rows checked " ++
+        s!"in {completed}/{total} completed tasks " ++
         s!"({(now - start) / 1000000} ms)")
   if h : AtlasProjectiveSolutionTree.tableCoreValidWithTasksB
       table taskCount tasks = true then
