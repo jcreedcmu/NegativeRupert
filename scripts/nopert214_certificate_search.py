@@ -3151,12 +3151,208 @@ def explore_atlas_projective_tree(max_nodes=10_000, max_view_depth=5,
     return counts
 
 
+def atlas_projective_state_action(task):
+    """Classify one global-tree state without allocating child row IDs."""
+    (chart, center, widths, root, triangle, view_depth, shared_index,
+     inherited_global_candidates, max_view_depth,
+     min_relative_half_width, restricted_fundamental_root,
+     chart0_origin_tube_radii) = task
+    count_deltas = {"exact_rejections": 0,
+                    "global_audit8": 0, "global_audit64": 0}
+
+    def answer(kind, **fields):
+        return {"action": kind, "count_deltas": count_deltas, **fields}
+
+    if (chart == 0 and chart0_origin_tube_radii is not None and
+            shared_index is None):
+        return answer("view_split", assign_shared=True, inherited=None)
+    if interval_outside_cayley_ball(center, widths):
+        return answer("terminal", row_kind="radius", extra={})
+    if restricted_fundamental_root and chart != 3:
+        fundamental_status = "inside"
+        fundamental_direction = None
+    else:
+        fundamental_status, fundamental_direction, _ = \
+            atlas_fundamental_status(chart, center, widths)
+        if fundamental_status == "outside":
+            return answer("terminal", row_kind="fundamental_prune",
+                          extra={"direction": fundamental_direction})
+    if (chart == 0 and chart0_origin_tube_radii is not None and
+            shared_index is not None):
+        chart0_origin_tube_radius = chart0_origin_tube_radii[shared_index]
+        mismatch_radius = atlas_projective_mismatch_radius(
+            chart, 0, center, widths)[0]
+        if mismatch_radius <= chart0_origin_tube_radius:
+            return answer("terminal", row_kind="symmetry_tube", extra={
+                "symmetry_index": 0,
+                "radius": chart0_origin_tube_radius,
+                "shared_index": shared_index})
+        if all(abs(value) <= width
+               for value, width in zip(center, widths)):
+            widest = max(range(3), key=lambda i: widths[i])
+            return answer("relative_split", coordinate=widest,
+                          inherited=None, prioritize_origin=True)
+
+    fundamental_coordinates = (2,) if chart in (0, 3) else (0, 1)
+    fundamental_widest = max(
+        fundamental_coordinates, key=lambda i: widths[i])
+    fundamental_cutoff = (min_relative_half_width
+                          if chart in (0, 3) else
+                          Q(1, 128) if chart == 1 else Q(1, 64))
+    if (fundamental_status == "boundary" and
+            widths[fundamental_widest] > fundamental_cutoff):
+        return answer("relative_split", coordinate=fundamental_widest,
+                      inherited=None, prioritize_origin=False)
+
+    edge_float = atlas_simplex_float_screen(
+        chart, center, widths, triangle)
+    global_float = None
+    if (edge_float["minimum_strict_support_lower"] > 1e-8 and
+            edge_float["lower_bound"] > 1e-8):
+        exact = atlas_simplex_edge_smoke(
+            chart, center, widths, triangle, edge_float["cycle"],
+            edge_float["inner_indices"])
+        if exact is not None and exact["accepted"]:
+            return answer("terminal", row_kind="edge", extra={
+                "certificate": {
+                    "cycle": exact["cycle"],
+                    "contacts": exact["contacts"],
+                    "ball_multipliers": exact["ball_multipliers"]}})
+        count_deltas["exact_rejections"] += 1
+
+    global_float = atlas_projective_global_float_screen(
+        chart, center, widths, triangle, candidate_limit=1,
+        candidates=inherited_global_candidates)
+    if (view_depth >= 2 and
+            (global_float is None or
+             global_float["lower_bound"] <= 1e-8)):
+        count_deltas["global_audit8"] += 1
+        global_float = atlas_projective_global_float_screen(
+            chart, center, widths, triangle, candidate_limit=8,
+            candidates=None if global_float is None else
+                global_float["candidates"])
+    if (view_depth >= 2 and
+            (global_float is None or
+             global_float["lower_bound"] <= 1e-8)):
+        count_deltas["global_audit64"] += 1
+        global_float = atlas_projective_global_float_screen(
+            chart, center, widths, triangle, candidate_limit=64,
+            candidates=None if global_float is None else
+                global_float["candidates"])
+    if (global_float is not None and
+            global_float["lower_bound"] > 1e-8):
+        exact = atlas_projective_global_triangle(
+            chart, center, widths, root, triangle,
+            selected_candidate=global_float["candidate"])
+        if exact is not None and exact["accepted"]:
+            axis = exact["certificate"]
+            axis_keys = ("edge_start", "edge_finish",
+                         "edge_start2", "edge_finish2", "mix",
+                         "support_index", "nonzero_witness", "B")
+            return answer("terminal", row_kind="global", extra={
+                "certificate": {
+                    "axis": {key: axis[key] for key in axis_keys},
+                    "inner_index": exact["inner_index"],
+                    "ball_multiplier": exact["ball_multiplier"]}})
+        count_deltas["exact_rejections"] += 1
+
+    center_requires_view = False
+    center_view_depth = min(max_view_depth, 8)
+    if view_depth < center_view_depth:
+        center_edge = atlas_simplex_float_screen(
+            chart, center, (Q(0), Q(0), Q(0)), triangle,
+            cycle=edge_float["cycle"])
+        center_requires_view = center_edge["lower_bound"] <= 1e-8
+        if center_requires_view:
+            center_global = atlas_projective_global_float_screen(
+                chart, center, (Q(0), Q(0), Q(0)), triangle,
+                candidate_limit=64,
+                candidates=None if global_float is None else
+                    global_float["candidates"])
+            center_requires_view = (center_global is None or
+                center_global["lower_bound"] <= 1e-8)
+
+    support_transition = \
+        edge_float["minimum_strict_support_lower"] <= 0
+    widest = max(range(3), key=lambda i: widths[i])
+    local_refinement = False
+    if view_depth >= center_view_depth and max(widths) <= Q(1, 1024):
+        mismatch_candidates = sorted(
+            (atlas_projective_mismatch_radius(
+                chart, symmetry_index, center, widths)[0], symmetry_index)
+            for symmetry_index in range(5))
+        mismatch_radius, symmetry_index = mismatch_candidates[0]
+        if mismatch_radius < Q(1, 20):
+            if max(widths) <= Q(1, 2048):
+                local = atlas_projective_local_triangle(
+                    chart, center, widths, root, triangle,
+                    symmetry_index, cone_samples=4, trials=10_000)
+                if local is None:
+                    local = atlas_projective_local_triangle(
+                        chart, center, widths, root, triangle,
+                        symmetry_index, cone_samples=5, trials=50_000)
+                if local is not None and local["accepted"]:
+                    return answer("terminal", row_kind="local", extra={
+                        "certificate": {
+                            "symmetry_index": symmetry_index,
+                            "certificates": local["certificates"],
+                            "c": local["c"], "delta": local["delta"],
+                            "r": local["r"]}})
+            local_refinement = widths[widest] > Q(1, 4096)
+    use_fine_relative_split = (global_float is not None and
+        global_float["lower_bound"] > -2e-3)
+    relative_split = (local_refinement or (not support_transition and
+        not center_requires_view and
+        (widths[widest] > max(min_relative_half_width, Q(1, 256)) or
+         (widths[widest] > min_relative_half_width and
+          use_fine_relative_split))))
+    inherited = None if global_float is None else global_float["candidates"]
+    if relative_split:
+        return answer("relative_split", coordinate=widest,
+                      inherited=inherited, prioritize_origin=False)
+    if view_depth < max_view_depth:
+        return answer("view_split", assign_shared=False,
+                      inherited=inherited)
+    if widths[widest] > min_relative_half_width:
+        return answer("relative_split", coordinate=widest,
+                      inherited=None, prioritize_origin=False)
+
+    mismatch_candidates = sorted(
+        (atlas_projective_mismatch_radius(
+            chart, symmetry_index, center, widths)[0], symmetry_index)
+        for symmetry_index in range(5))
+    mismatch_radius, symmetry_index = mismatch_candidates[0]
+    local_refinement_limit = Q(1, 4096)
+    if (mismatch_radius < Q(1, 20) and
+            widths[widest] > local_refinement_limit):
+        return answer("relative_split", coordinate=widest,
+                      inherited=None, prioritize_origin=False)
+    if mismatch_radius < Q(1, 20):
+        local = atlas_projective_local_triangle(
+            chart, center, widths, root, triangle, symmetry_index,
+            cone_samples=5, trials=500_000)
+        if local is not None and local["accepted"]:
+            return answer("terminal", row_kind="local", extra={
+                "certificate": {
+                    "symmetry_index": symmetry_index,
+                    "certificates": local["certificates"],
+                    "c": local["c"], "delta": local["delta"],
+                    "r": local["r"]}})
+    return answer("failure", extra={
+        "shared_index": shared_index,
+        "edge_lower": edge_float["lower_bound"],
+        "global_lower": None if global_float is None else
+            global_float["lower_bound"],
+        "nearest_symmetry": symmetry_index,
+        "mismatch_radius": mismatch_radius})
+
+
 def generate_atlas_projective_table(
         chart, max_nodes=200_000, max_view_depth=12,
         min_relative_half_width=Q(1, 1024), checkpoint_path=None,
         checkpoint_every=1000, resume=False,
         restricted_fundamental_root=False,
-        chart0_origin_tube_radii=None):
+        chart0_origin_tube_radii=None, workers=0):
     """Generate one exact chart table for the formal projective checker."""
     lock = None
     if checkpoint_path is not None:
@@ -3281,6 +3477,113 @@ def generate_atlas_projective_table(
             "failures": len(failures),
             "counts": counts,
         }), flush=True)
+
+    if workers < 0:
+        raise ValueError("workers must be nonnegative")
+    if workers:
+        pool = (None if workers == 1 else
+                multiprocessing.get_context("fork").Pool(workers))
+
+        def apply_action(state, action):
+            (row_id, center, widths, root, triangle, view_depth,
+             shared_index, _) = state
+            common = {"id": row_id, "center": center, "widths": widths,
+                      "root": root, "triangle": triangle,
+                      "view_depth": view_depth}
+            for key, amount in action["count_deltas"].items():
+                counts[key] += amount
+            action_kind = action["action"]
+            if action_kind == "terminal":
+                row_kind = action["row_kind"]
+                rows[row_id] = {**common, "kind": row_kind,
+                                **action["extra"]}
+                counts[row_kind] += 1
+                return
+            if action_kind == "failure":
+                failures.append({**common, **action["extra"]})
+                return
+            if action_kind == "view_split":
+                children = allocate(4)
+                rows[row_id] = {**common, "kind": "view_split",
+                                "children": children}
+                counts["view_split"] += 1
+                for child_index, (child, child_triangle) in enumerate(zip(
+                        children, split_projective_triangle(triangle))):
+                    child_shared_index = (child_index
+                        if action["assign_shared"] else shared_index)
+                    stack.append((
+                        child, center, widths, root, child_triangle,
+                        view_depth+1, child_shared_index,
+                        action["inherited"]))
+                return
+            if action_kind != "relative_split":
+                raise AssertionError(f"unknown state action {action_kind}")
+            coordinate = action["coordinate"]
+            children = allocate(2)
+            rows[row_id] = {**common, "kind": "relative_split",
+                            "coordinate": coordinate+2,
+                            "children": children}
+            counts["relative_split"] += 1
+            child_widths = list(widths)
+            child_widths[coordinate] /= 2
+            child_states = []
+            for direction, child in zip((-1, 1), children):
+                child_center = list(center)
+                child_center[coordinate] += \
+                    direction*child_widths[coordinate]
+                child_states.append((
+                    child, tuple(child_center), tuple(child_widths), root,
+                    triangle, view_depth, shared_index,
+                    action["inherited"]))
+            if action["prioritize_origin"]:
+                child_states.sort(key=lambda child_state: all(
+                    abs(value) <= width for value, width in
+                    zip(child_state[1], child_state[2])))
+            stack.extend(child_states)
+
+        processed_since_checkpoint = 0
+        try:
+            while (stack and len(rows) < max_nodes and not failures):
+                remaining = max_nodes-len(rows)
+                batch_size = min(
+                    workers, len(stack), max(1, (remaining+3)//4))
+                batch = [stack.pop() for _ in range(batch_size)]
+                tasks = [(
+                    chart, center, widths, root, triangle, view_depth,
+                    shared_index, inherited_global_candidates,
+                    max_view_depth, min_relative_half_width,
+                    restricted_fundamental_root,
+                    chart0_origin_tube_radii)
+                    for (_, center, widths, root, triangle, view_depth,
+                         shared_index, inherited_global_candidates) in batch]
+                actions = ([atlas_projective_state_action(task)
+                            for task in tasks] if pool is None else
+                           pool.map(atlas_projective_state_action, tasks))
+                for state, action in zip(batch, actions):
+                    apply_action(state, action)
+                    processed_since_checkpoint += 1
+                if (checkpoint_every and processed_since_checkpoint >=
+                        checkpoint_every):
+                    checkpoint(False)
+                    processed_since_checkpoint = 0
+        except BaseException:
+            if pool is not None:
+                pool.terminate()
+            raise
+        else:
+            if pool is not None:
+                pool.close()
+        finally:
+            if pool is not None:
+                pool.join()
+        complete = (not stack and not failures and
+                    all(row is not None for row in rows))
+        checkpoint(complete)
+        if lock is not None:
+            lock.close()
+        return {"complete": complete, "chart": chart, "rows": rows,
+                "pending": stack, "counts": counts,
+                "failures": failures}
 
     while stack and len(rows) < max_nodes:
         state = stack.pop()
@@ -4378,6 +4681,9 @@ def main():
                                       default=1000)
     generate_atlas_table.add_argument("--resume", action="store_true")
     generate_atlas_table.add_argument(
+        "--workers", type=int, default=0,
+        help="parallel state-search processes (0 uses the legacy loop)")
+    generate_atlas_table.add_argument(
         "--restricted-fundamental-root", action="store_true",
         help="search the chart-specific rational superset of the exact "
              "fivefold Dirichlet cell")
@@ -4538,7 +4844,7 @@ def main():
             Q(args.min_relative_half_width), args.output,
             args.checkpoint_every, args.resume,
             args.restricted_fundamental_root,
-            chart0_origin_tube_radii)
+            chart0_origin_tube_radii, args.workers)
         print(json.dumps({"complete": result["complete"],
                           "chart": result["chart"],
                           "row_count": len(result["rows"]),
