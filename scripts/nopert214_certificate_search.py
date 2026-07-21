@@ -3171,7 +3171,8 @@ def atlas_projective_state_action(task):
      min_relative_half_width, restricted_fundamental_root,
      chart0_origin_tube_radii) = task
     count_deltas = {"exact_rejections": 0,
-                    "global_audit8": 0, "global_audit64": 0}
+                    "global_audit8": 0, "global_audit64": 0,
+                    "global_cone5": 0}
 
     def answer(kind, **fields):
         return {"action": kind, "count_deltas": count_deltas, **fields}
@@ -3252,6 +3253,17 @@ def atlas_projective_state_action(task):
             chart, center, widths, triangle, candidate_limit=64,
             candidates=None if global_float is None else
                 global_float["candidates"])
+    if (view_depth >= 8 and max(widths) <= Q(1, 256) and
+            (global_float is None or
+             global_float["lower_bound"] <= 1e-8)):
+        # A four-sample normal cone can miss a robust mixed silhouette edge
+        # in a narrow transition band.  Generating the larger pool globally
+        # is expensive, but on capped cells its top-ranked candidate often
+        # closes the entire box with orders of magnitude more margin.
+        count_deltas["global_cone5"] += 1
+        global_float = atlas_projective_global_float_screen(
+            chart, center, widths, triangle, cone_samples=5,
+            candidate_limit=8, candidates=None)
     if (global_float is not None and
             global_float["lower_bound"] > 1e-8):
         exact = atlas_projective_global_triangle(
@@ -3439,6 +3451,7 @@ def generate_atlas_projective_table(
         counts.setdefault("fundamental_prune", 0)
         counts.setdefault("global_audit8", 0)
         counts.setdefault("global_audit64", 0)
+        counts.setdefault("global_cone5", 0)
         failures = []
     else:
         rows = [None]
@@ -3459,7 +3472,7 @@ def generate_atlas_projective_table(
                   "edge": 0, "global": 0, "local": 0, "radius": 0,
                   "fundamental_prune": 0, "symmetry_tube": 0,
                   "exact_rejections": 0, "global_audit8": 0,
-                  "global_audit64": 0}
+                  "global_audit64": 0, "global_cone5": 0}
         failures = []
 
     def allocate(count):
@@ -3756,6 +3769,13 @@ def generate_atlas_projective_table(
                 chart, center, widths, triangle, candidate_limit=64,
                 candidates=None if global_float is None else
                     global_float["candidates"])
+        if (view_depth >= 8 and max(widths) <= Q(1, 256) and
+                (global_float is None or
+                 global_float["lower_bound"] <= 1e-8)):
+            counts["global_cone5"] += 1
+            global_float = atlas_projective_global_float_screen(
+                chart, center, widths, triangle, cone_samples=5,
+                candidate_limit=8, candidates=None)
         if (global_float is not None and
                 global_float["lower_bound"] > 1e-8):
             exact = atlas_projective_global_triangle(
