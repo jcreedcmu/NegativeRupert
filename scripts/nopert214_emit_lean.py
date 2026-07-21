@@ -290,6 +290,16 @@ end
 """
 
 
+def native_table_validity(shared):
+    shared_proof = (
+        "exact GeneratedLocalViews.tables_valid_native" if shared else
+        "intro index\n    fin_cases index <;> trivial")
+    return f"""theorem table_valid_native : table.Valid := by
+  refine ⟨by decide, ?_, by native_decide, by native_decide, ?_⟩
+  · native_decide
+  · {shared_proof}"""
+
+
 def emit_function_lookup(output, name, type_name, rendered_values,
                          chunk_size, default):
     """Emit a kernel-reducible chunked `Nat → type_name` lookup.
@@ -590,8 +600,8 @@ def main():
                          "(Array AtlasProjectiveSolutionTree.Row) := #[")
             output.write(", ".join(chunk_names))
             output.write("]\n")
-        validity = ("theorem table_valid_native : table.Valid := by "
-                    "native_decide" if args.unchecked_prefix is None else "")
+        validity = (native_table_validity(args.shared_local_view)
+                    if args.unchecked_prefix is None else "")
         audit = ""
         if args.audit_first_local:
             first_local = next(
@@ -623,7 +633,7 @@ theorem first_local_valid_kernel :
   size := {len(rows)}
 {shared_field}
 
-theorem table_valid_native : table.Valid := by native_decide
+{native_table_validity(args.shared_local_view)}
 
 {kernel_range_validity(chart, rows, args.kernel_range_size, shared,
                        shared_valid_proof)}

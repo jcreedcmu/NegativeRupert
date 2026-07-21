@@ -3586,6 +3586,7 @@ def generate_atlas_projective_table(
                     counts["local"] += 1
                     continue
             failures.append({**common,
+                "shared_index": shared_index,
                 "edge_lower": edge_float["lower_bound"],
                 "global_lower": None if global_float is None else
                     global_float["lower_bound"],
