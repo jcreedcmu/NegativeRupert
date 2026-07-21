@@ -428,6 +428,8 @@ def main():
                         help="number of interned intervals per Lean definition")
     parser.add_argument("--unchecked-prefix", type=int)
     parser.add_argument("--audit-first-local", action="store_true")
+    parser.add_argument("--data-only", action="store_true",
+                        help="emit the table data without validity theorems")
     parser.add_argument("--kernel-friendly", action="store_true",
                         help="emit equation-function data and chunked kernel proofs")
     parser.add_argument("--kernel-range-size", type=int, default=32,
@@ -442,6 +444,9 @@ def main():
     parser.add_argument("--namespace",
                         help="override the generated chart namespace")
     args = parser.parse_args()
+
+    if args.data_only and args.audit_first_local:
+        raise SystemExit("--data-only cannot be combined with --audit-first-local")
 
     with open(args.input, "r", encoding="utf-8") as source:
         data = json.load(source)
@@ -622,7 +627,8 @@ def main():
             output.write("]\n")
         validity = (native_table_validity(
                         shared_valid_native if has_shared else None)
-                    if args.unchecked_prefix is None else "")
+                    if args.unchecked_prefix is None and not args.data_only
+                    else "")
         audit = ""
         if args.audit_first_local:
             first_local = next(
@@ -648,17 +654,20 @@ theorem first_local_valid_kernel :
                 "exact GeneratedLocalViews.tables_valid_kernel"
                 if args.shared_local_view else
                 "intro index\n    fin_cases index <;> trivial")
+            proof_text = "" if args.data_only else f"""
+{native_table_validity(shared_valid_native if has_shared else None)}
+
+{kernel_range_validity(chart, rows, args.kernel_range_size, shared,
+                       shared_valid_proof)}
+{audit}
+"""
             output.write(f"""def table : AtlasProjectiveSolutionTree.Table where
   chart := {chart}
   get := getRow
   size := {len(rows)}
 {shared_field}
 
-{native_table_validity(shared_valid_native if has_shared else None)}
-
-{kernel_range_validity(chart, rows, args.kernel_range_size, shared,
-                       shared_valid_proof)}
-{audit}
+{proof_text}
 
 end Noperthedron.Nopert214.{namespace}
 
