@@ -44,7 +44,7 @@ def table : AtlasProjectiveSolutionTree.Table where
 theorem table_valid_native : table.Valid := by native_decide
 
 private theorem rows_valid_range_kernel :
-    RowsValidRangeAt 3 getRowKernel 4 0 4 none := by
+    RowsValidRangeAt 3 getRowKernel 4 0 4 (fun _ => none) := by
   decide +kernel
 
 theorem table_valid_kernel : table.Valid := by

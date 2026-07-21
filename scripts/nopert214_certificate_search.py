@@ -3155,7 +3155,7 @@ def generate_atlas_projective_table(
         min_relative_half_width=Q(1, 1024), checkpoint_path=None,
         checkpoint_every=1000, resume=False,
         restricted_fundamental_root=False,
-        chart0_origin_tube_radius=None):
+        chart0_origin_tube_radii=None):
     """Generate one exact chart table for the formal projective checker."""
     lock = None
     if checkpoint_path is not None:
@@ -3191,25 +3191,38 @@ def generate_atlas_projective_table(
         if saved.get("restricted_fundamental_root", False) != \
                 restricted_fundamental_root:
             raise ValueError("checkpoint fundamental-root mode does not match")
-        saved_tube_radius = saved.get("chart0_origin_tube_radius")
-        if ((None if saved_tube_radius is None else Q(saved_tube_radius)) !=
-                chart0_origin_tube_radius):
-            raise ValueError("checkpoint symmetry-tube radius does not match")
+        saved_tube_radii = saved.get("chart0_origin_tube_radii")
+        if (saved_tube_radii is None and
+                saved.get("chart0_origin_tube_radius") is not None):
+            # Read pre-indexed checkpoints for diagnostic/resume purposes.
+            legacy_radius = Q(saved["chart0_origin_tube_radius"])
+            saved_tube_radii = (legacy_radius,)*4
+        parsed_saved_radii = (None if saved_tube_radii is None else
+                              tuple(map(Q, saved_tube_radii)))
+        if parsed_saved_radii != chart0_origin_tube_radii:
+            raise ValueError("checkpoint symmetry-tube radii do not match")
         rows = saved["rows"]
         stack = []
         for state in saved["pending"]:
-            row_id, center, widths, root, triangle, view_depth = state
+            if len(state) == 6:
+                (row_id, center, widths, root, triangle, view_depth) = state
+                shared_index = None
+            else:
+                (row_id, center, widths, root, triangle, view_depth,
+                 shared_index) = state
             stack.append((row_id, tuple(map(Q, center)), tuple(map(Q, widths)),
                           root, tuple(tuple(map(Q, corner))
                                       for corner in triangle),
-                          view_depth, None))
+                          view_depth, shared_index, None))
         for failure in saved["failures"]:
             stack.append((failure["id"], tuple(map(Q, failure["center"])),
                           tuple(map(Q, failure["widths"])),
                           failure["root"],
                           tuple(tuple(map(Q, corner))
                                 for corner in failure["triangle"]),
-                          failure["view_depth"], None))
+                          failure["view_depth"],
+                          failure.get("shared_index"),
+                          None))
         counts = saved["counts"]
         counts.setdefault("local", 0)
         counts.setdefault("symmetry_tube", 0)
@@ -3228,7 +3241,7 @@ def generate_atlas_projective_table(
         child = len(rows)
         rows.append(None)
         stack.append((child, root_center, root_widths, root, triangle,
-                      0, None))
+                      0, None, None))
         rows[0] = {"kind": "view_root", "id": 0,
                    "child": child,
                    "center": root_center, "widths": root_widths}
@@ -3252,8 +3265,8 @@ def generate_atlas_projective_table(
             json.dump({"complete": complete, "chart": chart, "rows": rows,
                        "restricted_fundamental_root":
                            restricted_fundamental_root,
-                       "chart0_origin_tube_radius":
-                           chart0_origin_tube_radius,
+                       "chart0_origin_tube_radii":
+                           chart0_origin_tube_radii,
                        "pending": [state[:-1] for state in stack],
                        "pending_candidates_omitted": True,
                        "counts": counts,
@@ -3263,10 +3276,25 @@ def generate_atlas_projective_table(
     while stack and len(rows) < max_nodes:
         state = stack.pop()
         (row_id, center, widths, root, triangle, view_depth,
-         inherited_global_candidates) = state
+         shared_index, inherited_global_candidates) = state
         common = {"id": row_id, "center": center, "widths": widths,
                   "root": root, "triangle": triangle,
                   "view_depth": view_depth}
+        if (chart == 0 and chart0_origin_tube_radii is not None and
+                shared_index is None):
+            # Each first-level projective-view child has its own formally
+            # checked local atlas and can therefore use its own certified
+            # tube radius.  Force this split before doing any Cayley work so
+            # every descendant carries an unambiguous table index.
+            children = allocate(4)
+            rows[row_id] = {**common, "kind": "view_split",
+                            "children": children}
+            counts["view_split"] += 1
+            for child_index, (child, child_triangle) in enumerate(zip(
+                    children, split_projective_triangle(triangle))):
+                stack.append((child, center, widths, root, child_triangle,
+                              view_depth+1, child_index, None))
+            continue
         if interval_outside_cayley_ball(center, widths):
             rows[row_id] = {**common, "kind": "radius"}
             counts["radius"] += 1
@@ -3284,13 +3312,17 @@ def generate_atlas_projective_table(
                                 "direction": fundamental_direction}
                 counts["fundamental_prune"] += 1
                 continue
-        if chart == 0 and chart0_origin_tube_radius is not None:
+        if (chart == 0 and chart0_origin_tube_radii is not None and
+                shared_index is not None):
+            chart0_origin_tube_radius = \
+                chart0_origin_tube_radii[shared_index]
             mismatch_radius = atlas_projective_mismatch_radius(
                 chart, 0, center, widths)[0]
             if mismatch_radius <= chart0_origin_tube_radius:
                 rows[row_id] = {**common, "kind": "symmetry_tube",
                                 "symmetry_index": 0,
-                                "radius": chart0_origin_tube_radius}
+                                "radius": chart0_origin_tube_radius,
+                                "shared_index": shared_index}
                 counts["symmetry_tube"] += 1
                 continue
             if all(abs(value) <= width
@@ -3313,7 +3345,7 @@ def generate_atlas_projective_table(
                         direction*child_widths[widest]
                     child_states.append((child, tuple(child_center),
                                          tuple(child_widths), root, triangle,
-                                         view_depth, None))
+                                         view_depth, shared_index, None))
                 # This is depth-first search: put the child containing the
                 # equality pose last so it is popped next.  We prove the tube
                 # early instead of first exhausting its large away sibling.
@@ -3349,7 +3381,7 @@ def generate_atlas_projective_table(
                     direction*child_widths[fundamental_widest]
                 stack.append((child, tuple(child_center),
                               tuple(child_widths), root, triangle,
-                              view_depth, None))
+                              view_depth, shared_index, None))
             continue
         edge_float = atlas_simplex_float_screen(
             chart, center, widths, triangle)
@@ -3487,7 +3519,7 @@ def generate_atlas_projective_table(
                 child_center[widest] += direction*child_widths[widest]
                 stack.append((child, tuple(child_center),
                               tuple(child_widths), root, triangle, view_depth,
-                              inherited))
+                              shared_index, inherited))
         elif view_depth < max_view_depth:
             children = allocate(4)
             rows[row_id] = {**common, "kind": "view_split",
@@ -3498,7 +3530,7 @@ def generate_atlas_projective_table(
             for child, child_triangle in zip(
                     children, split_projective_triangle(triangle)):
                 stack.append((child, center, widths, root, child_triangle,
-                              view_depth+1, inherited))
+                              view_depth+1, shared_index, inherited))
         elif widths[widest] > min_relative_half_width:
             children = allocate(2)
             rows[row_id] = {**common, "kind": "relative_split",
@@ -3512,7 +3544,7 @@ def generate_atlas_projective_table(
                 child_center[widest] += direction*child_widths[widest]
                 stack.append((child, tuple(child_center),
                               tuple(child_widths), root, triangle, view_depth,
-                              None))
+                              shared_index, None))
         else:
             mismatch_candidates = sorted(
                 (atlas_projective_mismatch_radius(
@@ -3538,7 +3570,7 @@ def generate_atlas_projective_table(
                     child_center[widest] += direction*child_widths[widest]
                     stack.append((child, tuple(child_center),
                                   tuple(child_widths), root, triangle,
-                                  view_depth, None))
+                                  view_depth, shared_index, None))
                 continue
             if mismatch_radius < Q(1, 20):
                 local = atlas_projective_local_triangle(
@@ -4288,9 +4320,9 @@ def main():
         help="search the chart-specific rational superset of the exact "
              "fivefold Dirichlet cell")
     generate_atlas_table.add_argument(
-        "--chart0-origin-tube-radius",
-        help="experimental uniform local-rigidity radius around chart 0's "
-             "exact equality pose")
+        "--chart0-origin-tube-radii",
+        help="four comma-separated local-rigidity radii for chart 0's "
+             "first-level projective-view children")
     generate_local_view = sub.add_parser(
         "generate-projective-local-view-table")
     generate_local_view.add_argument("output")
@@ -4428,13 +4460,21 @@ def main():
     elif args.command == "generate-atlas-projective-table":
         if not 0 <= args.chart < 4:
             parser.error("chart must be in [0, 4)")
+        chart0_origin_tube_radii = None
+        if args.chart0_origin_tube_radii is not None:
+            chart0_origin_tube_radii = tuple(
+                Q(value) for value in
+                args.chart0_origin_tube_radii.split(","))
+            if len(chart0_origin_tube_radii) != 4:
+                parser.error("--chart0-origin-tube-radii requires four values")
+            if args.chart != 0:
+                parser.error("--chart0-origin-tube-radii requires chart 0")
         result = generate_atlas_projective_table(
             args.chart, args.max_nodes, args.max_view_depth,
             Q(args.min_relative_half_width), args.output,
             args.checkpoint_every, args.resume,
             args.restricted_fundamental_root,
-            None if args.chart0_origin_tube_radius is None else
-              Q(args.chart0_origin_tube_radius))
+            chart0_origin_tube_radii)
         print(json.dumps({"complete": result["complete"],
                           "chart": result["chart"],
                           "row_count": len(result["rows"]),

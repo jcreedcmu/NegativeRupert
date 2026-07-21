@@ -229,9 +229,10 @@ def emit_row(row, chart, interval_ids, triangle_ids, edge_template_ids,
       chart := %d
       symmetryIndex := %d
       r := %s }
+      %d
       (%s)""" % (
             row_id, iv, chart, row["symmetry_index"], q(row["radius"]),
-            region(row, triangle_ids))
+            row["shared_index"], region(row, triangle_ids))
     raise ValueError(f"unsupported row kind: {kind}")
 
 
@@ -342,7 +343,8 @@ def kernel_internal_range_proof(kind):
     · {valid}"""
 
 
-def kernel_range_validity(chart, rows, range_size, shared):
+def kernel_range_validity(chart, rows, range_size, shared,
+                          shared_valid_proof):
     """Emit local kernel checks and a balanced proof joining their ranges.
 
     Leaf runs are decided in chunks.  Internal rows are singleton ranges with
@@ -401,7 +403,7 @@ def kernel_range_validity(chart, rows, range_size, shared):
   refine ⟨by decide, rowsValidAt_of_range {nodes[0][0]}, ?_, ?_, ?_⟩
   · decide +kernel
   · decide +kernel
-  · {"trivial" if shared == "none" else "exact GeneratedLocalView.table_valid_kernel"}
+  · {shared_valid_proof}
 """)
     return "\n".join(declarations)
 
@@ -421,7 +423,7 @@ def main():
     parser.add_argument("--kernel-range-size", type=int, default=32,
                         help="rows checked by each kernel proof")
     parser.add_argument("--shared-local-view", action="store_true",
-                        help="attach GeneratedLocalView.table for symmetry-tube rows")
+                        help="attach GeneratedLocalViews.tables for symmetry-tube rows")
     args = parser.parse_args()
 
     with open(args.input, "r", encoding="utf-8") as source:
@@ -498,7 +500,7 @@ def main():
         output.write(HEADER.format(
             chart=chart,
             shared_import=(
-                "public import Noperthedron.Nopert214.GeneratedLocalView"
+                "public import Noperthedron.Nopert214.GeneratedLocalViews"
                 if args.shared_local_view else "")))
         if args.kernel_friendly:
             interval_definitions = kernel_interval_definitions(
@@ -598,17 +600,23 @@ def main():
             if first_local is None:
                 raise SystemExit("no projective-local row available to audit")
             audit = f"""theorem first_local_valid :
-    (getRow {first_local}).ValidAt {chart} getRow {len(rows)} none := by
+    (getRow {first_local}).ValidAt {chart} getRow {len(rows)}
+      (fun _ => none) := by
   native_decide
 
 theorem first_local_valid_kernel :
-    (getRow {first_local}).ValidAt {chart} getRow {len(rows)} none := by
+    (getRow {first_local}).ValidAt {chart} getRow {len(rows)}
+      (fun _ => none) := by
   decide +kernel"""
         if args.kernel_friendly:
-            shared = ("some GeneratedLocalView.table"
-                      if args.shared_local_view else "none")
-            shared_field = ("  sharedLocal := some GeneratedLocalView.table"
+            shared = ("GeneratedLocalViews.tables"
+                      if args.shared_local_view else "(fun _ => none)")
+            shared_field = ("  sharedLocal := GeneratedLocalViews.tables"
                             if args.shared_local_view else "")
+            shared_valid_proof = (
+                "exact GeneratedLocalViews.tables_valid_kernel"
+                if args.shared_local_view else
+                "intro index\n    fin_cases index <;> trivial")
             output.write(f"""def table : AtlasProjectiveSolutionTree.Table where
   chart := {chart}
   get := getRow
@@ -617,7 +625,8 @@ theorem first_local_valid_kernel :
 
 theorem table_valid_native : table.Valid := by native_decide
 
-{kernel_range_validity(chart, rows, args.kernel_range_size, shared)}
+{kernel_range_validity(chart, rows, args.kernel_range_size, shared,
+                       shared_valid_proof)}
 {audit}
 
 end Noperthedron.Nopert214.GeneratedChart{chart}
@@ -629,7 +638,7 @@ end
                 chart=chart, validity=validity, audit=audit,
                 chunk_size=args.chunk_size, size=len(rows),
                 shared_field=(
-                    "  sharedLocal := some GeneratedLocalView.table"
+                    "  sharedLocal := GeneratedLocalViews.tables"
                     if args.shared_local_view else "")))
 
 

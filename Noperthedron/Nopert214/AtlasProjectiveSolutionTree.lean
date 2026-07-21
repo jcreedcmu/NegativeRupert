@@ -26,13 +26,23 @@ open Noperthedron.SnubCube.ProjectiveView
 abbrev Interval := AtlasInterval ℚ
 abbrev Triangle := AtlasProjectiveView.Triangle ℚ
 
-def SharedLocalValid : Option AtlasProjectiveLocalViewTree.Table → Prop
+abbrev SharedLocalTables := Fin 4 → Option AtlasProjectiveLocalViewTree.Table
+
+def OptionalLocalValid : Option AtlasProjectiveLocalViewTree.Table → Prop
   | none => True
   | some table => table.Valid
 
-instance (shared : Option AtlasProjectiveLocalViewTree.Table) :
+instance (table : Option AtlasProjectiveLocalViewTree.Table) :
+    Decidable (OptionalLocalValid table) := by
+  cases table <;> simp only [OptionalLocalValid] <;> infer_instance
+
+def SharedLocalValid (shared : SharedLocalTables) : Prop :=
+  ∀ index, OptionalLocalValid (shared index)
+
+instance (shared : SharedLocalTables) :
     Decidable (SharedLocalValid shared) := by
-  cases shared <;> simp only [SharedLocalValid] <;> infer_instance
+  unfold SharedLocalValid
+  infer_instance
 
 inductive Region where
   | sphere
@@ -149,7 +159,7 @@ inductive Row where
       (region : Region)
   | projectiveLocal (id : ℕ) (box : AtlasProjectiveLocalCertificate.Box)
   | symmetryTube (id : ℕ) (tube : AtlasProjectiveLocalViewTree.Tube)
-      (region : Region)
+      (sharedIndex : Fin 4) (region : Region)
   | radiusPrune (id : ℕ) (interval : Interval) (region : Region)
   | fundamentalPrune (id : ℕ) (box : AtlasFundamentalPrune.Box)
       (region : Region)
@@ -169,7 +179,7 @@ def Row.interval : Row → Interval
   | .projectiveGlobal _ box => box.interval
   | .symmetryLocal _ box _ => box.interval
   | .projectiveLocal _ box => box.interval
-  | .symmetryTube _ tube _ => tube.interval
+  | .symmetryTube _ tube _ _ => tube.interval
   | .radiusPrune _ interval _ => interval
   | .fundamentalPrune _ box _ => box.interval
 
@@ -181,15 +191,27 @@ def Row.region : Row → Region
   | .projectiveGlobal _ box => .triangle box.root box.triangle
   | .symmetryLocal _ _ region => region
   | .projectiveLocal _ box => .triangle box.root box.triangle
-  | .symmetryTube _ _ region => region
+  | .symmetryTube _ _ _ region => region
   | .radiusPrune _ _ region => region
   | .fundamentalPrune _ _ region => region
 
 instance : Inhabited Row where
   default := .viewRoot 0 0 (AtlasPose.rootInterval ℚ)
 
+def SymmetryTubeMatches (tube : AtlasProjectiveLocalViewTree.Tube)
+    (region : Region) : Option AtlasProjectiveLocalViewTree.Table → Prop
+  | none => False
+  | some table =>
+      tube.symmetryIndex = table.symmetryIndex ∧ tube.r = table.r ∧
+        region = .triangle table.root table.triangle
+
+instance (tube : AtlasProjectiveLocalViewTree.Tube) (region : Region)
+    (table : Option AtlasProjectiveLocalViewTree.Table) :
+    Decidable (SymmetryTubeMatches tube region table) := by
+  cases table <;> simp only [SymmetryTubeMatches] <;> infer_instance
+
 def Row.ValidAt (chart : ChartIndex) (get : ℕ → Row)
-    (size : ℕ) (shared : Option AtlasProjectiveLocalViewTree.Table) : Row → Prop
+    (size : ℕ) (shared : SharedLocalTables) : Row → Prop
   | .cayleySplit id lowerChild upperChild coordinate interval region =>
       id < lowerChild ∧ id < upperChild ∧
       lowerChild < size ∧ upperChild < size ∧
@@ -210,29 +232,24 @@ def Row.ValidAt (chart : ChartIndex) (get : ℕ → Row)
   | .projectiveGlobal _ box => box.chart = chart ∧ box.Valid
   | .symmetryLocal _ box _ => box.chart = chart ∧ box.Valid
   | .projectiveLocal _ box => box.chart = chart ∧ box.Valid
-  | .symmetryTube _ tube _ =>
+  | .symmetryTube _ tube sharedIndex region =>
       tube.chart = chart ∧ tube.Valid ∧
-        match shared with
-        | none => False
-        | some table =>
-            tube.symmetryIndex = table.symmetryIndex ∧ tube.r = table.r
+        SymmetryTubeMatches tube region (shared sharedIndex)
   | .radiusPrune _ interval _ => interval.outsideCayleyBall
   | .fundamentalPrune _ box _ => box.chart = chart ∧ box.Valid
 
 instance (chart : ChartIndex) (get : ℕ → Row) (size : ℕ)
-    (shared : Option AtlasProjectiveLocalViewTree.Table) (row : Row) :
+    (shared : SharedLocalTables) (row : Row) :
     Decidable (row.ValidAt chart get size shared) := by
-  cases row <;> simp only [Row.ValidAt] <;>
-    try { cases shared <;> simp only <;> infer_instance } <;>
-    infer_instance
+  cases row <;> simp only [Row.ValidAt] <;> infer_instance
 
 def RowsValidAt (chart : ChartIndex) (get : ℕ → Row)
-    (size : ℕ) (shared : Option AtlasProjectiveLocalViewTree.Table) : Prop :=
+    (size : ℕ) (shared : SharedLocalTables) : Prop :=
   ∀ i : Fin size,
     (get i).id = i ∧ (get i).ValidAt chart get size shared
 
 instance (chart : ChartIndex) (get : ℕ → Row) (size : ℕ)
-    (shared : Option AtlasProjectiveLocalViewTree.Table) :
+    (shared : SharedLocalTables) :
     Decidable (RowsValidAt chart get size shared) := by
   unfold RowsValidAt
   infer_instance
@@ -241,21 +258,21 @@ instance (chart : ChartIndex) (get : ℕ → Row) (size : ℕ)
 slices independently and join them with `rowsValidRange_append`, avoiding one
 enormous reduction in the kernel evaluator. -/
 def RowsValidRangeAt (chart : ChartIndex) (get : ℕ → Row) (size start count : ℕ)
-    (shared : Option AtlasProjectiveLocalViewTree.Table) :
+    (shared : SharedLocalTables) :
     Prop :=
   start + count ≤ size ∧ ∀ j : Fin count,
     (get (start + j.val)).id = start + j.val ∧
       (get (start + j.val)).ValidAt chart get size shared
 
 instance (chart : ChartIndex) (get : ℕ → Row) (size start count : ℕ)
-    (shared : Option AtlasProjectiveLocalViewTree.Table) :
+    (shared : SharedLocalTables) :
     Decidable (RowsValidRangeAt chart get size start count shared) := by
   unfold RowsValidRangeAt
   infer_instance
 
 theorem rowsValidRange_append {chart : ChartIndex} {get : ℕ → Row}
     {size start left right : ℕ}
-    {shared : Option AtlasProjectiveLocalViewTree.Table}
+    {shared : SharedLocalTables}
     (hleft : RowsValidRangeAt chart get size start left shared)
     (hright : RowsValidRangeAt chart get size (start + left) right shared) :
     RowsValidRangeAt chart get size start (left + right) shared := by
@@ -271,14 +288,14 @@ theorem rowsValidRange_append {chart : ChartIndex} {get : ℕ → Row}
       simpa [hi] using hr
 
 theorem rowsValidAt_of_range {chart : ChartIndex} {get : ℕ → Row} {size : ℕ}
-    {shared : Option AtlasProjectiveLocalViewTree.Table}
+    {shared : SharedLocalTables}
     (h : RowsValidRangeAt chart get size 0 size shared) :
     RowsValidAt chart get size shared := by
   intro i
   simpa using h.2 ⟨i.val, i.isLt⟩
 
 theorem valid_imp_noRupert_ix (chart : ChartIndex) (get : ℕ → Row)
-    (size : ℕ) (shared : Option AtlasProjectiveLocalViewTree.Table)
+    (size : ℕ) (shared : SharedLocalTables)
     (sharedValid : SharedLocalValid shared)
     (rowsValid : RowsValidAt chart get size shared)
     (i : ℕ) (hi : i < size) :
@@ -313,24 +330,27 @@ theorem valid_imp_noRupert_ix (chart : ChartIndex) (get : ℕ → Row)
       subst hchart
       exact box.valid_imp_not_translated_rupert hbox hp offset
         hregion.1 hregion.2 hrupert
-  | symmetryTube id tube region =>
+  | symmetryTube id tube sharedIndex region =>
       unfold NoRupert
-      rintro ⟨p, hp, -, -, hview, hupper, offset, -, hrupert⟩
+      rintro ⟨p, hp, -, -, -, -, offset, hregion, hrupert⟩
       obtain ⟨hchart, htube, hmatch⟩ := hvalid
       subst hchart
-      cases hshared : shared with
+      cases hshared : shared sharedIndex with
       | none =>
-          have : False := by simpa [hshared] using hmatch
+          have : False := by
+            simpa [SymmetryTubeMatches, hshared] using hmatch
           contradiction
       | some table =>
           have htable : table.Valid := by
-            simpa [SharedLocalValid, hshared] using sharedValid
+            simpa [OptionalLocalValid, hshared] using sharedValid sharedIndex
           have hmatch' :
-              tube.symmetryIndex = table.symmetryIndex ∧ tube.r = table.r := by
-            simpa [hshared] using hmatch
-          obtain ⟨hsymmetry, hradius⟩ := hmatch'
-          exact table.valid_imp_not_translated_rupert htable tube
-            hsymmetry hradius htube hp hview hupper offset hrupert
+              tube.symmetryIndex = table.symmetryIndex ∧ tube.r = table.r ∧
+                region = .triangle table.root table.triangle := by
+            simpa [SymmetryTubeMatches, hshared] using hmatch
+          obtain ⟨hsymmetry, hradius, hregionEq⟩ := hmatch'
+          rw [hregionEq] at hregion
+          exact table.valid_imp_not_translated_rupert_in_triangle htable tube
+            hsymmetry hradius htube hp hregion.1 hregion.2 offset hrupert
   | cayleySplit id lowerChild upperChild coordinate interval region =>
       obtain ⟨hlower, hupper, hlowerSize, hupperSize,
         hlowerInterval, hupperInterval, hlowerRegion, hupperRegion⟩ := hvalid
@@ -380,7 +400,7 @@ structure Table where
   chart : ChartIndex
   get : ℕ → Row
   size : ℕ
-  sharedLocal : Option AtlasProjectiveLocalViewTree.Table := none
+  sharedLocal : SharedLocalTables := fun _ => none
 
 def Table.Valid (table : Table) : Prop :=
   0 < table.size ∧

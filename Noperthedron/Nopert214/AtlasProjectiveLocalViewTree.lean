@@ -183,34 +183,52 @@ decreasing_by
 structure Table where
   symmetryIndex : OrbitIndex
   r : ℚ
+  root : Fin 8 := 0
+  triangle : AtlasProjectiveView.Triangle ℚ := upperWedgeTriangle
   get : ℕ → Row
   size : ℕ
 
 def Table.Valid (table : Table) : Prop :=
   0 < table.size ∧
     RowsValidAt table.symmetryIndex table.r table.get table.size ∧
-    (table.get 0).root = 0 ∧
-    (table.get 0).triangle = upperWedgeTriangle
+    (table.get 0).root = table.root ∧
+    (table.get 0).triangle = table.triangle
 
 instance (table : Table) : Decidable table.Valid := by
   unfold Table.Valid
   infer_instance
+
+theorem Table.valid_imp_not_translated_rupert_in_triangle (table : Table)
+    (hvalid : table.Valid) (tube : Tube)
+    (htubeSymmetry : tube.symmetryIndex = table.symmetryIndex)
+    (htubeRadius : tube.r = table.r) (htube : tube.Valid)
+    {p : AtlasPose ℝ} (hp : p ∈ tube.interval.toReal)
+    (hscale : 1 ≤ viewScale table.root p)
+    (hmem : InTriangle (toReal table.triangle)
+      (normalizedView table.root p)) (offset : ℝ²) :
+    ¬ RupertPose (p.matrixPoseWithOffset tube.chart offset)
+      exactPolyhedron.hull := by
+  obtain ⟨hnonempty, hrows, hroot, htriangle⟩ := hvalid
+  have hchecked := valid_imp_not_rupert_ix table.symmetryIndex table.r
+    table.get table.size hrows 0 hnonempty tube htubeSymmetry htubeRadius
+    htube hp offset
+  rw [hroot, htriangle] at hchecked
+  exact hchecked hscale hmem
 
 theorem Table.valid_imp_not_translated_rupert (table : Table)
     (hvalid : table.Valid) (tube : Tube)
     (htubeSymmetry : tube.symmetryIndex = table.symmetryIndex)
     (htubeRadius : tube.r = table.r) (htube : tube.Valid)
     {p : AtlasPose ℝ} (hp : p ∈ tube.interval.toReal)
-    (hview : p.InViewWedge) (hupper : p.InUpperView) (offset : ℝ²) :
+    (hview : p.InViewWedge) (hupper : p.InUpperView) (offset : ℝ²)
+    (hroot : table.root = 0) (htriangle : table.triangle = upperWedgeTriangle) :
     ¬ RupertPose (p.matrixPoseWithOffset tube.chart offset)
       exactPolyhedron.hull := by
-  obtain ⟨hnonempty, hrows, hroot, htriangle⟩ := hvalid
   obtain ⟨hscale, hmem⟩ := upperView_mem_wedgeTriangle p hview hupper
-  have hchecked := valid_imp_not_rupert_ix table.symmetryIndex table.r
-    table.get table.size hrows 0 hnonempty tube htubeSymmetry htubeRadius
-    htube hp offset
-  rw [hroot, htriangle] at hchecked
-  exact hchecked hscale hmem
+  apply table.valid_imp_not_translated_rupert_in_triangle hvalid tube
+    htubeSymmetry htubeRadius htube hp
+  · simpa [hroot] using hscale
+  · simpa [hroot, htriangle] using hmem
 
 end Noperthedron.Nopert214.AtlasProjectiveLocalViewTree
 

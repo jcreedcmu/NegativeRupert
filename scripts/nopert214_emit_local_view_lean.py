@@ -18,9 +18,11 @@ def triangle_key(row):
     return tuple(tuple(corner) for corner in row["triangle"])
 
 
-def triangle_definitions(rows, triangle_ids):
+def triangle_definitions(rows, triangle_ids, initial_child):
     definitions = [None] * len(triangle_ids)
-    definitions[triangle_ids[triangle_key(rows[0])]] = "upperWedgeTriangle"
+    initial_triangle = ("upperWedgeTriangle" if initial_child is None else
+                        f"split upperWedgeTriangle {initial_child}")
+    definitions[triangle_ids[triangle_key(rows[0])]] = initial_triangle
     for row in rows:
         if row["kind"] != "view_split":
             continue
@@ -143,7 +145,7 @@ public meta import Noperthedron.Nopert214.AtlasProjectiveLocalViewTree
 
 @[expose] public section
 
-namespace Noperthedron.Nopert214.GeneratedLocalView
+namespace Noperthedron.Nopert214.{namespace}
 
 open AtlasProjectiveView AtlasProjectiveLocalCertificate
 open AtlasProjectiveLocalViewTree
@@ -159,6 +161,8 @@ def main():
     parser.add_argument("--chunk-size", type=int, default=64)
     parser.add_argument("--kernel-range-size", type=int, default=16)
     parser.add_argument("--native-only", action="store_true")
+    parser.add_argument("--table-index", type=int, choices=range(4),
+                        help="emit GeneratedLocalViewN for first view child N")
     args = parser.parse_args()
 
     with open(args.input, "r", encoding="utf-8") as source:
@@ -168,6 +172,13 @@ def main():
     rows = data["rows"]
     if any(row is None for row in rows):
         raise SystemExit("table contains unfilled rows")
+    initial_child = data.get("initial_child")
+    if args.table_index is not None and initial_child != args.table_index:
+        raise SystemExit(
+            f"--table-index {args.table_index} does not match "
+            f"input initial_child {initial_child}")
+    namespace = ("GeneratedLocalView" if args.table_index is None else
+                 f"GeneratedLocalView{args.table_index}")
 
     triangle_ids = {}
     axis_ids = {}
@@ -191,10 +202,12 @@ def main():
 
     destination = Path(args.output)
     with destination.open("w", encoding="utf-8") as output:
-        output.write(HEADER)
+        output.write(HEADER.format(namespace=namespace))
         for triangle_id, value in enumerate(
-                triangle_definitions(rows, triangle_ids)):
-            output.write(f"def triDef{triangle_id} : Triangle :=\n  {value}\n\n")
+                triangle_definitions(rows, triangle_ids, initial_child)):
+            output.write(
+                f"def triDef{triangle_id} : "
+                f"AtlasProjectiveView.Triangle ℚ :=\n  {value}\n\n")
         for axis_id, value in enumerate(axis_values):
             output.write(
                 f"def axis{axis_id} : AxisCertificate := {axis_certificate(value)}\n\n")
@@ -211,9 +224,12 @@ def main():
                                    if row["kind"] == "view_local")][
                                        "symmetry_index"]
         radius = data["tube_radius"]
+        root_triangle_id = triangle_ids[triangle_key(rows[0])]
         output.write(f"""def table : Table where
   symmetryIndex := {symmetry_index}
   r := {q(radius)}
+  root := {rows[0]["root"]}
+  triangle := triDef{root_triangle_id}
   get := getRow
   size := {len(rows)}
 
@@ -223,8 +239,8 @@ theorem table_valid_native : table.Valid := by native_decide
         if not args.native_only:
             output.write(kernel_range_validity(
                 rows, args.kernel_range_size, symmetry_index, radius))
-        output.write("""
-end Noperthedron.Nopert214.GeneratedLocalView
+        output.write(f"""
+end Noperthedron.Nopert214.{namespace}
 
 end
 """)
