@@ -4283,7 +4283,13 @@ def generate_projective_local_view_table(
             # Preserve the sequential generator's soft max_nodes bound: each
             # processed row can allocate at most four children.
             remaining = max_nodes - len(rows)
-            batch_size = min(workers, len(stack), max(1, (remaining+3)//4))
+            # Keep several tasks queued per process.  Deep corner-hull
+            # searches have a long-tailed runtime distribution; a one-task
+            # batch left eleven workers idle behind a single multi-minute
+            # straggler.  Results are still applied in deterministic DFS
+            # order below, and the final bound retains the soft row cap.
+            batch_size = min(4*workers, len(stack),
+                             max(1, (remaining+3)//4))
             batch = [stack.pop() for _ in range(batch_size)]
             tasks = [(triangle, depth, target_c)
                      for _, triangle, depth in batch]
