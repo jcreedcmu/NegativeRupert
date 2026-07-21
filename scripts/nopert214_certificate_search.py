@@ -3133,6 +3133,8 @@ def generate_atlas_projective_table(
         counts.setdefault("local", 0)
         counts.setdefault("symmetry_tube", 0)
         counts.setdefault("fundamental_prune", 0)
+        counts.setdefault("global_audit8", 0)
+        counts.setdefault("global_audit64", 0)
         failures = []
     else:
         rows = [None]
@@ -3152,7 +3154,8 @@ def generate_atlas_projective_table(
         counts = {"view_root": 1, "view_split": 0, "relative_split": 0,
                   "edge": 0, "global": 0, "local": 0, "radius": 0,
                   "fundamental_prune": 0, "symmetry_tube": 0,
-                  "exact_rejections": 0}
+                  "exact_rejections": 0, "global_audit8": 0,
+                  "global_audit64": 0}
         failures = []
 
     def allocate(count):
@@ -3285,10 +3288,32 @@ def generate_atlas_projective_table(
                 counts["edge"] += 1
                 continue
             counts["exact_rejections"] += 1
+        # The old interval checker rarely benefited from auditing more than
+        # its top-ranked balanced triple until the view mesh was very deep.
+        # The simplex Bernstein checker is different: a lower-ranked triple
+        # often preserves the view/relative correlation on a much larger
+        # box.  Audit progressively so easy edge-like regions still pay for
+        # one candidate, while hard regions can close before thousands of
+        # avoidable coordinate and view splits.
         global_float = atlas_projective_global_float_screen(
-            chart, center, widths, triangle,
-            candidate_limit=64 if view_depth >= 7 else 1,
+            chart, center, widths, triangle, candidate_limit=1,
             candidates=inherited_global_candidates)
+        if (view_depth >= 2 and
+                (global_float is None or
+                 global_float["lower_bound"] <= 1e-8)):
+            counts["global_audit8"] += 1
+            global_float = atlas_projective_global_float_screen(
+                chart, center, widths, triangle, candidate_limit=8,
+                candidates=None if global_float is None else
+                    global_float["candidates"])
+        if (view_depth >= 2 and
+                (global_float is None or
+                 global_float["lower_bound"] <= 1e-8)):
+            counts["global_audit64"] += 1
+            global_float = atlas_projective_global_float_screen(
+                chart, center, widths, triangle, candidate_limit=64,
+                candidates=None if global_float is None else
+                    global_float["candidates"])
         if (global_float is not None and
                 global_float["lower_bound"] > 1e-8):
             exact = atlas_projective_global_triangle(
