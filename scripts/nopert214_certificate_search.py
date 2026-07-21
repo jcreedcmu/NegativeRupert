@@ -3990,6 +3990,33 @@ def projective_local_candidate(task):
     return result, weak_rejection
 
 
+PROJECTIVE_LOCAL_AXIS_ARTIFACT_KEYS = (
+    "edge_start", "edge_finish", "edge_start2", "edge_finish2", "mix",
+    "support_index", "nonzero_witness", "B",
+)
+
+
+def compact_projective_local_axis_artifact(axis):
+    """Retain exactly the fields encoded by both local-table emitters.
+
+    Candidate construction also returns large exact diagnostics used while
+    choosing and auditing a leaf.  Once the leaf has been accepted, neither
+    resume nor the Lean/packed emitters consult those diagnostics.  Dropping
+    them keeps long-running checkpoints proportional to the final proof
+    artifact instead of repeatedly serializing hundreds of megabytes.
+    """
+    return {key: axis[key] for key in PROJECTIVE_LOCAL_AXIS_ARTIFACT_KEYS}
+
+
+def compact_projective_local_rows(rows):
+    for row in rows:
+        if row is not None and row.get("kind") == "view_local":
+            row["certificate"] = [
+                compact_projective_local_axis_artifact(axis)
+                for axis in row["certificate"]
+            ]
+
+
 def generate_projective_local_view_table(
         output_path, max_nodes=20_000, max_depth=12,
         target_c=Q(1, 10_000), tube_radius=Q(1, 10_000),
@@ -4017,6 +4044,7 @@ def generate_projective_local_view_table(
                 saved.get("initial_child") != initial_child):
             raise ValueError("local-view checkpoint parameters do not match")
         rows = saved["rows"]
+        compact_projective_local_rows(rows)
         stack = [(state[0],
                   tuple(tuple(map(Q, corner)) for corner in state[1]),
                   state[2]) for state in saved["pending"]]
@@ -4098,7 +4126,10 @@ def generate_projective_local_view_table(
                         "id": row_id, "kind": "view_local", "root": 0,
                         "triangle": triangle, "depth": depth,
                         "symmetry_index": 0, "r": tube_radius,
-                        "certificate": result["certificates"],
+                        "certificate": [
+                            compact_projective_local_axis_artifact(axis)
+                            for axis in result["certificates"]
+                        ],
                         "c": result["c"], "delta": result["delta"]}
                     counts["certificate"] += 1
                 elif depth < max_depth:
