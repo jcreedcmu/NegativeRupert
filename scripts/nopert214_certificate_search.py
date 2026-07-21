@@ -3266,7 +3266,13 @@ def atlas_projective_state_action(task):
     global_float = atlas_projective_global_float_screen(
         chart, center, widths, triangle, candidate_limit=1,
         candidates=inherited_global_candidates)
-    if (view_depth >= 2 and
+    # At view depth one, a still-wide pose box rarely benefits from the
+    # larger candidate pools.  Once the pose box is narrow, however, live
+    # chart-2 cells are already certified exactly without another split.
+    allow_global_audit = (view_depth >= 2 or
+                          (view_depth >= 1 and
+                           max(widths) <= Q(1, 256)))
+    if (allow_global_audit and
             (global_float is None or
              global_float["lower_bound"] <= 1e-8)):
         count_deltas["global_audit8"] += 1
@@ -3274,7 +3280,7 @@ def atlas_projective_state_action(task):
             chart, center, widths, triangle, candidate_limit=8,
             candidates=None if global_float is None else
                 global_float["candidates"])
-    if (view_depth >= 2 and
+    if (allow_global_audit and
             (global_float is None or
              global_float["lower_bound"] <= 1e-8)):
         count_deltas["global_audit64"] += 1
@@ -3282,7 +3288,7 @@ def atlas_projective_state_action(task):
             chart, center, widths, triangle, candidate_limit=64,
             candidates=None if global_float is None else
                 global_float["candidates"])
-    if (view_depth >= 2 and max(widths) <= Q(1, 256) and
+    if (allow_global_audit and max(widths) <= Q(1, 256) and
             (global_float is None or
              global_float["lower_bound"] <= 1e-8)):
         # A four-sample normal cone can miss a robust mixed silhouette edge
@@ -3293,7 +3299,7 @@ def atlas_projective_state_action(task):
         global_float = atlas_projective_global_float_screen(
             chart, center, widths, triangle, cone_samples=5,
             candidate_limit=8, candidates=None)
-    if (view_depth >= 2 and max(widths) <= Q(1, 256) and
+    if (allow_global_audit and max(widths) <= Q(1, 256) and
             (global_float is None or
              global_float["lower_bound"] <= 1e-8)):
         # Six samples close the narrow chart-1 transition cells that remain
@@ -3828,7 +3834,10 @@ def generate_atlas_projective_table(
         global_float = atlas_projective_global_float_screen(
             chart, center, widths, triangle, candidate_limit=1,
             candidates=inherited_global_candidates)
-        if (view_depth >= 2 and
+        allow_global_audit = (view_depth >= 2 or
+                              (view_depth >= 1 and
+                               max(widths) <= Q(1, 256)))
+        if (allow_global_audit and
                 (global_float is None or
                  global_float["lower_bound"] <= 1e-8)):
             counts["global_audit8"] += 1
@@ -3836,7 +3845,7 @@ def generate_atlas_projective_table(
                 chart, center, widths, triangle, candidate_limit=8,
                 candidates=None if global_float is None else
                     global_float["candidates"])
-        if (view_depth >= 2 and
+        if (allow_global_audit and
                 (global_float is None or
                  global_float["lower_bound"] <= 1e-8)):
             counts["global_audit64"] += 1
@@ -3844,14 +3853,14 @@ def generate_atlas_projective_table(
                 chart, center, widths, triangle, candidate_limit=64,
                 candidates=None if global_float is None else
                     global_float["candidates"])
-        if (view_depth >= 2 and max(widths) <= Q(1, 256) and
+        if (allow_global_audit and max(widths) <= Q(1, 256) and
                 (global_float is None or
                  global_float["lower_bound"] <= 1e-8)):
             counts["global_cone5"] += 1
             global_float = atlas_projective_global_float_screen(
                 chart, center, widths, triangle, cone_samples=5,
                 candidate_limit=8, candidates=None)
-        if (view_depth >= 2 and max(widths) <= Q(1, 256) and
+        if (allow_global_audit and max(widths) <= Q(1, 256) and
                 (global_float is None or
                  global_float["lower_bound"] <= 1e-8)):
             counts["global_cone6"] += 1
