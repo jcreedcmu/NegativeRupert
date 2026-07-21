@@ -462,12 +462,37 @@ def tableCoreValidParB (table : Table) (taskCount : ℕ) : Bool :=
     (table.get 0).region = .sphere) &&
   rowsValidAtParB table.chart table.get table.size table.sharedLocal taskCount
 
+/-- The native row tasks used by `tableCoreValidParB`, exposed for executable
+progress reporting. -/
+def tableCoreTasks (table : Table) (taskCount : ℕ) : List (Task Bool) :=
+  let chunkSize := table.size / taskCount + 1
+  Noperthedron.ParallelBool.chunkTasks
+    (validIxAtB table.chart table.get table.size table.sharedLocal)
+    taskCount chunkSize
+
+/-- The global table checker supplied with its already spawned task list. -/
+def tableCoreValidWithTasksB (table : Table) (taskCount : ℕ)
+    (tasks : List (Task Bool)) : Bool :=
+  let chunkSize := table.size / taskCount + 1
+  decide (0 < table.size ∧
+    (table.get 0).interval =
+      AtlasFundamentalPrune.restrictedRootInterval table.chart ∧
+    (table.get 0).region = .sphere) &&
+  Noperthedron.ParallelBool.allWithTasksB table.size taskCount chunkSize tasks
+
 theorem Table.Valid.of_parB {table : Table} {taskCount : ℕ}
     (hshared : SharedLocalValid table.sharedLocal)
     (h : tableCoreValidParB table taskCount = true) : table.Valid := by
   unfold tableCoreValidParB at h
   rw [Bool.and_eq_true, decide_eq_true_iff] at h
   exact ⟨h.1.1, rowsValidAt_of_parB h.2, h.1.2.1, h.1.2.2, hshared⟩
+
+theorem Table.Valid.of_withTasksB {table : Table} {taskCount : ℕ}
+    (hshared : SharedLocalValid table.sharedLocal)
+    (h : tableCoreValidWithTasksB table taskCount
+      (tableCoreTasks table taskCount) = true) : table.Valid := by
+  apply Table.Valid.of_parB hshared
+  exact h
 
 theorem Table.valid_imp_no_chart_translated_pose
     (table : Table) (h : table.Valid) :

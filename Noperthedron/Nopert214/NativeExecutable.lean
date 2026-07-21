@@ -83,10 +83,30 @@ def checkGlobal (label : String) (taskCount : Nat)
     IO (PLift table.Valid) := do
   let start ← IO.monoNanosNow
   log s!"checking chart {label}: {table.size} rows in {taskCount} native tasks"
-  if h : AtlasProjectiveSolutionTree.tableCoreValidParB table taskCount = true then
+  let chunkSize := table.size / taskCount + 1
+  let tasks := AtlasProjectiveSolutionTree.tableCoreTasks table taskCount
+  let total := tasks.length
+  for (task, index) in tasks.zipIdx do
+    unless task.get do
+      let first := index * chunkSize
+      let afterLast := min table.size (first + chunkSize)
+      throw (IO.userError (s!"chart {label} is invalid in rows " ++
+        s!"[{first}, {afterLast})"))
+    let completed := index + 1
+    if completed % 4 = 0 || completed = total then
+      let checkedRows := min table.size (completed * chunkSize)
+      let now ← IO.monoNanosNow
+      log (s!"chart {label}: {checkedRows}/{table.size} rows joined " ++
+        s!"({(now - start) / 1000000} ms)")
+  if h : AtlasProjectiveSolutionTree.tableCoreValidWithTasksB
+      table taskCount tasks = true then
     let finish ← IO.monoNanosNow
     log s!"valid chart {label}: {(finish - start) / 1000000} ms"
-    pure ⟨AtlasProjectiveSolutionTree.Table.Valid.of_parB hshared h⟩
+    have h' : AtlasProjectiveSolutionTree.tableCoreValidWithTasksB
+        table taskCount
+        (AtlasProjectiveSolutionTree.tableCoreTasks table taskCount) = true := by
+      simpa only [tasks] using h
+    pure ⟨AtlasProjectiveSolutionTree.Table.Valid.of_withTasksB hshared h'⟩
   else
     throw (IO.userError s!"global chart table {label} is not valid")
 

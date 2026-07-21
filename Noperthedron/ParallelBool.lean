@@ -67,6 +67,18 @@ def allChunkedB (predicate : ℕ → Bool)
       Task.spawn fun _ => chunkB predicate (task * chunkSize) chunkSize).all
         Task.get)
 
+/-- The tasks used by `allChunkedB`, exposed for progress-reporting native
+executables. -/
+def chunkTasks (predicate : ℕ → Bool) (taskCount chunkSize : ℕ) :
+    List (Task Bool) :=
+  (List.range taskCount).map fun task =>
+    Task.spawn fun _ => chunkB predicate (task * chunkSize) chunkSize
+
+/-- `allChunkedB` with an already spawned task list. -/
+def allWithTasksB (size taskCount chunkSize : ℕ)
+    (tasks : List (Task Bool)) : Bool :=
+  decide (size ≤ taskCount * chunkSize) && tasks.all Task.get
+
 theorem all_of_chunkedB {predicate : ℕ → Bool}
     {size taskCount chunkSize : ℕ}
     (h : allChunkedB predicate size taskCount chunkSize = true) :
@@ -91,6 +103,14 @@ theorem all_of_chunkedB {predicate : ℕ → Bool}
   have hmod := Nat.mod_lt i hchunkPos
   rw [Nat.mul_comm] at hdivision
   exact hchunk i (by omega) (by omega)
+
+theorem all_of_withTasksB {predicate : ℕ → Bool}
+    {size taskCount chunkSize : ℕ}
+    (h : allWithTasksB size taskCount chunkSize
+      (chunkTasks predicate taskCount chunkSize) = true) :
+    ∀ i, i < size → predicate i = true := by
+  apply all_of_chunkedB
+  exact h
 
 /-- Near-equal chunks suitable for native task scheduling. -/
 def allParB (predicate : ℕ → Bool) (size taskCount : ℕ) : Bool :=
