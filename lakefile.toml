@@ -59,3 +59,10 @@ buildType = "release"
 name = "checkNopert214Local2"
 root = "checkNopert214Local2"
 buildType = "release"
+
+# Full native proof constructor for Nopert #214. Its large generated data
+# modules are intentionally ignored and this target is built on demand.
+[[lean_exe]]
+name = "constructNopert214"
+root = "constructNopert214"
+buildType = "release"
