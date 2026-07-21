@@ -3610,7 +3610,12 @@ def generate_atlas_projective_table(
                 actions = ([atlas_projective_state_action(task)
                             for task in tasks] if pool is None else
                            pool.map(atlas_projective_state_action, tasks))
-                for state, action in zip(batch, actions):
+                # `batch[0]` was popped from the top of the DFS stack first.
+                # Apply lower-priority actions first so the children of that
+                # top state are allocated/pushed last and remain the next
+                # states visited.  Applying in pop order silently reversed
+                # priorities at every parallel batch boundary.
+                for state, action in reversed(list(zip(batch, actions))):
                     apply_action(state, action)
                     processed_since_checkpoint += 1
                 if (checkpoint_every and processed_since_checkpoint >=
