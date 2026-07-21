@@ -2174,12 +2174,12 @@ def atlas_projective_global_weighted_defect_upper(triangle, candidate):
                            cross3(edges[0], edges[1])]
     error = PROJECTIVE_SUPPORT_ERROR
 
-    def factor(coefficient, corner):
-        return exact_certificate.qdot(triangle[corner], coefficient) + error
-
     total = Q(0)
     for i, contact in enumerate(candidate["contacts"]):
         selected = contact["vertex"]
+        weight_values = [
+            exact_certificate.qdot(triangle[a], weight_coefficients[i]) +
+                error for a in range(3)]
         upper = Q(0)
         for k, vertex in enumerate(VERTICES_Q):
             if k == selected:
@@ -2187,13 +2187,14 @@ def atlas_projective_global_weighted_defect_upper(triangle, candidate):
             delta = tuple(a-b for a, b in
                           zip(vertex, VERTICES_Q[selected]))
             support_coefficient = cross3(edges[i], delta)
+            support_values = [
+                exact_certificate.qdot(triangle[a], support_coefficient) +
+                    error for a in range(3)]
             for a in range(3):
                 for b in range(3):
                     control = (
-                        factor(weight_coefficients[i], a) *
-                            factor(support_coefficient, b) +
-                        factor(weight_coefficients[i], b) *
-                            factor(support_coefficient, a)) / 2
+                        weight_values[a] * support_values[b] +
+                        weight_values[b] * support_values[a]) / 2
                     upper = max(upper, control)
         total += upper
     return total
@@ -2668,12 +2669,11 @@ def atlas_projective_global_weighted_defect_upper_float(
                            cross3(edges[0], edges[1])]
     error = float(PROJECTIVE_SUPPORT_ERROR)
 
-    def factor(coefficient, corner):
-        return dot3(triangle[corner], coefficient) + error
-
     total = 0.0
     for i, contact in enumerate(candidate["contacts"]):
         selected = contact["vertex"]
+        weight_values = [dot3(triangle[a], weight_coefficients[i]) + error
+                         for a in range(3)]
         upper = 0.0
         for k, vertex in enumerate(VERTICES):
             if k == selected:
@@ -2681,13 +2681,13 @@ def atlas_projective_global_weighted_defect_upper_float(
             delta = tuple(a-b for a, b in
                           zip(vertex, VERTICES[selected]))
             support_coefficient = cross3(edges[i], delta)
+            support_values = [dot3(triangle[a], support_coefficient) + error
+                              for a in range(3)]
             for a in range(3):
                 for b in range(3):
                     control = (
-                        factor(weight_coefficients[i], a) *
-                            factor(support_coefficient, b) +
-                        factor(weight_coefficients[i], b) *
-                            factor(support_coefficient, a)) / 2
+                        weight_values[a] * support_values[b] +
+                        weight_values[b] * support_values[a]) / 2
                     upper = max(upper, control)
         total += upper
     return total
