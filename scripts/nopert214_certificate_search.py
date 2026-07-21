@@ -16,6 +16,7 @@ balanced-support obstruction.
 from __future__ import annotations
 
 import argparse
+import fcntl
 import functools
 import hashlib
 import heapq
@@ -246,6 +247,94 @@ def tetrahedron_origin_margin(points):
     return min(face_distances), barycentric
 
 
+def closest_origin_face(points, indices):
+    """Closest point to zero on a hull known not to contain zero.
+
+    In three dimensions the closest point lies on a vertex, edge, or
+    triangle.  Returning the supporting face lets the balanced-support
+    search discard stale vertices instead of accumulating a large,
+    poorly-conditioned Frank--Wolfe active set.
+    """
+    best = None
+
+    def consider(support, coefficients):
+        nonlocal best
+        point = [sum(weight*points[index][axis]
+                     for index, weight in zip(support, coefficients))
+                 for axis in range(3)]
+        key = dot3(point, point)
+        if best is None or key < best[0]:
+            best = (key, tuple(support), point)
+
+    for index in indices:
+        consider((index,), (1.0,))
+    for left, right in itertools.combinations(indices, 2):
+        a, b = points[left], points[right]
+        direction = [b[axis]-a[axis] for axis in range(3)]
+        denominator = dot3(direction, direction)
+        if denominator <= 1e-30:
+            continue
+        t = -dot3(a, direction)/denominator
+        if 1e-12 < t < 1-1e-12:
+            consider((left, right), (1-t, t))
+    for first, second, third in itertools.combinations(indices, 3):
+        a, b, c = points[first], points[second], points[third]
+        u = [b[axis]-a[axis] for axis in range(3)]
+        v = [c[axis]-a[axis] for axis in range(3)]
+        uu, uv, vv = dot3(u, u), dot3(u, v), dot3(v, v)
+        determinant = uu*vv-uv*uv
+        if determinant <= 1e-30:
+            continue
+        au, av = dot3(a, u), dot3(a, v)
+        s = (-au*vv+av*uv)/determinant
+        t = (-av*uu+au*uv)/determinant
+        if s > 1e-12 and t > 1e-12 and s+t < 1-1e-12:
+            consider((first, second, third), (1-s-t, s, t))
+    return best
+
+
+def find_balanced_tetrahedron(points, max_iterations=100):
+    """Deterministically find four points whose hull contains zero.
+
+    This is a fully corrective conditional-gradient search specialized to
+    dimension three.  Each correction is exact up to ordinary floating
+    arithmetic: if the current hull misses zero, its closest point lies on a
+    face with at most three vertices.  A linear minimization over every input
+    point then either supplies a new vertex or proves a separating plane.
+    """
+    if len(points) < 4:
+        return None
+    active = [min(range(len(points)),
+                  key=lambda index: dot3(points[index], points[index]))]
+    seen = set()
+    for _ in range(max_iterations):
+        for indices in itertools.combinations(active, 4):
+            result = tetrahedron_origin_margin(
+                [points[index] for index in indices])
+            if result is not None:
+                return indices, result
+        closest = closest_origin_face(points, active)
+        if closest is None:
+            return None
+        norm_squared, support, current = closest
+        active = list(support)
+        if np is not None:
+            point_array = np.asarray(points)
+            next_index = int(np.argmin(point_array @ np.asarray(current)))
+        else:
+            next_index = min(range(len(points)),
+                             key=lambda index: dot3(current, points[index]))
+        improvement = norm_squared-dot3(current, points[next_index])
+        if improvement <= 1e-13*max(1.0, norm_squared):
+            return None
+        state = (tuple(active), next_index)
+        if next_index in active or state in seen:
+            return None
+        seen.add(state)
+        active.append(next_index)
+    return None
+
+
 def rational_unit_direction(direction, denominator=10**6):
     """Nearby exact rational point on the unit circle."""
     x, y = direction
@@ -429,7 +518,9 @@ def local_axis_candidates(theta, phi, cone_samples=1):
     return cycle, candidates
 
 
-def projective_local_axis_candidates(view, cone_samples=1):
+def projective_local_axis_candidates(view, cone_samples=1,
+                                     include_boundaries=False,
+                                     allow_zero_weights=False):
     """View-polynomial local candidates built from silhouette edge cones.
 
     Each contact direction is a positive rational-style combination of the
@@ -463,8 +554,18 @@ def projective_local_axis_candidates(view, cone_samples=1):
         following = cycle[(position + 1) % len(cycle)]
         before = edges[(position - 1) % len(cycle)]
         after = edges[position]
-        for sample in range(cone_samples):
-            lam = (sample + 1) / (cone_samples + 1)
+        samples = [(sample + 1) / (cone_samples + 1)
+                   for sample in range(cone_samples)]
+        if include_boundaries:
+            # Exact edge normals (0 and 1) have support ties that cannot
+            # survive the rational-vertex approximation allowance.  Include
+            # the nearest representable interior direction at each boundary:
+            # limiting LP duals often live on an edge normal, and a uniform
+            # cone grid otherwise approaches them far too slowly.
+            near = [1 / 1000]
+            samples = sorted(set(
+                [*near, *samples, *(1-value for value in near)]))
+        for lam in samples:
             edge_combination = tuple(
                 lam * before[i] + (1-lam) * after[i] for i in range(3))
             lift = cross3(unit_view, edge_combination)
@@ -494,7 +595,12 @@ def projective_local_axis_candidates(view, cone_samples=1):
                    dot3(unit_view, cross3(lifts[0], lifts[1]))]
         if all(weight <= 1e-12 for weight in weights):
             weights = [-weight for weight in weights]
-        if not all(weight > 1e-10 for weight in weights):
+        if allow_zero_weights:
+            if min(weights) < -1e-10 or max(weights) <= 1e-10:
+                continue
+            weights = [0.0 if abs(weight) <= 1e-10 else weight
+                       for weight in weights]
+        elif not all(weight > 1e-10 for weight in weights):
             continue
         a = [0.0, 0.0, 0.0]
         b = 0.0
@@ -744,11 +850,29 @@ def atlas_projective_local_smoke(
     }
 
 
-def projective_local_float_candidates(triangle, cone_samples=4):
+def projective_local_float_candidates(triangle, cone_samples=4,
+                                      include_boundaries=False,
+                                      include_corner_cycles=False):
     """Fast conservative prefilter for exact mixed-edge local rows."""
     centroid = [sum(float(corner[i]) for corner in triangle)/3
                 for i in range(3)]
-    _, candidates = projective_local_axis_candidates(centroid, cone_samples)
+    sample_views = [centroid]
+    if include_corner_cycles:
+        sample_views.extend([[float(x) for x in corner]
+                             for corner in triangle])
+    candidates = []
+    seen = set()
+    for sample_view in sample_views:
+        _, sample_candidates = projective_local_axis_candidates(
+            sample_view, cone_samples, include_boundaries)
+        for candidate in sample_candidates:
+            key = tuple((contact["edge_start"], contact["edge_finish"],
+                         contact["edge_start2"], contact["edge_finish2"],
+                         contact["mix"], contact["vertex"])
+                        for contact in candidate["contacts"])
+            if key not in seen:
+                seen.add(key)
+                candidates.append(candidate)
     triangle_f = [[float(x) for x in corner] for corner in triangle]
     support_cache = {}
 
@@ -823,20 +947,63 @@ def projective_local_float_candidates(triangle, cone_samples=4):
 
 @functools.lru_cache(maxsize=256)
 def choose_projective_local_tetrahedron(triangle, cone_samples=4,
-                                         trials=200_000, seed=214):
+                                         trials=200_000, seed=214,
+                                         include_boundaries=False,
+                                         include_corner_cycles=False):
     """Choose a well-conditioned tetrahedron after triangle-wide filtering."""
-    candidates = projective_local_float_candidates(triangle, cone_samples)
+    candidates = projective_local_float_candidates(
+        triangle, cone_samples, include_boundaries, include_corner_cycles)
     if len(candidates) < 4:
         return None, candidates
     total = math.comb(len(candidates), 4)
     if total <= trials:
         choices = itertools.combinations(range(len(candidates)), 4)
     else:
-        rng = random.Random(repr((triangle, cone_samples, seed)))
+        rng = random.Random(repr(
+            (triangle, cone_samples, seed, include_boundaries,
+             include_corner_cycles)))
+        # A tetrahedron containing zero is overwhelmingly more likely to use
+        # vertices of the convex hull than four uniformly sampled candidates.
+        # Collect exposed points in many deterministic probe directions, then
+        # spend most of the trial budget on that much smaller pool.
+        extreme = set()
+        points_list = [candidate["normalized_a"] for candidate in candidates]
+        # A fully corrective low-dimensional hull search finds narrow
+        # balanced supports that random four-subsets almost never hit.
+        balanced = find_balanced_tetrahedron(points_list)
+        priority = []
+        if balanced is not None:
+            balanced_indices, _ = balanced
+            priority.append(tuple(balanced_indices))
+            extreme.update(balanced_indices)
+        direction_count = min(1024, max(64, trials // 10))
+        if np is not None:
+            points = np.asarray(points_list)
+            directions = np.asarray([
+                [rng.gauss(0, 1) for _ in range(3)]
+                for _ in range(direction_count)])
+            scores = points @ directions.T
+            extreme.update(map(int, np.argmax(scores, axis=0)))
+            extreme.update(map(int, np.argmin(scores, axis=0)))
+        else:
+            for _ in range(direction_count):
+                direction = [rng.gauss(0, 1) for _ in range(3)]
+                values = [dot3(candidate["normalized_a"], direction)
+                          for candidate in candidates]
+                extreme.add(max(range(len(values)), key=values.__getitem__))
+                extreme.add(min(range(len(values)), key=values.__getitem__))
+        pool = sorted(extreme)
         sampled = set()
+        pool_budget = 9 * trials // 10
+        pool_total = math.comb(len(pool), 4) if len(pool) >= 4 else 0
+        if pool_total <= pool_budget:
+            sampled.update(itertools.combinations(pool, 4))
+        else:
+            while len(sampled) < pool_budget:
+                sampled.add(tuple(sorted(rng.sample(pool, 4))))
         while len(sampled) < trials:
             sampled.add(tuple(sorted(rng.sample(range(len(candidates)), 4))))
-        choices = sampled
+        choices = itertools.chain(priority, sampled)
     best = None
     for indices in choices:
         points = [candidates[index]["normalized_a"] for index in indices]
@@ -853,10 +1020,14 @@ def choose_projective_local_tetrahedron(triangle, cone_samples=4,
 
 @functools.lru_cache(maxsize=256)
 def projective_local_geometry(triangle, symmetry_index,
-                              cone_samples=4, trials=200_000):
+                              cone_samples=4, trials=200_000,
+                              include_boundaries=False,
+                              include_corner_cycles=False):
     """Cache the view-dependent part of a projective-local certificate."""
     chosen, candidates = choose_projective_local_tetrahedron(
-        triangle, cone_samples, trials)
+        triangle, cone_samples, trials,
+        include_boundaries=include_boundaries,
+        include_corner_cycles=include_corner_cycles)
     if chosen is None:
         return None
     (_, _), indices, _ = chosen
@@ -902,10 +1073,12 @@ def projective_local_geometry(triangle, symmetry_index,
 
 def atlas_projective_local_triangle(
         chart, relative_center, relative_radii, root, triangle,
-        symmetry_index, cone_samples=4, trials=200_000):
+        symmetry_index, cone_samples=4, trials=200_000,
+        include_boundaries=False, include_corner_cycles=False):
     """Generate and exactly audit a projective-local leaf on any atlas cell."""
     geometry = projective_local_geometry(
-        triangle, symmetry_index, cone_samples, trials)
+        triangle, symmetry_index, cone_samples, trials, include_boundaries,
+        include_corner_cycles)
     if geometry is None:
         return None
     c = geometry["c"]
@@ -2738,6 +2911,16 @@ def generate_atlas_projective_table(
         restricted_fundamental_root=False,
         chart0_origin_tube_radius=None):
     """Generate one exact chart table for the formal projective checker."""
+    lock = None
+    if checkpoint_path is not None:
+        lock = open(checkpoint_path + ".lock", "w", encoding="utf-8")
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as error:
+            lock.close()
+            raise RuntimeError(
+                f"another generator is already writing {checkpoint_path}") \
+                from error
     root_center = (Q(0), Q(0), Q(0))
     if restricted_fundamental_root:
         # The fivefold max-trace condition forces one Cayley coordinate into
@@ -2874,13 +3057,21 @@ def generate_atlas_projective_table(
                 counts["relative_split"] += 1
                 child_widths = list(widths)
                 child_widths[widest] /= 2
+                child_states = []
                 for direction, child in zip((-1, 1), children):
                     child_center = list(center)
                     child_center[widest] += \
                         direction*child_widths[widest]
-                    stack.append((child, tuple(child_center),
-                                  tuple(child_widths), root, triangle,
-                                  view_depth, None))
+                    child_states.append((child, tuple(child_center),
+                                         tuple(child_widths), root, triangle,
+                                         view_depth, None))
+                # This is depth-first search: put the child containing the
+                # equality pose last so it is popped next.  We prove the tube
+                # early instead of first exhausting its large away sibling.
+                child_states.sort(key=lambda state: all(
+                    abs(value) <= width
+                    for value, width in zip(state[1], state[2])))
+                stack.extend(child_states)
                 continue
         # Resolve the relative-rotation fundamental domain before refining
         # the independent projective view.  Only coordinates occurring in
@@ -3091,6 +3282,8 @@ def generate_atlas_projective_table(
             checkpoint(False)
     complete = not stack and not failures and all(row is not None for row in rows)
     checkpoint(complete)
+    if lock is not None:
+        lock.close()
     return {"complete": complete, "chart": chart, "rows": rows,
             "pending": stack, "counts": counts, "failures": failures}
 
@@ -3106,8 +3299,15 @@ def split_projective_triangle(triangle):
 def generate_projective_local_view_table(
         output_path, max_nodes=20_000, max_depth=12,
         target_c=Q(1, 10_000), tube_radius=Q(1, 10_000),
-        checkpoint_every=100, resume=False):
+        checkpoint_every=100, resume=False, initial_child=None):
     """Generate the shared chart-0 symmetry-local projective-view atlas."""
+    lock = open(output_path + ".lock", "w", encoding="utf-8")
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError as error:
+        lock.close()
+        raise RuntimeError(
+            f"another generator is already writing {output_path}") from error
     if tube_radius*tube_radius*(1+target_c*target_c) > 4*target_c*target_c:
         raise ValueError("tube radius is too large for the target local margin")
     if resume and os.path.exists(output_path):
@@ -3115,17 +3315,34 @@ def generate_projective_local_view_table(
             saved = json.load(source)
         if (Q(saved["target_c"]) != target_c or
                 Q(saved["tube_radius"]) != tube_radius or
-                saved["max_depth"] != max_depth):
+                saved["max_depth"] > max_depth or
+                saved.get("initial_child") != initial_child):
             raise ValueError("local-view checkpoint parameters do not match")
         rows = saved["rows"]
         stack = [(state[0],
                   tuple(tuple(map(Q, corner)) for corner in state[1]),
                   state[2]) for state in saved["pending"]]
         failures = saved["failures"]
+        if saved["max_depth"] < max_depth:
+            # A capped leaf is an unresolved search cell, not a rejected
+            # certificate.  Reopen it when the user raises the depth cap.
+            stack.extend((failure["id"],
+                          tuple(tuple(map(Q, corner))
+                                for corner in failure["triangle"]),
+                          failure["depth"])
+                         for failure in failures)
+            failures = []
         counts = saved["counts"]
     else:
         rows = [None]
-        stack = [(0, UPPER_WEDGE_PROJECTIVE_ROOT, 0)]
+        if initial_child is None:
+            initial_triangle = UPPER_WEDGE_PROJECTIVE_ROOT
+            initial_depth = 0
+        else:
+            initial_triangle = split_projective_triangle(
+                UPPER_WEDGE_PROJECTIVE_ROOT)[initial_child]
+            initial_depth = 1
+        stack = [(0, initial_triangle, initial_depth)]
         failures = []
         counts = {"view_split": 0, "certificate": 0,
                   "weak_rejections": 0}
@@ -3140,21 +3357,39 @@ def generate_projective_local_view_table(
         with open(temporary_path, "w", encoding="utf-8") as output:
             json.dump({"complete": complete, "target_c": target_c,
                        "tube_radius": tube_radius, "max_depth": max_depth,
+                       "initial_child": initial_child,
                        "rows": rows, "pending": stack,
                        "counts": counts, "failures": failures}, output,
                       default=str)
         os.replace(temporary_path, output_path)
 
+    processed_since_checkpoint = 0
     while stack and len(rows) < max_nodes and not failures:
         row_id, triangle, depth = stack.pop()
         trials = 100 if depth < 4 else 1000
         result = atlas_projective_local_triangle(
             0, (Q(0), Q(0), Q(0)), (Q(0), Q(0), Q(0)),
             0, triangle, 0, cone_samples=4, trials=trials)
-        if result is None and depth >= 4:
+        if result is None and 4 <= depth < 10:
             result = atlas_projective_local_triangle(
                 0, (Q(0), Q(0), Q(0)), (Q(0), Q(0), Q(0)),
                 0, triangle, 0, cone_samples=5, trials=5000)
+        if ((result is None or result["c"] < target_c) and depth >= 10):
+            # Near a silhouette transition the useful limiting LP dual can
+            # sit extremely close to an edge normal.  The endpoint-enriched
+            # grid is cheaper than the dense uniform fallback, so try it
+            # first on genuinely deep holdouts.
+            boundary_result = atlas_projective_local_triangle(
+                0, (Q(0), Q(0), Q(0)), (Q(0), Q(0), Q(0)),
+                0, triangle, 0, cone_samples=4, trials=1,
+                include_boundaries=True)
+            if (boundary_result is not None and
+                    (result is None or boundary_result["c"] > result["c"])):
+                result = boundary_result
+        if result is None and depth >= 10:
+            result = atlas_projective_local_triangle(
+                0, (Q(0), Q(0), Q(0)), (Q(0), Q(0), Q(0)),
+                0, triangle, 0, cone_samples=6, trials=10_000)
         if result is not None and result["c"] < target_c:
             counts["weak_rejections"] += 1
             stronger = atlas_projective_local_triangle(
@@ -3164,6 +3399,11 @@ def generate_projective_local_view_table(
                 stronger = atlas_projective_local_triangle(
                     0, (Q(0), Q(0), Q(0)), (Q(0), Q(0), Q(0)),
                     0, triangle, 0, cone_samples=5, trials=50_000)
+            if ((stronger is None or stronger["c"] < target_c) and
+                    depth >= 10):
+                stronger = atlas_projective_local_triangle(
+                    0, (Q(0), Q(0), Q(0)), (Q(0), Q(0), Q(0)),
+                    0, triangle, 0, cone_samples=6, trials=100_000)
             result = stronger
         if (result is not None and result["c"] >= target_c and
                 tube_radius*tube_radius*(1+result["c"]*result["c"]) <=
@@ -3188,14 +3428,18 @@ def generate_projective_local_view_table(
             failures.append({"id": row_id, "triangle": triangle,
                              "depth": depth,
                              "best_c": None if result is None else result["c"]})
-        if checkpoint_every and len(rows) % checkpoint_every < 4:
+        processed_since_checkpoint += 1
+        if (checkpoint_every and
+                processed_since_checkpoint >= checkpoint_every):
             checkpoint(False)
+            processed_since_checkpoint = 0
     complete = not stack and not failures and all(row is not None for row in rows)
     checkpoint(complete)
+    lock.close()
     return {"complete": complete, "rows": rows, "pending": stack,
             "counts": counts, "failures": failures,
             "target_c": target_c, "tube_radius": tube_radius,
-            "max_depth": max_depth}
+            "max_depth": max_depth, "initial_child": initial_child}
 
 
 def atlas_simplex_cover(chart, relative_center, relative_half_widths,
@@ -3764,6 +4008,8 @@ def main():
     generate_local_view.add_argument("--checkpoint-every", type=int,
                                      default=100)
     generate_local_view.add_argument("--resume", action="store_true")
+    generate_local_view.add_argument("--initial-child", type=int,
+                                     choices=range(4))
     explore = sub.add_parser("explore-cover")
     explore.add_argument("--max-nodes", type=int, default=200000)
     explore.add_argument("--directions", type=int, default=24)
@@ -3907,7 +4153,7 @@ def main():
         result = generate_projective_local_view_table(
             args.output, args.max_nodes, args.max_depth,
             Q(args.target_c), Q(args.tube_radius), args.checkpoint_every,
-            args.resume)
+            args.resume, args.initial_child)
         print(json.dumps({"complete": result["complete"],
                           "row_count": len(result["rows"]),
                           "pending_count": len(result["pending"]),
