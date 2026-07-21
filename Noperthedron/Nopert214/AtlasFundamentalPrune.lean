@@ -312,11 +312,235 @@ theorem Box.valid_imp_not_inFundamentalDomain
     linarith
   exact positive_exactAdvantage_not_inFundamentalDomain hpositive
 
+/-- Inside the exact Dirichlet cell, the checked rational approximation to
+an adjacent trace advantage is at most its uniform approximation error. -/
+theorem advantage_eval_le_error_of_inFundamentalDomain
+    (chart : ChartIndex) (direction : Direction) (x y z : ℝ)
+    (hbounded : x ^ 2 + y ^ 2 + z ^ 2 ≤ 3)
+    (hfund : InFivefoldFundamentalDomain
+      (chartMatrix chart * cayleyMatrix x y z)) :
+    (advantageQuadratic chart direction).evalReal x y z ≤
+      approximationError := by
+  have htrace := hfund direction.symmetryIndex
+  have htrace' :
+      Matrix.trace ((chartMatrix chart * cayleyMatrix x y z) *
+          fivefoldMatrix direction.symmetryIndex) -
+        Matrix.trace (chartMatrix chart * cayleyMatrix x y z) ≤ 0 :=
+    sub_nonpos.mpr htrace
+  rw [trace_advantage_eq] at htrace'
+  have hexact : exactAdvantage chart direction x y z ≤ 0 := by
+    rcases div_nonpos_iff.mp htrace' with hbad | hgood
+    · nlinarith [cayleyDenom_pos x y z]
+    · exact hgood.1
+  have herr := advantage_approximation_error chart direction x y z hbounded
+  rw [abs_le] at herr
+  nlinarith
+
+/-- The two adjacent fivefold inequalities force the second coordinate into
+the rational interval `[-1/3, 1/3]` whenever the first lies in `[-1, 1]`.
+The true irrational cutoff is about `0.325`, so the rational interval has a
+comfortable checked margin. -/
+private theorem narrow_second_coordinate {x y : ℝ}
+    (hxlo : -1 ≤ x) (hxhi : x ≤ 1)
+    (hneg :
+      (-690983 / 500000 : ℝ) * x ^ 2 -
+          (951057 / 250000 : ℝ) * x * y +
+          (690983 / 500000 : ℝ) * y ^ 2 ≤ 2 / 125000)
+    (hpos :
+      (-690983 / 500000 : ℝ) * x ^ 2 +
+          (951057 / 250000 : ℝ) * x * y +
+          (690983 / 500000 : ℝ) * y ^ 2 ≤ 2 / 125000) :
+    y ∈ Set.Icc (-1 / 3 : ℝ) (1 / 3 : ℝ) := by
+  constructor
+  · by_contra hy
+    have hy' : y < -1 / 3 := lt_of_not_ge hy
+    by_cases hx : 0 ≤ x
+    · have hprod1 : 0 ≤ x * (1 - x) := mul_nonneg hx (by linarith)
+      have hf2 : 0 ≤
+          (690983 / 500000 : ℝ) * (-y + 1 / 3) +
+            (951057 / 250000 : ℝ) * x := by nlinarith
+      have hprod2 : 0 ≤ (-y - 1 / 3) *
+          ((690983 / 500000 : ℝ) * (-y + 1 / 3) +
+            (951057 / 250000 : ℝ) * x) :=
+        mul_nonneg (by linarith) hf2
+      nlinarith
+    · have hx' : x < 0 := lt_of_not_ge hx
+      have hprod1 : 0 ≤ (-x) * (1 - (-x)) :=
+        mul_nonneg (by linarith) (by linarith)
+      have hf2 : 0 ≤
+          (690983 / 500000 : ℝ) * (-y + 1 / 3) +
+            (951057 / 250000 : ℝ) * (-x) := by nlinarith
+      have hprod2 : 0 ≤ (-y - 1 / 3) *
+          ((690983 / 500000 : ℝ) * (-y + 1 / 3) +
+            (951057 / 250000 : ℝ) * (-x)) :=
+        mul_nonneg (by linarith) hf2
+      nlinarith
+  · by_contra hy
+    have hy' : 1 / 3 < y := lt_of_not_ge hy
+    by_cases hx : 0 ≤ x
+    · have hprod1 : 0 ≤ x * (1 - x) := mul_nonneg hx (by linarith)
+      have hf2 : 0 ≤
+          (690983 / 500000 : ℝ) * (y + 1 / 3) +
+            (951057 / 250000 : ℝ) * x := by nlinarith
+      have hprod2 : 0 ≤ (y - 1 / 3) *
+          ((690983 / 500000 : ℝ) * (y + 1 / 3) +
+            (951057 / 250000 : ℝ) * x) :=
+        mul_nonneg (by linarith) hf2
+      nlinarith
+    · have hx' : x < 0 := lt_of_not_ge hx
+      have hprod1 : 0 ≤ (-x) * (1 - (-x)) :=
+        mul_nonneg (by linarith) (by linarith)
+      have hf2 : 0 ≤
+          (690983 / 500000 : ℝ) * (y + 1 / 3) +
+            (951057 / 250000 : ℝ) * (-x) := by nlinarith
+      have hprod2 : 0 ≤ (y - 1 / 3) *
+          ((690983 / 500000 : ℝ) * (y + 1 / 3) +
+            (951057 / 250000 : ℝ) * (-x)) :=
+        mul_nonneg (by linarith) hf2
+      nlinarith
+
 /-- Fundamental-domain condition carried by an atlas representative. -/
 def _root_.Noperthedron.Nopert214.AtlasPose.InFivefoldFundamentalDomain
     (p : AtlasPose ℝ) (chart : ChartIndex) : Prop :=
   Noperthedron.Nopert214.InFivefoldFundamentalDomain
     (chartMatrix chart * cayleyMatrix p.x p.y p.z)
+
+private theorem chart0_fundamental_z_mem {p : AtlasPose ℝ}
+    (hbounded : p.CayleyBounded)
+    (hfund : p.InFivefoldFundamentalDomain 0) :
+    p.z ∈ Set.Icc (-1 / 3 : ℝ) (1 / 3 : ℝ) := by
+  apply narrow_second_coordinate (x := 1)
+  · norm_num
+  · norm_num
+  · have h := advantage_eval_le_error_of_inFundamentalDomain
+      0 .positive p.x p.y p.z hbounded hfund
+    norm_num [advantageQuadratic, aQuadratic, bQuadratic,
+      AtlasQuadratic.eval_numeratorQuadratic, chartMatrix,
+      cayleyNumeratorMatrix, Matrix.mul_apply, Direction.signQ,
+      approximationError] at h
+    nlinarith
+  · have h := advantage_eval_le_error_of_inFundamentalDomain
+      0 .negative p.x p.y p.z hbounded hfund
+    norm_num [advantageQuadratic, aQuadratic, bQuadratic,
+      AtlasQuadratic.eval_numeratorQuadratic, chartMatrix,
+      cayleyNumeratorMatrix, Matrix.mul_apply, Direction.signQ,
+      approximationError] at h
+    nlinarith
+
+private theorem chart1_fundamental_y_mem {p : AtlasPose ℝ}
+    (hp : p ∈ AtlasPose.rootInterval ℝ)
+    (hbounded : p.CayleyBounded)
+    (hfund : p.InFivefoldFundamentalDomain 1) :
+    p.y ∈ Set.Icc (-1 / 3 : ℝ) (1 / 3 : ℝ) := by
+  rw [NonemptyInterval.mem_def, AtlasPose.le_iff, AtlasPose.le_iff] at hp
+  apply narrow_second_coordinate hp.1.2.2.1 hp.2.2.2.1
+  · have h := advantage_eval_le_error_of_inFundamentalDomain
+      1 .negative p.x p.y p.z hbounded hfund
+    norm_num [advantageQuadratic, aQuadratic, bQuadratic,
+      AtlasQuadratic.eval_numeratorQuadratic, chartMatrix,
+      cayleyNumeratorMatrix, Matrix.mul_apply, Direction.signQ,
+      approximationError] at h
+    nlinarith
+  · have h := advantage_eval_le_error_of_inFundamentalDomain
+      1 .positive p.x p.y p.z hbounded hfund
+    norm_num [advantageQuadratic, aQuadratic, bQuadratic,
+      AtlasQuadratic.eval_numeratorQuadratic, chartMatrix,
+      cayleyNumeratorMatrix, Matrix.mul_apply, Direction.signQ,
+      approximationError] at h
+    nlinarith
+
+private theorem chart2_fundamental_x_mem {p : AtlasPose ℝ}
+    (hp : p ∈ AtlasPose.rootInterval ℝ)
+    (hbounded : p.CayleyBounded)
+    (hfund : p.InFivefoldFundamentalDomain 2) :
+    p.x ∈ Set.Icc (-1 / 3 : ℝ) (1 / 3 : ℝ) := by
+  rw [NonemptyInterval.mem_def, AtlasPose.le_iff, AtlasPose.le_iff] at hp
+  apply narrow_second_coordinate (x := p.y) (y := p.x)
+      hp.1.2.2.2.1 hp.2.2.2.2.1
+  · have h := advantage_eval_le_error_of_inFundamentalDomain
+      2 .positive p.x p.y p.z hbounded hfund
+    norm_num [advantageQuadratic, aQuadratic, bQuadratic,
+      AtlasQuadratic.eval_numeratorQuadratic, chartMatrix,
+      cayleyNumeratorMatrix, Matrix.mul_apply, Direction.signQ,
+      approximationError, mul_comm] at h
+    nlinarith
+  · have h := advantage_eval_le_error_of_inFundamentalDomain
+      2 .negative p.x p.y p.z hbounded hfund
+    norm_num [advantageQuadratic, aQuadratic, bQuadratic,
+      AtlasQuadratic.eval_numeratorQuadratic, chartMatrix,
+      cayleyNumeratorMatrix, Matrix.mul_apply, Direction.signQ,
+      approximationError, mul_comm] at h
+    nlinarith
+
+/-- Coordinate narrowed by the fivefold Dirichlet condition in each Cayley
+chart.  Chart 3 keeps a vacuous full-width coordinate because it is excluded
+by a separate four-row certificate. -/
+def restrictedCoordinate : ChartIndex → Fin 5 := ![4, 3, 2, 4]
+
+/-- Rational half-width of the restricted coordinate. -/
+def restrictedWidth : ChartIndex → ℚ := ![1 / 3, 1 / 3, 1 / 3, 1]
+
+/-- A chart-specific rational box containing every bounded representative in
+the exact fivefold fundamental domain.  Searching these boxes directly
+avoids approximating the irrational Dirichlet boundary with a staircase of
+axis-aligned boxes. -/
+def restrictedRootInterval (chart : ChartIndex) : AtlasInterval ℚ :=
+  let root := AtlasPose.rootInterval ℚ
+  AtlasInterval.mk
+    ((AtlasInterval.min root).set (restrictedCoordinate chart)
+      (-restrictedWidth chart))
+    ((AtlasInterval.max root).set (restrictedCoordinate chart)
+      (restrictedWidth chart))
+    (by
+      rw [AtlasPose.le_iff_forall_get]
+      intro i
+      by_cases h : i = restrictedCoordinate chart
+      · subst i
+        simp only [AtlasPose.get_set_same]
+        fin_cases chart <;> norm_num [restrictedWidth]
+      · simpa [AtlasPose.get_set_of_ne _ _ h] using
+          (AtlasPose.le_iff_forall_get _ _).mp
+            (AtlasInterval.min_le_max root) i)
+
+@[simp] theorem restrictedRootInterval_min (chart : ChartIndex) :
+    AtlasInterval.min (restrictedRootInterval chart) =
+      (AtlasInterval.min (AtlasPose.rootInterval ℚ)).set
+        (restrictedCoordinate chart) (-restrictedWidth chart) := rfl
+
+@[simp] theorem restrictedRootInterval_max (chart : ChartIndex) :
+    AtlasInterval.max (restrictedRootInterval chart) =
+      (AtlasInterval.max (AtlasPose.rootInterval ℚ)).set
+        (restrictedCoordinate chart) (restrictedWidth chart) := rfl
+
+theorem mem_restrictedRootInterval {p : AtlasPose ℝ}
+    (chart : ChartIndex) (hp : p ∈ AtlasPose.rootInterval ℝ)
+    (hbounded : p.CayleyBounded)
+    (hfund : p.InFivefoldFundamentalDomain chart) :
+    p ∈ (restrictedRootInterval chart).toReal := by
+  have hpQ : p ∈ AtlasInterval.toReal (AtlasPose.rootInterval ℚ) := by
+    rwa [AtlasInterval.rootInterval_toReal]
+  have hp' := AtlasInterval.mem_toReal_iff.mp hpQ
+  have hcoordinate :
+      p.get (restrictedCoordinate chart) ∈
+        Set.Icc (-(restrictedWidth chart : ℚ) : ℝ)
+          (restrictedWidth chart : ℚ) := by
+    fin_cases chart
+    · convert chart0_fundamental_z_mem hbounded hfund using 1 <;>
+        norm_num [restrictedCoordinate, restrictedWidth]
+    · convert chart1_fundamental_y_mem hp hbounded hfund using 1 <;>
+        norm_num [restrictedCoordinate, restrictedWidth]
+    · convert chart2_fundamental_x_mem hp hbounded hfund using 1 <;>
+        norm_num [restrictedCoordinate, restrictedWidth]
+    · simpa [restrictedCoordinate, restrictedWidth,
+        AtlasPose.rootInterval] using hp' 4
+  rw [AtlasInterval.mem_toReal_iff]
+  intro i
+  by_cases hi : i = restrictedCoordinate chart
+  · subst i
+    simpa [restrictedRootInterval_min,
+      restrictedRootInterval_max] using hcoordinate
+  · simpa [restrictedRootInterval_min, restrictedRootInterval_max,
+      AtlasPose.get_set_of_ne _ _ hi] using hp' i
 
 @[simp] theorem AtlasPose.matrixPoseWithOffset_inFundamentalDomain_iff
     (p : AtlasPose ℝ) (chart : ChartIndex) (offset : ℝ²) :

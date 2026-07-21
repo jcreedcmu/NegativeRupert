@@ -336,7 +336,8 @@ structure Table where
 def Table.Valid (table : Table) : Prop :=
   0 < table.size ∧
     RowsValidAt table.chart table.get table.size ∧
-    (table.get 0).interval = AtlasPose.rootInterval ℚ ∧
+    (table.get 0).interval =
+      AtlasFundamentalPrune.restrictedRootInterval table.chart ∧
     (table.get 0).region = .sphere
 
 instance (table : Table) : Decidable table.Valid := by
@@ -353,9 +354,12 @@ theorem Table.valid_imp_no_chart_translated_pose
   obtain ⟨hnonempty, hrows, hrootInterval, hrootRegion⟩ := h
   have hchecked := valid_imp_noRupert_ix table.chart table.get table.size
     hrows 0 hnonempty
-  rw [hrootInterval, hrootRegion, NoRupert,
-    AtlasInterval.rootInterval_toReal] at hchecked
-  simpa [Region.Mem, and_assoc, and_left_comm, and_comm] using hchecked
+  rw [hrootInterval, hrootRegion] at hchecked
+  rintro ⟨p, hp, hbounded, hfund, hview, hupper, offset, hrupert⟩
+  exact hchecked ⟨p,
+    AtlasFundamentalPrune.mem_restrictedRootInterval
+      table.chart hp hbounded hfund,
+    hbounded, hfund, hview, hupper, offset, trivial, hrupert⟩
 
 /-- Four valid chart tables exclude every matrix pose. -/
 theorem no_matrixPose_of_valid_tables

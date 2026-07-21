@@ -2734,17 +2734,33 @@ def explore_atlas_projective_tree(max_nodes=10_000, max_view_depth=5,
 def generate_atlas_projective_table(
         chart, max_nodes=200_000, max_view_depth=12,
         min_relative_half_width=Q(1, 1024), checkpoint_path=None,
-        checkpoint_every=1000, resume=False):
+        checkpoint_every=1000, resume=False,
+        restricted_fundamental_root=False):
     """Generate one exact chart table for the formal projective checker."""
     root_center = (Q(0), Q(0), Q(0))
-    # The maximum-trace four-chart atlas puts each Cayley coordinate in
-    # [-1,1], an eightfold volume reduction over the earlier atlas root.
-    root_widths = (Q(1), Q(1), Q(1))
+    if restricted_fundamental_root:
+        # The fivefold max-trace condition forces one Cayley coordinate into
+        # [-1/3, 1/3]: z in chart 0, y in chart 1, and x in chart 2.
+        # These rational boxes are supersets of the exact Dirichlet cells, so
+        # geometric leaves may safely certify the whole box without tracing
+        # either irrational boundary.  Chart 3 is excluded separately by its
+        # four-row table and is retained here only for diagnostic symmetry.
+        root_widths = ((Q(1), Q(1), Q(1, 3)),
+                       (Q(1), Q(1, 3), Q(1)),
+                       (Q(1, 3), Q(1), Q(1)),
+                       (Q(1), Q(1), Q(1)))[chart]
+    else:
+        # The maximum-trace four-chart atlas puts each Cayley coordinate in
+        # [-1,1], an eightfold volume reduction over the earlier atlas root.
+        root_widths = (Q(1), Q(1), Q(1))
     if resume and checkpoint_path and os.path.exists(checkpoint_path):
         with open(checkpoint_path, "r", encoding="utf-8") as source:
             saved = json.load(source)
         if saved["chart"] != chart:
             raise ValueError("checkpoint chart does not match")
+        if saved.get("restricted_fundamental_root", False) != \
+                restricted_fundamental_root:
+            raise ValueError("checkpoint fundamental-root mode does not match")
         rows = saved["rows"]
         stack = []
         for state in saved["pending"]:
@@ -2795,6 +2811,8 @@ def generate_atlas_projective_table(
         temporary_path = checkpoint_path + ".tmp"
         with open(temporary_path, "w", encoding="utf-8") as output:
             json.dump({"complete": complete, "chart": chart, "rows": rows,
+                       "restricted_fundamental_root":
+                           restricted_fundamental_root,
                        "pending": [state[:-1] for state in stack],
                        "pending_candidates_omitted": True,
                        "counts": counts,
@@ -2811,13 +2829,19 @@ def generate_atlas_projective_table(
             rows[row_id] = {**common, "kind": "radius"}
             counts["radius"] += 1
             continue
-        fundamental_status, fundamental_direction, fundamental_bounds = \
-            atlas_fundamental_status(chart, center, widths)
-        if fundamental_status == "outside":
-            rows[row_id] = {**common, "kind": "fundamental_prune",
-                            "direction": fundamental_direction}
-            counts["fundamental_prune"] += 1
-            continue
+        if restricted_fundamental_root and chart != 3:
+            # Every fundamental-domain point is already in the restricted
+            # rational root.  Certifying its superset directly avoids an
+            # expensive axis-aligned approximation to the irrational cone.
+            fundamental_status = "inside"
+        else:
+            fundamental_status, fundamental_direction, fundamental_bounds = \
+                atlas_fundamental_status(chart, center, widths)
+            if fundamental_status == "outside":
+                rows[row_id] = {**common, "kind": "fundamental_prune",
+                                "direction": fundamental_direction}
+                counts["fundamental_prune"] += 1
+                continue
         # Resolve the relative-rotation fundamental domain before refining
         # the independent projective view.  Only coordinates occurring in
         # the chart's two trace-advantage quadratics need to be split.
@@ -3587,6 +3611,10 @@ def main():
     generate_atlas_table.add_argument("--checkpoint-every", type=int,
                                       default=1000)
     generate_atlas_table.add_argument("--resume", action="store_true")
+    generate_atlas_table.add_argument(
+        "--restricted-fundamental-root", action="store_true",
+        help="search the chart-specific rational superset of the exact "
+             "fivefold Dirichlet cell")
     explore = sub.add_parser("explore-cover")
     explore.add_argument("--max-nodes", type=int, default=200000)
     explore.add_argument("--directions", type=int, default=24)
@@ -3715,7 +3743,8 @@ def main():
         result = generate_atlas_projective_table(
             args.chart, args.max_nodes, args.max_view_depth,
             Q(args.min_relative_half_width), args.output,
-            args.checkpoint_every, args.resume)
+            args.checkpoint_every, args.resume,
+            args.restricted_fundamental_root)
         print(json.dumps({"complete": result["complete"],
                           "chart": result["chart"],
                           "row_count": len(result["rows"]),

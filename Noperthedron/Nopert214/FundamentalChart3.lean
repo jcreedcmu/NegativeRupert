@@ -19,7 +19,8 @@ namespace Noperthedron.Nopert214.FundamentalChart3
 open AtlasProjectiveSolutionTree AtlasProjectiveView
 open Noperthedron.SnubCube.ProjectiveView
 
-def root : AtlasProjectiveSolutionTree.Interval := AtlasPose.rootInterval ℚ
+def root : AtlasProjectiveSolutionTree.Interval :=
+  AtlasFundamentalPrune.restrictedRootInterval 3
 def lower : AtlasProjectiveSolutionTree.Interval := root.lowerHalf 4
 def upper : AtlasProjectiveSolutionTree.Interval := root.upperHalf 4
 
