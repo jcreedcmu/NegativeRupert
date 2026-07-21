@@ -275,7 +275,7 @@ FOOTER = """
 def getRow (i : ℕ) : AtlasProjectiveSolutionTree.Row :=
   (chunks[i / {chunk_size}]!)[i % {chunk_size}]!
 
-def table : AtlasProjectiveSolutionTree.Table where
+def table{table_parameters} : AtlasProjectiveSolutionTree.Table where
   chart := {chart}
   get := getRow
   size := {size}
@@ -441,12 +441,17 @@ def main():
     shared_group.add_argument("--shared-local-view-native", action="store_true",
                               help="attach native-only "
                                    "GeneratedLocalViewsNative.tables")
+    shared_group.add_argument("--parameterized-shared-local", action="store_true",
+                              help=("emit a data-only table parameterized by "
+                                    "externally checked shared local tables"))
     parser.add_argument("--namespace",
                         help="override the generated chart namespace")
     args = parser.parse_args()
 
     if args.data_only and args.audit_first_local:
         raise SystemExit("--data-only cannot be combined with --audit-first-local")
+    if args.parameterized_shared_local and not args.data_only:
+        raise SystemExit("--parameterized-shared-local requires --data-only")
 
     with open(args.input, "r", encoding="utf-8") as source:
         data = json.load(source)
@@ -460,7 +465,8 @@ def main():
         raise SystemExit("table contains unfilled rows")
     chart = data["chart"]
     namespace = args.namespace or f"GeneratedChart{chart}"
-    has_shared = args.shared_local_view or args.shared_local_view_native
+    has_shared = (args.shared_local_view or args.shared_local_view_native or
+                  args.parameterized_shared_local)
     shared_module = (
         "Noperthedron.Nopert214.GeneratedLocalViewsNative"
         if args.shared_local_view_native else
@@ -536,7 +542,8 @@ def main():
         output.write(HEADER.format(
             chart=chart, namespace=namespace,
             shared_import=(
-                f"public import {shared_module}" if has_shared else "")))
+                f"public import {shared_module}"
+                if has_shared and not args.parameterized_shared_local else "")))
         if args.kernel_friendly:
             interval_definitions = kernel_interval_definitions(
                 rows, interval_ids)
@@ -646,9 +653,12 @@ theorem first_local_valid_kernel :
       (fun _ => none) := by
   decide +kernel"""
         if args.kernel_friendly:
-            shared = (f"{shared_namespace}.tables"
-                      if has_shared else "(fun _ => none)")
-            shared_field = (f"  sharedLocal := {shared_namespace}.tables"
+            shared = ("shared" if args.parameterized_shared_local else
+                      f"{shared_namespace}.tables" if has_shared else
+                      "(fun _ => none)")
+            shared_field = ("  sharedLocal := shared"
+                            if args.parameterized_shared_local else
+                            f"  sharedLocal := {shared_namespace}.tables"
                             if has_shared else "")
             shared_valid_proof = (
                 "exact GeneratedLocalViews.tables_valid_kernel"
@@ -661,7 +671,9 @@ theorem first_local_valid_kernel :
                        shared_valid_proof)}
 {audit}
 """
-            output.write(f"""def table : AtlasProjectiveSolutionTree.Table where
+            table_parameters = (" (shared : SharedLocalTables)"
+                                if args.parameterized_shared_local else "")
+            output.write(f"""def table{table_parameters} : AtlasProjectiveSolutionTree.Table where
   chart := {chart}
   get := getRow
   size := {len(rows)}
@@ -678,7 +690,11 @@ end
                 chart=chart, validity=validity, audit=audit,
                 namespace=namespace,
                 chunk_size=args.chunk_size, size=len(rows),
+                table_parameters=(" (shared : SharedLocalTables)"
+                                  if args.parameterized_shared_local else ""),
                 shared_field=(
+                    "  sharedLocal := shared"
+                    if args.parameterized_shared_local else
                     f"  sharedLocal := {shared_namespace}.tables"
                     if has_shared else "")))
 
