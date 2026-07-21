@@ -34,9 +34,9 @@ pack_local 1 local-view-r100-child1.json
 pack_local 2 local-view-r10-child2.json
 pack_local 3 local-view-r10-child3.json
 
-pack_chart 0 correlated-per-view-chart0.json
-pack_chart 1 correlated-chart1.json
-pack_chart 2 correlated-chart2.json
+pack_chart 0 correlated-tight-chart0.json
+pack_chart 1 correlated-tight-chart1.json
+pack_chart 2 correlated-tight-chart2.json
 
 lake build constructNopert214
 exec .lake/build/bin/constructNopert214 "$artifact_dir"
