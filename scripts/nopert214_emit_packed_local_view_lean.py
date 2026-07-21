@@ -88,6 +88,8 @@ def main():
     parser.add_argument("--namespace", required=True)
     parser.add_argument("--string-chunk-size", type=int, default=32768)
     parser.add_argument("--proof-part-size", type=int, default=256)
+    parser.add_argument("--data-only", action="store_true",
+                        help="emit only the packed table data module")
     args = parser.parse_args()
 
     with open(args.input, "r", encoding="utf-8") as source:
@@ -131,6 +133,11 @@ end Noperthedron.Nopert214.{data_namespace}
 
 end
 """)
+
+    if args.data_only:
+        print(f"encoded {len(rows)} rows as {len(values)} naturals, "
+              f"{len(packed)} bytes, {len(chunks)} string chunks, data only")
+        return
 
     proof_parts = []
     for start in range(0, len(rows), args.proof_part_size):
