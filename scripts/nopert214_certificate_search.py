@@ -4014,10 +4014,21 @@ def projective_local_candidate(task):
         if (boundary_result is not None and
                 (result is None or boundary_result["c"] > result["c"])):
             result = boundary_result
+    if ((result is None or result["c"] < target_c) and depth >= 10):
+        # A five-sample boundary grid catches the remaining alternating cone
+        # pattern cheaply before the much larger corner-cycle searches.
+        boundary5_result = atlas_projective_local_triangle(
+            0, (Q(0), Q(0), Q(0)), (Q(0), Q(0), Q(0)),
+            0, triangle, 0, cone_samples=5, trials=1000,
+            include_boundaries=True)
+        if (boundary5_result is not None and
+                (result is None or boundary5_result["c"] > result["c"])):
+            result = boundary5_result
     if result is None and depth >= 10:
         result = atlas_projective_local_triangle(
             0, (Q(0), Q(0), Q(0)), (Q(0), Q(0), Q(0)),
-            0, triangle, 0, cone_samples=6, trials=10_000)
+            0, triangle, 0, cone_samples=6, trials=1000,
+            include_boundaries=True)
     if ((result is None or result["c"] < target_c) and depth >= 12):
         # A small triangle can straddle a silhouette-cycle transition.  Merge
         # candidate families seen at its corners before the uniform audit.
