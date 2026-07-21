@@ -15,7 +15,7 @@ open Noperthedron.Nopert214
 open Noperthedron.Nopert214.AtlasProjectiveLocalViewTree
 open Noperthedron.Nopert214.NativeExecutable
 
-private def taskCount : Nat := 512
+private def taskCount : Nat := 64
 
 def main (args : List String) : IO Unit := do
   let path ← match args with
