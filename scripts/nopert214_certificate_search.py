@@ -3313,8 +3313,12 @@ def generate_projective_local_view_table(
     if resume and os.path.exists(output_path):
         with open(output_path, "r", encoding="utf-8") as source:
             saved = json.load(source)
-        if (Q(saved["target_c"]) != target_c or
-                Q(saved["tube_radius"]) != tube_radius or
+        # Existing leaves remain valid when a resumed search asks for a
+        # smaller tube and a smaller required margin.  Their own larger `r`
+        # values are retained; the formal view-tree checker only requires the
+        # table radius to be no larger than each leaf radius.
+        if (target_c > Q(saved["target_c"]) or
+                tube_radius > Q(saved["tube_radius"]) or
                 saved["max_depth"] > max_depth or
                 saved.get("initial_child") != initial_child):
             raise ValueError("local-view checkpoint parameters do not match")
@@ -3392,9 +3396,16 @@ def generate_projective_local_view_table(
                 0, triangle, 0, cone_samples=6, trials=10_000)
         if result is not None and result["c"] < target_c:
             counts["weak_rejections"] += 1
-            stronger = atlas_projective_local_triangle(
-                0, (Q(0), Q(0), Q(0)), (Q(0), Q(0), Q(0)),
-                0, triangle, 0, cone_samples=4, trials=10_000)
+            stronger = None
+            if depth >= 10:
+                stronger = atlas_projective_local_triangle(
+                    0, (Q(0), Q(0), Q(0)), (Q(0), Q(0), Q(0)),
+                    0, triangle, 0, cone_samples=4, trials=10_000,
+                    include_boundaries=True)
+            if stronger is None or stronger["c"] < target_c:
+                stronger = atlas_projective_local_triangle(
+                    0, (Q(0), Q(0), Q(0)), (Q(0), Q(0), Q(0)),
+                    0, triangle, 0, cone_samples=4, trials=10_000)
             if stronger is None or stronger["c"] < target_c:
                 stronger = atlas_projective_local_triangle(
                     0, (Q(0), Q(0), Q(0)), (Q(0), Q(0), Q(0)),

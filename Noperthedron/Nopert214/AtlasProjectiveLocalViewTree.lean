@@ -67,7 +67,7 @@ def Row.ValidAt (symmetryIndex : OrbitIndex) (r : ℚ)
       (get (children child)).triangle =
         Noperthedron.SnubCube.ProjectiveView.split triangle child
   | .certificate _ box =>
-      box.symmetryIndex = symmetryIndex ∧ box.r = r ∧ box.ViewValid
+      box.symmetryIndex = symmetryIndex ∧ r ≤ box.r ∧ box.ViewValid
 
 instance (symmetryIndex : OrbitIndex) (r : ℚ) (get : ℕ → Row)
     (size : ℕ) (row : Row) :
@@ -154,18 +154,22 @@ theorem valid_imp_not_rupert_ix (symmetryIndex : OrbitIndex) (r : ℚ)
       have hmismatch : actual.mismatchRadius ≤ actual.r := by
         have hsym : box.symmetryIndex = tube.symmetryIndex :=
           hboxSymmetry.trans htubeSymmetry.symm
-        have hr : box.r = tube.r :=
-          hboxRadius.trans htubeRadius.symm
-        simpa [actual, Box.retarget, Box.mismatchRadius,
-          Box.mismatchShell, Tube.Valid, Tube.mismatchRadius, Tube.shell,
-          AtlasLocalCertificate.Box.mismatchRadius,
-          AtlasLocalCertificate.Box.mismatchFrobeniusSqUpper,
-          AtlasLocalCertificate.Box.entryAbsUpper,
-          AtlasLocalCertificate.Box.mismatchBall,
-          AtlasLocalCertificate.Box.variableBalls,
-          AtlasLocalCertificate.Box.mismatchQuadratic,
-          hsym, hr]
-          using htube
+        have hmismatchTube : actual.mismatchRadius ≤ tube.r := by
+          simpa [actual, Box.retarget, Box.mismatchRadius,
+            Box.mismatchShell, Tube.Valid, Tube.mismatchRadius, Tube.shell,
+            AtlasLocalCertificate.Box.mismatchRadius,
+            AtlasLocalCertificate.Box.mismatchFrobeniusSqUpper,
+            AtlasLocalCertificate.Box.entryAbsUpper,
+            AtlasLocalCertificate.Box.mismatchBall,
+            AtlasLocalCertificate.Box.variableBalls,
+            AtlasLocalCertificate.Box.mismatchQuadratic,
+            hsym]
+            using htube
+        have hr : tube.r ≤ box.r := by
+          calc
+            tube.r = r := htubeRadius
+            _ ≤ box.r := hboxRadius
+        simpa [actual, Box.retarget] using hmismatchTube.trans hr
       have hactual : actual.Valid :=
         Box.Valid.of_viewValid hactualView hmismatch
       exact actual.valid_imp_not_translated_rupert hactual hp offset

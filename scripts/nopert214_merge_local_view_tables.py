@@ -5,6 +5,7 @@ import argparse
 import copy
 import json
 import os
+from fractions import Fraction as Q
 
 from nopert214_certificate_search import UPPER_WEDGE_PROJECTIVE_ROOT
 
@@ -24,11 +25,12 @@ def main():
         if table.get("initial_child") != child:
             raise SystemExit(f"child index mismatch in {path}")
         tables.append(table)
-    target_c = tables[0]["target_c"]
-    tube_radius = tables[0]["tube_radius"]
-    if any(table["target_c"] != target_c or
-           table["tube_radius"] != tube_radius for table in tables[1:]):
-        raise SystemExit("child certificate parameters differ")
+    # A view certificate proved for a larger tube remains valid for every
+    # smaller tube.  The formal row checker records this monotonicity, so the
+    # merged table may use the smallest child radius while retaining stronger
+    # certificates already generated for easier quadrants.
+    target_c = str(min(Q(table["target_c"]) for table in tables))
+    tube_radius = str(min(Q(table["tube_radius"]) for table in tables))
 
     rows = [None]
     root_children = []
