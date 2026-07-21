@@ -4018,9 +4018,11 @@ def projective_local_candidate(task):
         result = atlas_projective_local_triangle(
             0, (Q(0), Q(0), Q(0)), (Q(0), Q(0), Q(0)),
             0, triangle, 0, cone_samples=6, trials=10_000)
-    if ((result is None or result["c"] < target_c) and depth >= 10):
+    if ((result is None or result["c"] < target_c) and depth >= 12):
         # A small triangle can straddle a silhouette-cycle transition.  Merge
         # candidate families seen at its corners before the uniform audit.
+        # Exact endpoint ties make subdivision cheaper at shallower depths,
+        # so reserve this much larger candidate pool for genuine survivors.
         corner_result = atlas_projective_local_triangle(
             0, (Q(0), Q(0), Q(0)), (Q(0), Q(0), Q(0)),
             0, triangle, 0, cone_samples=4, trials=100_000,
@@ -4044,7 +4046,7 @@ def projective_local_candidate(task):
                 (result is None or
                  dense_boundary_result["c"] > result["c"])):
             result = dense_boundary_result
-    if ((result is None or result["c"] < target_c) and depth >= 10):
+    if ((result is None or result["c"] < target_c) and depth >= 12):
         # The floating hull heuristic normalizes each candidate by an error-
         # inflated remainder budget.  On an exceptionally thin balanced
         # tetrahedron that perturbation can make the hull search choose the
@@ -4059,7 +4061,7 @@ def projective_local_candidate(task):
         if (zero_guided_result is not None and
                 (result is None or zero_guided_result["c"] > result["c"])):
             result = zero_guided_result
-    if ((result is None or result["c"] < target_c) and depth >= 10):
+    if ((result is None or result["c"] < target_c) and depth >= 12):
         # If even the zero-guided hull fails, retain the ordinary seven-sample
         # search as a final independent candidate ordering.
         fine_boundary_result = atlas_projective_local_triangle(
