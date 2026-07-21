@@ -205,6 +205,28 @@ def Box.mismatchShell (box : Box) : AtlasLocalCertificate.Box where
 abbrev Box.mismatchRadius (box : Box) : ℚ := box.mismatchShell.mismatchRadius
 
 @[mk_iff]
+structure Box.ViewValid (box : Box) : Prop where
+  triangle_valid : SignedTriangleValid box.root box.triangle
+  c_nonneg : 0 ≤ box.c
+  delta_nonneg : 0 ≤ box.δ
+  r_nonneg : 0 ≤ box.r
+  B_pos : ∀ j, 0 < (box.certificate j).B
+  weight_nonneg : ∀ j i, 0 ≤ box.weightLower j i
+  weight_pos : ∀ j, ∃ i, 0 < box.weightLower j i
+  support : ∀ j i k, box.supportUpper j i k ≤ 0
+  direction_nonzero : ∀ j i,
+    box.supportUpper j i ((box.certificate j).nonzeroWitness i) < 0
+  budget : ∀ j, box.weightBudget j ≤ (box.certificate j).B
+  variation : ∀ j,
+    box.variationRadiusSum j + 3 * variationError ≤
+      (box.certificate j).B * box.δ
+  barycentric : box.barycentricValid
+  angle_bound : box.r ^ 2 * (1 + box.c ^ 2) ≤ 4 * box.c ^ 2
+
+instance (box : Box) : Decidable box.ViewValid :=
+  decidable_of_iff _ (Box.viewValid_iff box).symm
+
+@[mk_iff]
 structure Box.Valid (box : Box) : Prop where
   triangle_valid : SignedTriangleValid box.root box.triangle
   c_nonneg : 0 ≤ box.c
@@ -226,6 +248,61 @@ structure Box.Valid (box : Box) : Prop where
 
 instance (box : Box) : Decidable box.Valid :=
   decidable_of_iff _ (Box.valid_iff box).symm
+
+theorem Box.Valid.viewValid {box : Box} (h : box.Valid) : box.ViewValid where
+  triangle_valid := h.triangle_valid
+  c_nonneg := h.c_nonneg
+  delta_nonneg := h.delta_nonneg
+  r_nonneg := h.r_nonneg
+  B_pos := h.B_pos
+  weight_nonneg := h.weight_nonneg
+  weight_pos := h.weight_pos
+  support := h.support
+  direction_nonzero := h.direction_nonzero
+  budget := h.budget
+  variation := h.variation
+  barycentric := h.barycentric
+  angle_bound := h.angle_bound
+
+theorem Box.Valid.of_viewValid {box : Box} (h : box.ViewValid)
+    (hmismatch : box.mismatchRadius ≤ box.r) : box.Valid where
+  triangle_valid := h.triangle_valid
+  c_nonneg := h.c_nonneg
+  delta_nonneg := h.delta_nonneg
+  r_nonneg := h.r_nonneg
+  B_pos := h.B_pos
+  weight_nonneg := h.weight_nonneg
+  weight_pos := h.weight_pos
+  support := h.support
+  direction_nonzero := h.direction_nonzero
+  budget := h.budget
+  variation := h.variation
+  barycentric := h.barycentric
+  mismatch_bound := hmismatch
+  angle_bound := h.angle_bound
+
+/-- Replace the relative-rotation box while retaining the view-local
+certificate.  `ViewValid` deliberately depends on neither field. -/
+def Box.retarget (box : Box) (interval : AtlasInterval ℚ)
+    (chart : CayleyAtlas.ChartIndex) : Box :=
+  { box with interval, chart }
+
+theorem Box.ViewValid.retarget {box : Box} (h : box.ViewValid)
+    (interval : AtlasInterval ℚ) (chart : CayleyAtlas.ChartIndex) :
+    (box.retarget interval chart).ViewValid where
+  triangle_valid := h.triangle_valid
+  c_nonneg := h.c_nonneg
+  delta_nonneg := h.delta_nonneg
+  r_nonneg := h.r_nonneg
+  B_pos := h.B_pos
+  weight_nonneg := h.weight_nonneg
+  weight_pos := h.weight_pos
+  support := h.support
+  direction_nonzero := h.direction_nonzero
+  budget := h.budget
+  variation := h.variation
+  barycentric := h.barycentric
+  angle_bound := h.angle_bound
 
 noncomputable def AxisCertificate.approxVariation (box : Box)
     (cert : AxisCertificate) (n : Fin 3 → ℝ) : ℝ³ :=

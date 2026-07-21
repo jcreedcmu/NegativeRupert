@@ -19,6 +19,7 @@ public import Noperthedron.Nopert214.AtlasLocalCertificateSmoke
 public import Noperthedron.Nopert214.AtlasProjectiveLocalRigidity
 public import Noperthedron.Nopert214.AtlasProjectiveLocalCertificate
 public import Noperthedron.Nopert214.AtlasProjectiveLocalCertificateSmoke
+public import Noperthedron.Nopert214.AtlasProjectiveLocalViewTree
 public import Noperthedron.Nopert214.AtlasProjectiveGlobalRigidity
 public import Noperthedron.Nopert214.AtlasProjectiveGlobalCertificate
 public import Noperthedron.Nopert214.AtlasProjectiveGlobalCertificateSmoke

@@ -2735,7 +2735,8 @@ def generate_atlas_projective_table(
         chart, max_nodes=200_000, max_view_depth=12,
         min_relative_half_width=Q(1, 1024), checkpoint_path=None,
         checkpoint_every=1000, resume=False,
-        restricted_fundamental_root=False):
+        restricted_fundamental_root=False,
+        chart0_origin_tube_radius=None):
     """Generate one exact chart table for the formal projective checker."""
     root_center = (Q(0), Q(0), Q(0))
     if restricted_fundamental_root:
@@ -2761,6 +2762,10 @@ def generate_atlas_projective_table(
         if saved.get("restricted_fundamental_root", False) != \
                 restricted_fundamental_root:
             raise ValueError("checkpoint fundamental-root mode does not match")
+        saved_tube_radius = saved.get("chart0_origin_tube_radius")
+        if ((None if saved_tube_radius is None else Q(saved_tube_radius)) !=
+                chart0_origin_tube_radius):
+            raise ValueError("checkpoint symmetry-tube radius does not match")
         rows = saved["rows"]
         stack = []
         for state in saved["pending"]:
@@ -2778,6 +2783,7 @@ def generate_atlas_projective_table(
                           failure["view_depth"], None))
         counts = saved["counts"]
         counts.setdefault("local", 0)
+        counts.setdefault("symmetry_tube", 0)
         counts.setdefault("fundamental_prune", 0)
         failures = []
     else:
@@ -2797,7 +2803,8 @@ def generate_atlas_projective_table(
                    "center": root_center, "widths": root_widths}
         counts = {"view_root": 1, "view_split": 0, "relative_split": 0,
                   "edge": 0, "global": 0, "local": 0, "radius": 0,
-                  "fundamental_prune": 0, "exact_rejections": 0}
+                  "fundamental_prune": 0, "symmetry_tube": 0,
+                  "exact_rejections": 0}
         failures = []
 
     def allocate(count):
@@ -2813,6 +2820,8 @@ def generate_atlas_projective_table(
             json.dump({"complete": complete, "chart": chart, "rows": rows,
                        "restricted_fundamental_root":
                            restricted_fundamental_root,
+                       "chart0_origin_tube_radius":
+                           chart0_origin_tube_radius,
                        "pending": [state[:-1] for state in stack],
                        "pending_candidates_omitted": True,
                        "counts": counts,
@@ -2820,8 +2829,9 @@ def generate_atlas_projective_table(
         os.replace(temporary_path, checkpoint_path)
 
     while stack and len(rows) < max_nodes:
+        state = stack.pop()
         (row_id, center, widths, root, triangle, view_depth,
-         inherited_global_candidates) = stack.pop()
+         inherited_global_candidates) = state
         common = {"id": row_id, "center": center, "widths": widths,
                   "root": root, "triangle": triangle,
                   "view_depth": view_depth}
@@ -2841,6 +2851,36 @@ def generate_atlas_projective_table(
                 rows[row_id] = {**common, "kind": "fundamental_prune",
                                 "direction": fundamental_direction}
                 counts["fundamental_prune"] += 1
+                continue
+        if chart == 0 and chart0_origin_tube_radius is not None:
+            mismatch_radius = atlas_projective_mismatch_radius(
+                chart, 0, center, widths)[0]
+            if mismatch_radius <= chart0_origin_tube_radius:
+                rows[row_id] = {**common, "kind": "symmetry_tube",
+                                "symmetry_index": 0,
+                                "radius": chart0_origin_tube_radius}
+                counts["symmetry_tube"] += 1
+                continue
+            if all(abs(value) <= width
+                   for value, width in zip(center, widths)):
+                # The exact equality pose lies in this closed box.  Isolate a
+                # small chart-0 neighborhood before refining the independent
+                # view, then discharge it with the shared uniform tube.
+                widest = max(range(3), key=lambda i: widths[i])
+                children = allocate(2)
+                rows[row_id] = {**common, "kind": "relative_split",
+                                "coordinate": widest+2,
+                                "children": children}
+                counts["relative_split"] += 1
+                child_widths = list(widths)
+                child_widths[widest] /= 2
+                for direction, child in zip((-1, 1), children):
+                    child_center = list(center)
+                    child_center[widest] += \
+                        direction*child_widths[widest]
+                    stack.append((child, tuple(child_center),
+                                  tuple(child_widths), root, triangle,
+                                  view_depth, None))
                 continue
         # Resolve the relative-rotation fundamental domain before refining
         # the independent projective view.  Only coordinates occurring in
@@ -3061,6 +3101,101 @@ def split_projective_triangle(triangle):
     bc = tuple((x+y)/2 for x, y in zip(b, c))
     ca = tuple((x+y)/2 for x, y in zip(c, a))
     return ((a, ab, ca), (ab, b, bc), (ca, bc, c), (ab, bc, ca))
+
+
+def generate_projective_local_view_table(
+        output_path, max_nodes=20_000, max_depth=12,
+        target_c=Q(1, 10_000), tube_radius=Q(1, 10_000),
+        checkpoint_every=100, resume=False):
+    """Generate the shared chart-0 symmetry-local projective-view atlas."""
+    if tube_radius*tube_radius*(1+target_c*target_c) > 4*target_c*target_c:
+        raise ValueError("tube radius is too large for the target local margin")
+    if resume and os.path.exists(output_path):
+        with open(output_path, "r", encoding="utf-8") as source:
+            saved = json.load(source)
+        if (Q(saved["target_c"]) != target_c or
+                Q(saved["tube_radius"]) != tube_radius or
+                saved["max_depth"] != max_depth):
+            raise ValueError("local-view checkpoint parameters do not match")
+        rows = saved["rows"]
+        stack = [(state[0],
+                  tuple(tuple(map(Q, corner)) for corner in state[1]),
+                  state[2]) for state in saved["pending"]]
+        failures = saved["failures"]
+        counts = saved["counts"]
+    else:
+        rows = [None]
+        stack = [(0, UPPER_WEDGE_PROJECTIVE_ROOT, 0)]
+        failures = []
+        counts = {"view_split": 0, "certificate": 0,
+                  "weak_rejections": 0}
+
+    def allocate(count):
+        children = list(range(len(rows), len(rows)+count))
+        rows.extend([None]*count)
+        return children
+
+    def checkpoint(complete=False):
+        temporary_path = output_path + ".tmp"
+        with open(temporary_path, "w", encoding="utf-8") as output:
+            json.dump({"complete": complete, "target_c": target_c,
+                       "tube_radius": tube_radius, "max_depth": max_depth,
+                       "rows": rows, "pending": stack,
+                       "counts": counts, "failures": failures}, output,
+                      default=str)
+        os.replace(temporary_path, output_path)
+
+    while stack and len(rows) < max_nodes and not failures:
+        row_id, triangle, depth = stack.pop()
+        trials = 100 if depth < 4 else 1000
+        result = atlas_projective_local_triangle(
+            0, (Q(0), Q(0), Q(0)), (Q(0), Q(0), Q(0)),
+            0, triangle, 0, cone_samples=4, trials=trials)
+        if result is None and depth >= 4:
+            result = atlas_projective_local_triangle(
+                0, (Q(0), Q(0), Q(0)), (Q(0), Q(0), Q(0)),
+                0, triangle, 0, cone_samples=5, trials=5000)
+        if result is not None and result["c"] < target_c:
+            counts["weak_rejections"] += 1
+            stronger = atlas_projective_local_triangle(
+                0, (Q(0), Q(0), Q(0)), (Q(0), Q(0), Q(0)),
+                0, triangle, 0, cone_samples=4, trials=10_000)
+            if stronger is None or stronger["c"] < target_c:
+                stronger = atlas_projective_local_triangle(
+                    0, (Q(0), Q(0), Q(0)), (Q(0), Q(0), Q(0)),
+                    0, triangle, 0, cone_samples=5, trials=50_000)
+            result = stronger
+        if (result is not None and result["c"] >= target_c and
+                tube_radius*tube_radius*(1+result["c"]*result["c"]) <=
+                    4*result["c"]*result["c"]):
+            rows[row_id] = {
+                "id": row_id, "kind": "view_local", "root": 0,
+                "triangle": triangle, "depth": depth,
+                "symmetry_index": 0, "r": tube_radius,
+                "certificate": result["certificates"],
+                "c": result["c"], "delta": result["delta"]}
+            counts["certificate"] += 1
+        elif depth < max_depth:
+            children = allocate(4)
+            rows[row_id] = {"id": row_id, "kind": "view_split",
+                            "root": 0, "triangle": triangle,
+                            "depth": depth, "children": children}
+            counts["view_split"] += 1
+            for child, child_triangle in zip(
+                    children, split_projective_triangle(triangle)):
+                stack.append((child, child_triangle, depth+1))
+        else:
+            failures.append({"id": row_id, "triangle": triangle,
+                             "depth": depth,
+                             "best_c": None if result is None else result["c"]})
+        if checkpoint_every and len(rows) % checkpoint_every < 4:
+            checkpoint(False)
+    complete = not stack and not failures and all(row is not None for row in rows)
+    checkpoint(complete)
+    return {"complete": complete, "rows": rows, "pending": stack,
+            "counts": counts, "failures": failures,
+            "target_c": target_c, "tube_radius": tube_radius,
+            "max_depth": max_depth}
 
 
 def atlas_simplex_cover(chart, relative_center, relative_half_widths,
@@ -3615,6 +3750,20 @@ def main():
         "--restricted-fundamental-root", action="store_true",
         help="search the chart-specific rational superset of the exact "
              "fivefold Dirichlet cell")
+    generate_atlas_table.add_argument(
+        "--chart0-origin-tube-radius",
+        help="experimental uniform local-rigidity radius around chart 0's "
+             "exact equality pose")
+    generate_local_view = sub.add_parser(
+        "generate-projective-local-view-table")
+    generate_local_view.add_argument("output")
+    generate_local_view.add_argument("--max-nodes", type=int, default=20_000)
+    generate_local_view.add_argument("--max-depth", type=int, default=12)
+    generate_local_view.add_argument("--target-c", default="1/10000")
+    generate_local_view.add_argument("--tube-radius", default="1/10000")
+    generate_local_view.add_argument("--checkpoint-every", type=int,
+                                     default=100)
+    generate_local_view.add_argument("--resume", action="store_true")
     explore = sub.add_parser("explore-cover")
     explore.add_argument("--max-nodes", type=int, default=200000)
     explore.add_argument("--directions", type=int, default=24)
@@ -3744,13 +3893,29 @@ def main():
             args.chart, args.max_nodes, args.max_view_depth,
             Q(args.min_relative_half_width), args.output,
             args.checkpoint_every, args.resume,
-            args.restricted_fundamental_root)
+            args.restricted_fundamental_root,
+            None if args.chart0_origin_tube_radius is None else
+              Q(args.chart0_origin_tube_radius))
         print(json.dumps({"complete": result["complete"],
                           "chart": result["chart"],
                           "row_count": len(result["rows"]),
                           "pending_count": len(result["pending"]),
                           "counts": result["counts"],
                           "failures": result["failures"]},
+                         indent=2, default=str))
+    elif args.command == "generate-projective-local-view-table":
+        result = generate_projective_local_view_table(
+            args.output, args.max_nodes, args.max_depth,
+            Q(args.target_c), Q(args.tube_radius), args.checkpoint_every,
+            args.resume)
+        print(json.dumps({"complete": result["complete"],
+                          "row_count": len(result["rows"]),
+                          "pending_count": len(result["pending"]),
+                          "counts": result["counts"],
+                          "failures": result["failures"],
+                          "target_c": result["target_c"],
+                          "tube_radius": result["tube_radius"],
+                          "max_depth": result["max_depth"]},
                          indent=2, default=str))
     elif args.command == "explore-cover":
         print(json.dumps(explore_cover(
