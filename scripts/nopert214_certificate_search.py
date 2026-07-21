@@ -23,6 +23,7 @@ import heapq
 import itertools
 import json
 import math
+import multiprocessing
 import os
 import random
 import sys
@@ -3619,10 +3620,70 @@ def split_projective_triangle(triangle):
     return ((a, ab, ca), (ab, b, bc), (ca, bc, c), (ab, bc, ca))
 
 
+def projective_local_candidate(task):
+    """Search one local-view triangle; suitable for a process-pool worker."""
+    triangle, depth, target_c = task
+    trials = 100 if depth < 4 else 1000
+    result = atlas_projective_local_triangle(
+        0, (Q(0), Q(0), Q(0)), (Q(0), Q(0), Q(0)),
+        0, triangle, 0, cone_samples=4, trials=trials)
+    if result is None and 4 <= depth < 10:
+        result = atlas_projective_local_triangle(
+            0, (Q(0), Q(0), Q(0)), (Q(0), Q(0), Q(0)),
+            0, triangle, 0, cone_samples=5, trials=5000)
+    if ((result is None or result["c"] < target_c) and depth >= 10):
+        # Near a silhouette transition the limiting dual may lie almost on
+        # an edge normal.  Endpoint-enriched sampling is the cheap fallback.
+        boundary_result = atlas_projective_local_triangle(
+            0, (Q(0), Q(0), Q(0)), (Q(0), Q(0), Q(0)),
+            0, triangle, 0, cone_samples=4, trials=1,
+            include_boundaries=True)
+        if (boundary_result is not None and
+                (result is None or boundary_result["c"] > result["c"])):
+            result = boundary_result
+    if result is None and depth >= 10:
+        result = atlas_projective_local_triangle(
+            0, (Q(0), Q(0), Q(0)), (Q(0), Q(0), Q(0)),
+            0, triangle, 0, cone_samples=6, trials=10_000)
+    if ((result is None or result["c"] < target_c) and depth >= 10):
+        # A small triangle can straddle a silhouette-cycle transition.  Merge
+        # candidate families seen at its corners before the uniform audit.
+        corner_result = atlas_projective_local_triangle(
+            0, (Q(0), Q(0), Q(0)), (Q(0), Q(0), Q(0)),
+            0, triangle, 0, cone_samples=4, trials=100_000,
+            include_boundaries=True, include_corner_cycles=True)
+        if (corner_result is not None and
+                (result is None or corner_result["c"] > result["c"])):
+            result = corner_result
+    weak_rejection = result is not None and result["c"] < target_c
+    if weak_rejection:
+        stronger = None
+        if depth >= 10:
+            stronger = atlas_projective_local_triangle(
+                0, (Q(0), Q(0), Q(0)), (Q(0), Q(0), Q(0)),
+                0, triangle, 0, cone_samples=4, trials=10_000,
+                include_boundaries=True)
+        if stronger is None or stronger["c"] < target_c:
+            stronger = atlas_projective_local_triangle(
+                0, (Q(0), Q(0), Q(0)), (Q(0), Q(0), Q(0)),
+                0, triangle, 0, cone_samples=4, trials=10_000)
+        if stronger is None or stronger["c"] < target_c:
+            stronger = atlas_projective_local_triangle(
+                0, (Q(0), Q(0), Q(0)), (Q(0), Q(0), Q(0)),
+                0, triangle, 0, cone_samples=5, trials=50_000)
+        if ((stronger is None or stronger["c"] < target_c) and
+                depth >= 10):
+            stronger = atlas_projective_local_triangle(
+                0, (Q(0), Q(0), Q(0)), (Q(0), Q(0), Q(0)),
+                0, triangle, 0, cone_samples=6, trials=100_000)
+        result = stronger
+    return result, weak_rejection
+
+
 def generate_projective_local_view_table(
         output_path, max_nodes=20_000, max_depth=12,
         target_c=Q(1, 10_000), tube_radius=Q(1, 10_000),
-        checkpoint_every=100, resume=False, initial_child=None):
+        checkpoint_every=100, resume=False, initial_child=None, workers=1):
     """Generate the shared chart-0 symmetry-local projective-view atlas."""
     lock = open(output_path + ".lock", "w", encoding="utf-8")
     try:
@@ -3698,98 +3759,67 @@ def generate_projective_local_view_table(
             "counts": counts,
         }), flush=True)
 
+    if workers < 1:
+        raise ValueError("workers must be positive")
+    pool = (None if workers == 1 else
+            multiprocessing.get_context("fork").Pool(workers))
     processed_since_checkpoint = 0
-    while stack and len(rows) < max_nodes and not failures:
-        row_id, triangle, depth = stack.pop()
-        trials = 100 if depth < 4 else 1000
-        result = atlas_projective_local_triangle(
-            0, (Q(0), Q(0), Q(0)), (Q(0), Q(0), Q(0)),
-            0, triangle, 0, cone_samples=4, trials=trials)
-        if result is None and 4 <= depth < 10:
-            result = atlas_projective_local_triangle(
-                0, (Q(0), Q(0), Q(0)), (Q(0), Q(0), Q(0)),
-                0, triangle, 0, cone_samples=5, trials=5000)
-        if ((result is None or result["c"] < target_c) and depth >= 10):
-            # Near a silhouette transition the useful limiting LP dual can
-            # sit extremely close to an edge normal.  The endpoint-enriched
-            # grid is cheaper than the dense uniform fallback, so try it
-            # first on genuinely deep holdouts.
-            boundary_result = atlas_projective_local_triangle(
-                0, (Q(0), Q(0), Q(0)), (Q(0), Q(0), Q(0)),
-                0, triangle, 0, cone_samples=4, trials=1,
-                include_boundaries=True)
-            if (boundary_result is not None and
-                    (result is None or boundary_result["c"] > result["c"])):
-                result = boundary_result
-        if result is None and depth >= 10:
-            result = atlas_projective_local_triangle(
-                0, (Q(0), Q(0), Q(0)), (Q(0), Q(0), Q(0)),
-                0, triangle, 0, cone_samples=6, trials=10_000)
-        if ((result is None or result["c"] < target_c) and depth >= 10):
-            # A tiny triangle can still straddle a silhouette-cycle change.
-            # In that case its centroid exposes only one of the adjacent
-            # candidate families, even though a balanced tetrahedron using
-            # both families is uniformly valid on the whole triangle.  The
-            # corner-enriched search merges those families before the exact
-            # triangle-wide audit.  This closes transition cells without an
-            # artificial depth chase.
-            corner_result = atlas_projective_local_triangle(
-                0, (Q(0), Q(0), Q(0)), (Q(0), Q(0), Q(0)),
-                0, triangle, 0, cone_samples=4, trials=100_000,
-                include_boundaries=True, include_corner_cycles=True)
-            if (corner_result is not None and
-                    (result is None or corner_result["c"] > result["c"])):
-                result = corner_result
-        if result is not None and result["c"] < target_c:
-            counts["weak_rejections"] += 1
-            stronger = None
-            if depth >= 10:
-                stronger = atlas_projective_local_triangle(
-                    0, (Q(0), Q(0), Q(0)), (Q(0), Q(0), Q(0)),
-                    0, triangle, 0, cone_samples=4, trials=10_000,
-                    include_boundaries=True)
-            if stronger is None or stronger["c"] < target_c:
-                stronger = atlas_projective_local_triangle(
-                    0, (Q(0), Q(0), Q(0)), (Q(0), Q(0), Q(0)),
-                    0, triangle, 0, cone_samples=4, trials=10_000)
-            if stronger is None or stronger["c"] < target_c:
-                stronger = atlas_projective_local_triangle(
-                    0, (Q(0), Q(0), Q(0)), (Q(0), Q(0), Q(0)),
-                    0, triangle, 0, cone_samples=5, trials=50_000)
-            if ((stronger is None or stronger["c"] < target_c) and
-                    depth >= 10):
-                stronger = atlas_projective_local_triangle(
-                    0, (Q(0), Q(0), Q(0)), (Q(0), Q(0), Q(0)),
-                    0, triangle, 0, cone_samples=6, trials=100_000)
-            result = stronger
-        if (result is not None and result["c"] >= target_c and
-                tube_radius*tube_radius*(1+result["c"]*result["c"]) <=
-                    4*result["c"]*result["c"]):
-            rows[row_id] = {
-                "id": row_id, "kind": "view_local", "root": 0,
-                "triangle": triangle, "depth": depth,
-                "symmetry_index": 0, "r": tube_radius,
-                "certificate": result["certificates"],
-                "c": result["c"], "delta": result["delta"]}
-            counts["certificate"] += 1
-        elif depth < max_depth:
-            children = allocate(4)
-            rows[row_id] = {"id": row_id, "kind": "view_split",
-                            "root": 0, "triangle": triangle,
-                            "depth": depth, "children": children}
-            counts["view_split"] += 1
-            for child, child_triangle in zip(
-                    children, split_projective_triangle(triangle)):
-                stack.append((child, child_triangle, depth+1))
-        else:
-            failures.append({"id": row_id, "triangle": triangle,
-                             "depth": depth,
-                             "best_c": None if result is None else result["c"]})
-        processed_since_checkpoint += 1
-        if (checkpoint_every and
-                processed_since_checkpoint >= checkpoint_every):
-            checkpoint(False)
-            processed_since_checkpoint = 0
+    try:
+        while stack and len(rows) < max_nodes and not failures:
+            # Preserve the sequential generator's soft max_nodes bound: each
+            # processed row can allocate at most four children.
+            remaining = max_nodes - len(rows)
+            batch_size = min(workers, len(stack), max(1, (remaining+3)//4))
+            batch = [stack.pop() for _ in range(batch_size)]
+            tasks = [(triangle, depth, target_c)
+                     for _, triangle, depth in batch]
+            evaluated = ([projective_local_candidate(task) for task in tasks]
+                         if pool is None else pool.map(
+                             projective_local_candidate, tasks))
+            for (row_id, triangle, depth), (result, weak_rejection) in zip(
+                    batch, evaluated):
+                if weak_rejection:
+                    counts["weak_rejections"] += 1
+                if (result is not None and result["c"] >= target_c and
+                        tube_radius*tube_radius *
+                        (1+result["c"]*result["c"]) <=
+                            4*result["c"]*result["c"]):
+                    rows[row_id] = {
+                        "id": row_id, "kind": "view_local", "root": 0,
+                        "triangle": triangle, "depth": depth,
+                        "symmetry_index": 0, "r": tube_radius,
+                        "certificate": result["certificates"],
+                        "c": result["c"], "delta": result["delta"]}
+                    counts["certificate"] += 1
+                elif depth < max_depth:
+                    children = allocate(4)
+                    rows[row_id] = {
+                        "id": row_id, "kind": "view_split", "root": 0,
+                        "triangle": triangle, "depth": depth,
+                        "children": children}
+                    counts["view_split"] += 1
+                    for child, child_triangle in zip(
+                            children, split_projective_triangle(triangle)):
+                        stack.append((child, child_triangle, depth+1))
+                else:
+                    failures.append({
+                        "id": row_id, "triangle": triangle, "depth": depth,
+                        "best_c": (None if result is None else result["c"])})
+                processed_since_checkpoint += 1
+            if (checkpoint_every and
+                    processed_since_checkpoint >= checkpoint_every):
+                checkpoint(False)
+                processed_since_checkpoint = 0
+    except BaseException:
+        if pool is not None:
+            pool.terminate()
+        raise
+    else:
+        if pool is not None:
+            pool.close()
+    finally:
+        if pool is not None:
+            pool.join()
     complete = not stack and not failures and all(row is not None for row in rows)
     checkpoint(complete)
     lock.close()
@@ -4367,6 +4397,8 @@ def main():
     generate_local_view.add_argument("--resume", action="store_true")
     generate_local_view.add_argument("--initial-child", type=int,
                                      choices=range(4))
+    generate_local_view.add_argument("--workers", type=int, default=1,
+                                     help="parallel triangle-search processes")
     explore = sub.add_parser("explore-cover")
     explore.add_argument("--max-nodes", type=int, default=200000)
     explore.add_argument("--directions", type=int, default=24)
@@ -4518,7 +4550,7 @@ def main():
         result = generate_projective_local_view_table(
             args.output, args.max_nodes, args.max_depth,
             Q(args.target_c), Q(args.tube_radius), args.checkpoint_every,
-            args.resume, args.initial_child)
+            args.resume, args.initial_child, args.workers)
         print(json.dumps({"complete": result["complete"],
                           "row_count": len(result["rows"]),
                           "pending_count": len(result["pending"]),
