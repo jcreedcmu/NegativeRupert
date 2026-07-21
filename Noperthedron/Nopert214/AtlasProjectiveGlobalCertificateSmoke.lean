@@ -100,6 +100,71 @@ theorem bernstein_valid_kernel : bernsteinBox.Valid := by decide +kernel
 
 theorem bernstein_valid_native : bernsteinBox.Valid := by native_decide
 
+/-! A silhouette-transition row where the old product of independent
+weight/support maxima loses the positive margin.  The correlated simplex
+controls in `weightedDefectUpper` recover it. -/
+
+def weightedInterval : AtlasInterval ℚ :=
+  AtlasInterval.mk
+    { θ := 0, φ := 0, x := 1 / 4, y := 15 / 16, z := 7 / 8 }
+    { θ := 0, φ := 0, x := 1 / 3, y := 1, z := 15 / 16 }
+    (by rw [AtlasPose.le_iff]; norm_num)
+
+def weightedTriangle : AtlasProjectiveView.Triangle ℚ := ![
+  ![61 / 164, 31 / 82, 1 / 4],
+  ![51 / 164, 31 / 164, 1 / 2],
+  ![23 / 41, 31 / 164, 1 / 4]]
+
+def weightedCertificate : AxisCertificate where
+  edgeStart := ![3, 9, 17]
+  edgeFinish := ![7, 12, 18]
+  edgeStart₂ := ![7, 12, 18]
+  edgeFinish₂ := ![6, 13, 19]
+  mix := ![800, 800, 400]
+  index := ![7, 12, 18]
+  nonzeroWitness := ![12, 3, 9]
+  B := 1012059661 / 1000000000
+
+def weightedBox : AtlasProjectiveGlobalCertificate.Box where
+  interval := weightedInterval
+  root := 0
+  triangle := weightedTriangle
+  chart := 2
+  certificate := weightedCertificate
+  innerIndex := ![5, 13, 11]
+  ballMultiplier := 0
+
+theorem weighted_triangle_valid :
+    AtlasProjectiveEdgeCertificate.SignedTriangleValid
+      weightedBox.root weightedBox.triangle := by
+  native_decide
+
+theorem weighted_weights_valid :
+    (∀ i, 0 ≤ weightedBox.weightLower i) ∧
+      (∃ i, 0 < weightedBox.weightLower i) := by
+  native_decide
+
+theorem weighted_directions_valid :
+    ∀ i, weightedBox.supportUpper i
+      (weightedBox.certificate.nonzeroWitness i) < 0 := by
+  native_decide
+
+theorem weighted_displacement_valid :
+    weightedBox.displacementError ≤
+      weightedBox.certifiedDisplacementLower -
+        weightedBox.dBound * weightedBox.weightedDefectUpper := by
+  native_decide
+
+theorem weighted_old_defect_fails :
+    weightedBox.certifiedDisplacementLower -
+        weightedBox.dBound * weightedBox.totalDefect <
+      weightedBox.displacementError := by
+  native_decide
+
+theorem weighted_valid_kernel : weightedBox.Valid := by decide +kernel
+
+theorem weighted_valid_native : weightedBox.Valid := by native_decide
+
 theorem excludes_triangle_kernel {p : AtlasPose ℝ}
     (hp : p ∈ interval.toReal) (offset : ℝ²)
     (hbounded : p.CayleyBounded)

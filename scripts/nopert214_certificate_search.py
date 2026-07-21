@@ -1246,7 +1246,10 @@ def atlas_projective_global_triangle(
                           zip(relative_center, relative_radii))
         error = 300 * d_bound * exact_certificate.KAPPA
         total_support_defect = row["diagnostics"]["total_support_defect"]
-        defect_penalty = d_bound * total_support_defect
+        weighted_support_defect = \
+            atlas_projective_global_weighted_defect_upper(
+                triangle, candidate)
+        defect_penalty = d_bound * weighted_support_defect
         interval_lower = displacement_ball[0] - displacement_ball[1]
         bernstein_lower = atlas_projective_global_simplex_bernstein_lower(
             chart, relative_center, relative_radii, triangle, candidate,
@@ -1272,6 +1275,7 @@ def atlas_projective_global_triangle(
                 "certified_lower": certified_lower,
                 "d_bound": d_bound,
                 "total_support_defect": total_support_defect,
+                "weighted_support_defect": weighted_support_defect,
                 "defect_penalty": defect_penalty,
                 "error": error,
                 "lower_bound": lower,
@@ -1469,13 +1473,16 @@ def atlas_projective_global_float_screen(
         total_support_defect = sum(
             upper * contact.get("support_defect", 0.0)
             for upper, contact in zip(weight_upper, contacts))
+        weighted_support_defect = \
+            atlas_projective_global_weighted_defect_upper_float(
+                triangle_f, candidate)
         bernstein_lower = \
             atlas_projective_global_simplex_bernstein_lower_float(
                 chart, relative_center_f, relative_radii_f, triangle_f,
                 candidate, [center_data(contact)[1]
                             for contact in contacts], ball_multiplier)
         certified_lower = max(total[0]-total[1], bernstein_lower)
-        lower = (certified_lower - d_bound*total_support_defect -
+        lower = (certified_lower - d_bound*weighted_support_defect -
                  300*d_bound*float(exact_certificate.KAPPA))
         if best is None or lower > best[0]:
             best = (lower, candidate, ball_multiplier)
@@ -2153,6 +2160,45 @@ def qpoly_bernstein_control(coefficients, centers, radii, i, j, k):
             (azz if k == 2 else 0)+u*v*axy+u*w*axz+v*w*ayz)
 
 
+def atlas_projective_global_weighted_defect_upper(triangle, candidate):
+    """Exact simplex bound for the correlated weight × support excess.
+
+    Both factors are affine in the normalized view.  Their symmetric
+    degree-two controls avoid multiplying unrelated maxima at a silhouette
+    transition, mirroring `Box.weightedDefectUpper` in Lean.
+    """
+    edges = [projective_mixed_edge_q(contact)
+             for contact in candidate["contacts"]]
+    weight_coefficients = [cross3(edges[1], edges[2]),
+                           cross3(edges[2], edges[0]),
+                           cross3(edges[0], edges[1])]
+    error = PROJECTIVE_SUPPORT_ERROR
+
+    def factor(coefficient, corner):
+        return exact_certificate.qdot(triangle[corner], coefficient) + error
+
+    total = Q(0)
+    for i, contact in enumerate(candidate["contacts"]):
+        selected = contact["vertex"]
+        upper = Q(0)
+        for k, vertex in enumerate(VERTICES_Q):
+            if k == selected:
+                continue
+            delta = tuple(a-b for a, b in
+                          zip(vertex, VERTICES_Q[selected]))
+            support_coefficient = cross3(edges[i], delta)
+            for a in range(3):
+                for b in range(3):
+                    control = (
+                        factor(weight_coefficients[i], a) *
+                            factor(support_coefficient, b) +
+                        factor(weight_coefficients[i], b) *
+                            factor(support_coefficient, a)) / 2
+                    upper = max(upper, control)
+        total += upper
+    return total
+
+
 def qpoly_bernstein_lower(coefficients, centers, radii):
     """Exact tensor-degree-(2,2,2) Bernstein lower bound on a box."""
     return min(qpoly_bernstein_control(
@@ -2610,6 +2656,41 @@ def qpoly_bernstein_control_float(coefficients, centers, radii, i, j, k):
         (axx if i == 2 else 0)+(ayy if j == 2 else 0)+
         (azz if k == 2 else 0)+(i*j/4)*axy+(i*k/4)*axz+
         (j*k/4)*ayz)
+
+
+def atlas_projective_global_weighted_defect_upper_float(
+        triangle, candidate):
+    edges_q = [projective_mixed_edge_q(contact)
+               for contact in candidate["contacts"]]
+    edges = [tuple(map(float, edge)) for edge in edges_q]
+    weight_coefficients = [cross3(edges[1], edges[2]),
+                           cross3(edges[2], edges[0]),
+                           cross3(edges[0], edges[1])]
+    error = float(PROJECTIVE_SUPPORT_ERROR)
+
+    def factor(coefficient, corner):
+        return dot3(triangle[corner], coefficient) + error
+
+    total = 0.0
+    for i, contact in enumerate(candidate["contacts"]):
+        selected = contact["vertex"]
+        upper = 0.0
+        for k, vertex in enumerate(VERTICES):
+            if k == selected:
+                continue
+            delta = tuple(a-b for a, b in
+                          zip(vertex, VERTICES[selected]))
+            support_coefficient = cross3(edges[i], delta)
+            for a in range(3):
+                for b in range(3):
+                    control = (
+                        factor(weight_coefficients[i], a) *
+                            factor(support_coefficient, b) +
+                        factor(weight_coefficients[i], b) *
+                            factor(support_coefficient, a)) / 2
+                    upper = max(upper, control)
+        total += upper
+    return total
 
 
 def qpoly_bernstein_lower_float(coefficients, centers, radii):

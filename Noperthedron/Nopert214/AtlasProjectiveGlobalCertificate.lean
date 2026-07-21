@@ -66,9 +66,49 @@ def Box.defect (box : Box) (i : Fin 3) : ℚ :=
     simp only [Finset.image_nonempty]
     exact Finset.univ_nonempty)
 
+/-- The true, pose-dependent support excess.  Keeping it pose-dependent is
+what permits a correlated upper bound on `weight * defect`. -/
+noncomputable def Box.actualDefect (box : Box) (p : AtlasPose ℝ)
+    (i : Fin 3) : ℝ :=
+  (Finset.image
+    (fun k => box.certificate.exactSupport box.localShell p i k)
+    Finset.univ).max' (by
+      simp only [Finset.image_nonempty]
+      exact Finset.univ_nonempty)
+
 /-- A uniform upper bound for the exact weighted support-defect charge. -/
 def Box.totalDefect (box : Box) : ℚ :=
   ∑ i, box.weightUpper i * box.defect i
+
+/-! The pointwise weight and support excess are affine in the normalized
+projective view.  Bounding their product by multiplying two unrelated maxima
+is unnecessarily lossy near a silhouette transition.  The nine controls
+below are the degree-two simplex Bernstein controls of that product, with the
+rational-approximation allowance folded into both affine factors. -/
+
+def Box.weightedSupportControl (box : Box) (i : Fin 3) (k : VertexIndex)
+    (a b : Fin 3) : ℚ :=
+  if k = box.certificate.index i then 0
+  else
+    ((box.localShell.weightAt 0 a i +
+          AtlasProjectiveLocalCertificate.supportError) *
+        (box.localShell.supportAt 0 b i k +
+          AtlasProjectiveLocalCertificate.supportError) +
+      (box.localShell.weightAt 0 b i +
+          AtlasProjectiveLocalCertificate.supportError) *
+        (box.localShell.supportAt 0 a i k +
+          AtlasProjectiveLocalCertificate.supportError)) / 2
+
+def Box.weightedSupportUpper (box : Box) (i : Fin 3)
+    (k : VertexIndex) : ℚ :=
+  max3 fun a => max3 fun b => box.weightedSupportControl i k a b
+
+def Box.contactDefectUpper (box : Box) (i : Fin 3) : ℚ :=
+  max 0 ((Finset.image (box.weightedSupportUpper i) Finset.univ).max'
+    (by simp only [Finset.image_nonempty]; exact Finset.univ_nonempty))
+
+def Box.weightedDefectUpper (box : Box) : ℚ :=
+  ∑ i, box.contactDefectUpper i
 
 def Box.contactQuadratic (box : Box) (i c : Fin 3) : RatQuadratic3 :=
   let edge := box.certificate.edgeQ i
@@ -262,7 +302,7 @@ structure Box.Valid (box : Box) : Prop where
     box.supportUpper i (box.certificate.nonzeroWitness i) < 0
   ball_multiplier_nonneg : 0 ≤ box.ballMultiplier
   displacement : box.displacementError ≤
-    box.certifiedDisplacementLower - box.dBound * box.totalDefect
+    box.certifiedDisplacementLower - box.dBound * box.weightedDefectUpper
 
 instance (box : Box) : Decidable box.Valid :=
   decidable_of_iff _ (Box.valid_iff box).symm
@@ -344,6 +384,15 @@ theorem Box.totalDefect_nonneg (box : Box) (h : box.Valid) :
   exact Finset.sum_nonneg fun i _ =>
     mul_nonneg (box.weightUpper_nonneg h i) (box.defect_nonneg i)
 
+theorem Box.contactDefectUpper_nonneg (box : Box) (i : Fin 3) :
+    0 ≤ box.contactDefectUpper i := by
+  exact le_max_left 0 _
+
+theorem Box.weightedDefectUpper_nonneg (box : Box) :
+    0 ≤ box.weightedDefectUpper := by
+  unfold Box.weightedDefectUpper
+  exact Finset.sum_nonneg fun i _ => box.contactDefectUpper_nonneg i
+
 theorem Box.valid_support_with_defect (box : Box) (_h : box.Valid)
     {p : AtlasPose ℝ} (offset : ℝ²)
     (hscale : 1 ≤ viewScale box.root p)
@@ -363,6 +412,58 @@ theorem Box.valid_support_with_defect (box : Box) (_h : box.Valid)
   have hdefect : box.certificate.exactSupport box.localShell p i k ≤
       (box.defect i : ℝ) :=
     hupper.trans (by exact_mod_cast box.supportUpper_le_defect i k)
+  have hdiff :
+      inner ℝ (direction box.root p (box.certificate.exactEdge i))
+          ((outerProjectionLinear (p.matrixPoseWithOffset box.chart offset))
+              (exactVertex k) -
+            (outerProjectionLinear (p.matrixPoseWithOffset box.chart offset))
+              (exactVertex (box.certificate.index i))) =
+        box.certificate.exactSupport box.localShell p i k := by
+    rw [← map_sub,
+      inner_direction_outerProjection_eq_support box.root p box.chart offset
+        _ _ hscaleNe]
+    unfold AxisCertificate.exactSupport
+    congr 2
+    simp [AxisCertificate.exactDelta,
+      AxisCertificate.exactSelectedVertex]
+  rw [inner_sub_right] at hdiff
+  linarith
+
+theorem Box.exactSupport_le_actualDefect (box : Box) (p : AtlasPose ℝ)
+    (i : Fin 3) (k : VertexIndex) :
+    box.certificate.exactSupport box.localShell p i k ≤
+      box.actualDefect p i := by
+  unfold Box.actualDefect
+  exact Finset.le_max' _ _
+    (Finset.mem_image_of_mem _ (Finset.mem_univ k))
+
+theorem Box.actualDefect_nonneg (box : Box) (p : AtlasPose ℝ)
+    (i : Fin 3) : 0 ≤ box.actualDefect p i := by
+  have htie : box.localShell.exactSupportTie 0 i
+      (box.certificate.index i) := by
+    unfold AtlasProjectiveLocalCertificate.Box.exactSupportTie
+    change box.certificate.index i =
+      box.certificate.supportIndex box.localShell i
+    exact (box.localShell_supportIndex i).symm
+  rw [← box.localShell.exactSupport_eq_zero_of_tie 0 i
+    (box.certificate.index i) htie]
+  exact box.exactSupport_le_actualDefect p i (box.certificate.index i)
+
+theorem Box.valid_support_with_actualDefect (box : Box) (_h : box.Valid)
+    {p : AtlasPose ℝ} (offset : ℝ²)
+    (hscale : 1 ≤ viewScale box.root p)
+    (_hmem : InTriangle (toReal box.triangle)
+      (AtlasProjectiveView.normalizedView box.root p))
+    (i : Fin 3) (k : VertexIndex) :
+    inner ℝ (direction box.root p (box.certificate.exactEdge i))
+        (outerProjectionLinear (p.matrixPoseWithOffset box.chart offset)
+          (exactVertex k)) ≤
+      inner ℝ (direction box.root p (box.certificate.exactEdge i))
+        (outerProjectionLinear (p.matrixPoseWithOffset box.chart offset)
+          (exactVertex (box.certificate.index i))) + box.actualDefect p i := by
+  have hscaleNe :=
+    (lt_of_lt_of_le (by norm_num : (0 : ℝ) < 1) hscale).ne'
+  have hdefect := box.exactSupport_le_actualDefect p i k
   have hdiff :
       inner ℝ (direction box.root p (box.certificate.exactEdge i))
           ((outerProjectionLinear (p.matrixPoseWithOffset box.chart offset))
@@ -761,6 +862,238 @@ private theorem lower_le_weighted_sum {ι : Type} [Fintype ι]
       apply Finset.sum_le_sum
       intro i _
       exact mul_le_mul_of_nonneg_left (hlower i) (hweight i)
+
+private theorem weighted_sum_le_upper {ι : Type} [Fintype ι]
+    (weight value : ι → ℝ) (upper : ℝ)
+    (hweight : ∀ i, 0 ≤ weight i) (hsum : ∑ i, weight i = 1)
+    (hupper : ∀ i, value i ≤ upper) :
+    ∑ i, weight i * value i ≤ upper := by
+  calc
+    _ ≤ ∑ i, weight i * upper := by
+      apply Finset.sum_le_sum
+      intro i _
+      exact mul_le_mul_of_nonneg_left (hupper i) (hweight i)
+    _ = upper := by rw [← Finset.sum_mul, hsum, one_mul]
+
+theorem Box.weightedSupportControl_le_upper (box : Box) (i : Fin 3)
+    (k : VertexIndex) (a b : Fin 3) :
+    box.weightedSupportControl i k a b ≤ box.weightedSupportUpper i k := by
+  unfold Box.weightedSupportUpper
+  exact (le_max3 (fun b => box.weightedSupportControl i k a b) b).trans
+    (le_max3 (fun a => max3 fun b =>
+      box.weightedSupportControl i k a b) a)
+
+theorem Box.weightedSupportUpper_le_contactDefect (box : Box) (i : Fin 3)
+    (k : VertexIndex) :
+    box.weightedSupportUpper i k ≤ box.contactDefectUpper i := by
+  apply le_trans _ (le_max_right 0 _)
+  exact Finset.le_max' _ _
+    (Finset.mem_image_of_mem _ (Finset.mem_univ k))
+
+noncomputable def symmetricControl (left right : Fin 3 → ℝ)
+    (a b : Fin 3) : ℝ :=
+  (left a * right b + left b * right a) / 2
+
+theorem symmetricControl_sum (left right weight : Fin 3 → ℝ) :
+    (∑ a, ∑ b, weight a * weight b *
+      symmetricControl left right a b) =
+      (∑ a, weight a * left a) * (∑ b, weight b * right b) := by
+  simp [symmetricControl, Fin.sum_univ_three]
+  ring
+
+theorem Box.weightedSupportControl_sum (box : Box) (i : Fin 3)
+    (k : VertexIndex) (weight : Fin 3 → ℝ)
+    (hsum : ∑ a, weight a = 1)
+    (hne : k ≠ box.certificate.index i) :
+    (∑ a, ∑ b, weight a * weight b *
+      (box.weightedSupportControl i k a b : ℝ)) =
+      ((box.certificate.approxWeight
+          (affinePoint (toReal box.triangle) weight) i) +
+        (AtlasProjectiveLocalCertificate.supportError : ℝ)) *
+      ((box.certificate.approxSupport box.localShell
+          (affinePoint (toReal box.triangle) weight) i k) +
+        (AtlasProjectiveLocalCertificate.supportError : ℝ)) := by
+  let left : Fin 3 → ℝ := fun a =>
+    (box.localShell.weightAt 0 a i : ℝ) +
+      (AtlasProjectiveLocalCertificate.supportError : ℝ)
+  let right : Fin 3 → ℝ := fun a =>
+    (box.localShell.supportAt 0 a i k : ℝ) +
+      (AtlasProjectiveLocalCertificate.supportError : ℝ)
+  have hcontrol (a b : Fin 3) :
+      (box.weightedSupportControl i k a b : ℝ) =
+        symmetricControl left right a b := by
+    simp [Box.weightedSupportControl, hne, symmetricControl, left, right]
+  simp_rw [hcontrol]
+  rw [symmetricControl_sum]
+  have hleft : (∑ a, weight a * left a) =
+      box.certificate.approxWeight
+          (affinePoint (toReal box.triangle) weight) i +
+        (AtlasProjectiveLocalCertificate.supportError : ℝ) := by
+    dsimp only [left]
+    simp_rw [show ∀ a, (box.localShell.weightAt 0 a i : ℝ) =
+        box.certificate.approxWeight (toReal box.triangle a) i by
+      intro a
+      simpa [Box.localShell] using box.localShell.weightAt_cast 0 a i]
+    simp [AxisCertificate.approxWeight, affinePoint, linearValue,
+      Fin.sum_univ_three] at hsum ⊢
+    linear_combination
+      (AtlasProjectiveLocalCertificate.supportError : ℝ) * hsum
+  have hright : (∑ a, weight a * right a) =
+      box.certificate.approxSupport box.localShell
+          (affinePoint (toReal box.triangle) weight) i k +
+        (AtlasProjectiveLocalCertificate.supportError : ℝ) := by
+    dsimp only [right]
+    simp_rw [show ∀ a, (box.localShell.supportAt 0 a i k : ℝ) =
+        box.certificate.approxSupport box.localShell
+          (toReal box.triangle a) i k by
+      intro a
+      simpa [Box.localShell] using box.localShell.supportAt_cast 0 a i k]
+    simp [AxisCertificate.approxSupport, affinePoint, linearValue,
+      Fin.sum_univ_three] at hsum ⊢
+    linear_combination
+      (AtlasProjectiveLocalCertificate.supportError : ℝ) * hsum
+  rw [hleft, hright]
+
+theorem Box.exactWeight_mul_exactSupport_le_contactDefect
+    (box : Box) (h : box.Valid) {p : AtlasPose ℝ}
+    (hscale : 1 ≤ viewScale box.root p)
+    (hmem : InTriangle (toReal box.triangle)
+      (AtlasProjectiveView.normalizedView box.root p))
+    (i : Fin 3) (k : VertexIndex) :
+    box.certificate.exactWeight box.localShell p i *
+        box.certificate.exactSupport box.localShell p i k ≤
+      (box.contactDefectUpper i : ℝ) := by
+  have hwNonneg := box.valid_weight_nonneg h hscale hmem i
+  by_cases htie : k = box.certificate.index i
+  · subst k
+    have hlocalTie : box.localShell.exactSupportTie 0 i
+        (box.certificate.index i) := by
+      unfold AtlasProjectiveLocalCertificate.Box.exactSupportTie
+      change box.certificate.index i =
+        box.certificate.supportIndex box.localShell i
+      exact (box.localShell_supportIndex i).symm
+    have hzero : box.certificate.exactSupport box.localShell p i
+        (box.certificate.index i) = 0 := by
+      simpa [Box.localShell] using
+        box.localShell.exactSupport_eq_zero_of_tie 0 i _ hlocalTie
+    rw [hzero, mul_zero]
+    exact_mod_cast box.contactDefectUpper_nonneg i
+  · by_cases hsNonpos :
+        box.certificate.exactSupport box.localShell p i k ≤ 0
+    · exact (mul_nonpos_of_nonneg_of_nonpos hwNonneg hsNonpos).trans
+        (by exact_mod_cast box.contactDefectUpper_nonneg i)
+    · have hsPos : 0 <
+          box.certificate.exactSupport box.localShell p i k :=
+        lt_of_not_ge hsNonpos
+      obtain ⟨weight, hweight, hsum, hpoint⟩ := hmem
+      have hwError := box.certificate.exactWeight_sub_approx_abs_le
+        box.localShell hscale i
+      have hsError := box.certificate.exactSupport_sub_approx_abs_le
+        box.localShell hscale i k
+      rw [abs_le] at hwError hsError
+      have hwUpper :
+          box.certificate.exactWeight box.localShell p i ≤
+            box.certificate.approxWeight
+                (AtlasProjectiveView.normalizedView box.root p) i +
+              (AtlasProjectiveLocalCertificate.supportError : ℝ) := by
+        have herrorEq : 10 * RationalApprox.κ =
+            (AtlasProjectiveLocalCertificate.supportError : ℝ) := by
+          norm_num [AtlasProjectiveLocalCertificate.supportError,
+            RationalApprox.κ, RationalApprox.κℚ]
+        have herr :
+            box.certificate.exactWeight box.localShell p i -
+              box.certificate.approxWeight
+                (AtlasProjectiveView.normalizedView box.root p) i ≤
+              (AtlasProjectiveLocalCertificate.supportError : ℝ) := by
+          calc
+            _ ≤ 10 * RationalApprox.κ := by
+              simpa only [Box.localShell] using hwError.2
+            _ = _ := herrorEq
+        linarith only [herr]
+      have hsUpper :
+          box.certificate.exactSupport box.localShell p i k ≤
+            box.certificate.approxSupport box.localShell
+                (AtlasProjectiveView.normalizedView box.root p) i k +
+              (AtlasProjectiveLocalCertificate.supportError : ℝ) := by
+        have herr :
+            box.certificate.exactSupport box.localShell p i k -
+              box.certificate.approxSupport box.localShell
+                (AtlasProjectiveView.normalizedView box.root p) i k ≤
+              (AtlasProjectiveLocalCertificate.supportError : ℝ) := by
+          simpa only [Box.localShell] using hsError.2
+        linarith only [herr]
+      have hwApproxNonneg : 0 ≤
+          box.certificate.approxWeight
+              (AtlasProjectiveView.normalizedView box.root p) i +
+            (AtlasProjectiveLocalCertificate.supportError : ℝ) :=
+        hwNonneg.trans hwUpper
+      have hmul :
+          box.certificate.exactWeight box.localShell p i *
+              box.certificate.exactSupport box.localShell p i k ≤
+            (box.certificate.approxWeight
+                (AtlasProjectiveView.normalizedView box.root p) i +
+              (AtlasProjectiveLocalCertificate.supportError : ℝ)) *
+            (box.certificate.approxSupport box.localShell
+                (AtlasProjectiveView.normalizedView box.root p) i k +
+              (AtlasProjectiveLocalCertificate.supportError : ℝ)) :=
+        mul_le_mul hwUpper hsUpper (le_of_lt hsPos) hwApproxNonneg
+      have hcontrol (a b : Fin 3) :
+          (box.weightedSupportControl i k a b : ℝ) ≤
+            (box.weightedSupportUpper i k : ℝ) := by
+        exact_mod_cast box.weightedSupportControl_le_upper i k a b
+      have hweighted :
+          (∑ a, ∑ b, weight a * weight b *
+              (box.weightedSupportControl i k a b : ℝ)) ≤
+            (box.weightedSupportUpper i k : ℝ) := by
+        have houter := weighted_sum_le_upper weight
+          (fun a => ∑ b, weight b *
+            (box.weightedSupportControl i k a b : ℝ))
+          (box.weightedSupportUpper i k : ℝ) hweight hsum (fun a =>
+            weighted_sum_le_upper weight
+              (fun b => (box.weightedSupportControl i k a b : ℝ))
+              (box.weightedSupportUpper i k : ℝ) hweight hsum
+              (hcontrol a))
+        simpa only [Finset.mul_sum, mul_assoc] using houter
+      have hproduct := box.weightedSupportControl_sum i k weight hsum htie
+      rw [← hpoint] at hproduct
+      rw [hproduct] at hweighted
+      exact hmul.trans (hweighted.trans (by
+        exact_mod_cast box.weightedSupportUpper_le_contactDefect i k))
+
+theorem Box.exactWeight_mul_actualDefect_le_contactDefect
+    (box : Box) (h : box.Valid) {p : AtlasPose ℝ}
+    (hscale : 1 ≤ viewScale box.root p)
+    (hmem : InTriangle (toReal box.triangle)
+      (AtlasProjectiveView.normalizedView box.root p))
+    (i : Fin 3) :
+    box.certificate.exactWeight box.localShell p i * box.actualDefect p i ≤
+      (box.contactDefectUpper i : ℝ) := by
+  let values : Finset ℝ := Finset.image
+    (fun k => box.certificate.exactSupport box.localShell p i k)
+    Finset.univ
+  have hvalues : values.Nonempty := by
+    simp only [values, Finset.image_nonempty]
+    exact Finset.univ_nonempty
+  have hmember : values.max' hvalues ∈ values := Finset.max'_mem _ _
+  obtain ⟨k, _hk, hkvalue⟩ := Finset.mem_image.mp hmember
+  have hactual : box.actualDefect p i =
+      box.certificate.exactSupport box.localShell p i k := by
+    simpa only [Box.actualDefect, values] using hkvalue.symm
+  rw [hactual]
+  exact box.exactWeight_mul_exactSupport_le_contactDefect
+    h hscale hmem i k
+
+theorem Box.exactWeightedActualDefect_le (box : Box) (h : box.Valid)
+    {p : AtlasPose ℝ}
+    (hscale : 1 ≤ viewScale box.root p)
+    (hmem : InTriangle (toReal box.triangle)
+      (AtlasProjectiveView.normalizedView box.root p)) :
+    (∑ i, box.certificate.exactWeight box.localShell p i *
+        box.actualDefect p i) ≤ (box.weightedDefectUpper : ℝ) := by
+  rw [Box.weightedDefectUpper]
+  push_cast
+  exact Finset.sum_le_sum fun i _ =>
+    box.exactWeight_mul_actualDefect_le_contactDefect h hscale hmem i
 
 theorem Box.bernsteinDisplacementLower_le_control (box : Box)
     (i j : Fin 3) :
@@ -1283,7 +1616,7 @@ theorem Box.valid_exactClearedDisplacement (box : Box) (h : box.Valid)
     (hscale : 1 ≤ viewScale box.root p)
     (hmem : InTriangle (toReal box.triangle)
       (AtlasProjectiveView.normalizedView box.root p)) :
-    (box.dBound : ℝ) * (box.totalDefect : ℝ) ≤
+    (box.dBound : ℝ) * (box.weightedDefectUpper : ℝ) ≤
       box.exactClearedDisplacement p := by
   have hball := box.adjustedDisplacementBall_holds hp hmem
   have hlower := RatBall.lower_le_of_holds hball
@@ -1301,7 +1634,7 @@ theorem Box.valid_exactClearedDisplacement (box : Box) (h : box.Valid)
     exact max_le hlower hbernstein
   have hchecked : (box.displacementError : ℝ) ≤
       (box.certifiedDisplacementLower : ℝ) -
-        (box.dBound : ℝ) * (box.totalDefect : ℝ) := by
+        (box.dBound : ℝ) * (box.weightedDefectUpper : ℝ) := by
     have hcast := (Rat.cast_le (K := ℝ)).mpr h.displacement
     push_cast at hcast
     exact hcast
@@ -1324,14 +1657,16 @@ theorem Box.valid_actualClearedDisplacement (box : Box) (h : box.Valid)
     (hscale : 1 ≤ viewScale box.root p)
     (hmem : InTriangle (toReal box.triangle)
       (AtlasProjectiveView.normalizedView box.root p)) :
-    (box.totalDefect : ℝ) ≤ box.actualClearedDisplacement p := by
+    (box.weightedDefectUpper : ℝ) ≤ box.actualClearedDisplacement p := by
   have hexact := box.valid_exactClearedDisplacement h hp hbounded hscale hmem
   rw [box.exactClearedDisplacement_eq_denom_mul] at hexact
-  have hcharge : cayleyDenom p.x p.y p.z * (box.totalDefect : ℝ) ≤
-      (box.dBound : ℝ) * (box.totalDefect : ℝ) :=
+  have hcharge : cayleyDenom p.x p.y p.z *
+      (box.weightedDefectUpper : ℝ) ≤
+      (box.dBound : ℝ) * (box.weightedDefectUpper : ℝ) :=
     mul_le_mul_of_nonneg_right (box.denom_le_dBound hp)
-      (by exact_mod_cast box.totalDefect_nonneg h)
-  have hmul : cayleyDenom p.x p.y p.z * (box.totalDefect : ℝ) ≤
+      (by exact_mod_cast box.weightedDefectUpper_nonneg)
+  have hmul : cayleyDenom p.x p.y p.z *
+      (box.weightedDefectUpper : ℝ) ≤
       cayleyDenom p.x p.y p.z * box.actualClearedDisplacement p :=
     hcharge.trans hexact
   exact le_of_mul_le_mul_left hmul (cayleyDenom_pos p.x p.y p.z)
@@ -1350,7 +1685,7 @@ theorem Box.valid_imp_not_translated_rupert (box : Box) (h : box.Valid) :
     (lt_of_lt_of_le (by norm_num : (0 : ℝ) < 1) hscale).ne'
   apply AtlasProjectiveGlobalRigidity.not_rupertPose_of_projective_global_certificate_with_defect
     box.root p box.chart offset (fun i => box.certificate.exactEdge i)
-    box.innerIndex box.certificate.index (fun i => (box.defect i : ℝ))
+    box.innerIndex box.certificate.index (box.actualDefect p)
     hscaleNe
   · exact box.valid_direction_nonzero h offset hscale hmem
   · intro i
@@ -1358,20 +1693,11 @@ theorem Box.valid_imp_not_translated_rupert (box : Box) (h : box.Valid) :
       box.valid_weight_nonneg h hscale hmem i
   · obtain ⟨i, hi⟩ := box.valid_weight_pos h hscale hmem
     exact ⟨i, by simpa [AxisCertificate.exactWeight, Box.localShell] using hi⟩
-  · exact box.valid_support_with_defect h offset hscale hmem
+  · exact box.valid_support_with_actualDefect h offset hscale hmem
   · have hactual := box.valid_actualClearedDisplacement h hp hbounded hscale hmem
     rw [box.actualClearedDisplacement_eq_pose offset hscaleNe] at hactual
-    have hweighted :
-        (∑ i, box.certificate.exactWeight box.localShell p i *
-          (box.defect i : ℝ)) ≤ (box.totalDefect : ℝ) := by
-      rw [Box.totalDefect]
-      push_cast
-      apply Finset.sum_le_sum
-      intro i _
-      apply mul_le_mul_of_nonneg_right _
-        (by exact_mod_cast box.defect_nonneg i)
-      simpa [Box.weightUpper, Box.localShell] using
-        box.localShell.exactWeight_le_upper hscale hmem 0 i
+    have hweighted :=
+      box.exactWeightedActualDefect_le h hscale hmem
     exact hweighted.trans (by
       simpa [AxisCertificate.exactWeight, Box.localShell] using hactual)
 
