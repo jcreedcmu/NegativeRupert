@@ -4290,8 +4290,14 @@ def generate_projective_local_view_table(
             evaluated = ([projective_local_candidate(task) for task in tasks]
                          if pool is None else pool.map(
                              projective_local_candidate, tasks))
-            for (row_id, triangle, depth), (result, weak_rejection) in zip(
-                    batch, evaluated):
+            # `batch[0]` was the first (highest-priority) DFS state popped.
+            # Apply the other workers first so any children of that state are
+            # pushed last and remain at the top of the stack.  This mirrors
+            # the global generator and keeps adjacent projective triangles
+            # together in the small geometry cache.
+            for ((row_id, triangle, depth),
+                    (result, weak_rejection)) in reversed(list(zip(
+                        batch, evaluated))):
                 if weak_rejection:
                     counts["weak_rejections"] += 1
                 if (result is not None and result["c"] >= target_c and
