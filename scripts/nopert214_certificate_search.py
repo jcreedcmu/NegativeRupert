@@ -668,7 +668,8 @@ def projective_mixed_edge_q(contact):
     return [lam*a + (1-lam)*b for a, b in zip(first, second)]
 
 
-def projective_local_axis_row_mixed(triangle, contacts, symmetry_index=0):
+def projective_local_axis_row_mixed(triangle, contacts, symmetry_index=0,
+                                    allow_support_defect=False):
     """Exactly audit one mixed-edge projective-local axis certificate."""
     contacts = [dict(contact) for contact in contacts]
     edges = [projective_mixed_edge_q(contact) for contact in contacts]
@@ -708,7 +709,7 @@ def projective_local_axis_row_mixed(triangle, contacts, symmetry_index=0):
                             for corner in triangle) + \
                     PROJECTIVE_SUPPORT_ERROR
             values.append(upper)
-        if max(values) > 0:
+        if max(values) > 0 and not allow_support_defect:
             raise RuntimeError(
                 f"support fails by {float(max(values)):.6g} at {selected}")
         witness = min(range(len(VERTICES_Q)), key=values.__getitem__)
@@ -732,6 +733,11 @@ def projective_local_axis_row_mixed(triangle, contacts, symmetry_index=0):
                    3*PROJECTIVE_VARIATION_ERROR) / B
     delta = exact_certificate.ceil_to(
         exact_delta, PROJECTIVE_CERTIFICATE_DENOMINATOR)
+    support_defects = [max(Q(0), max(values))
+                       for values in support_upper]
+    total_support_defect = sum(
+        (upper * defect for upper, defect in
+         zip(weight_upper, support_defects)), Q(0))
     return {
         "edge_start": [contact["edge_start"] for contact in contacts],
         "edge_finish": [contact["edge_finish"] for contact in contacts],
@@ -747,6 +753,8 @@ def projective_local_axis_row_mixed(triangle, contacts, symmetry_index=0):
         "diagnostics": {
             "weight_lower": weight_lower,
             "weight_upper": weight_upper,
+            "support_defects": support_defects,
+            "total_support_defect": total_support_defect,
             "variation_balls": variation_balls,
             "exact_weight_budget": exact_B,
             "exact_delta": exact_delta,
@@ -1114,7 +1122,8 @@ def atlas_projective_local_triangle(
 
 def atlas_projective_global_triangle(
         chart, relative_center, relative_radii, root, triangle,
-        cone_samples=4, candidate_limit=12, selected_candidate=None):
+        cone_samples=4, candidate_limit=12, selected_candidate=None,
+        allow_support_defect=True):
     """Generate one exact moving balanced-triple global certificate.
 
     This mirrors ``AtlasProjectiveGlobalCertificate.Box``: the three support
@@ -1136,7 +1145,8 @@ def atlas_projective_global_triangle(
     for candidate in ranked[:candidate_limit]:
         try:
             row = projective_local_axis_row_mixed(
-                triangle, candidate["contacts"])
+                triangle, candidate["contacts"],
+                allow_support_defect=allow_support_defect)
         except RuntimeError:
             continue
         contacts = [{
@@ -1235,7 +1245,10 @@ def atlas_projective_global_triangle(
                           for center, radius in
                           zip(relative_center, relative_radii))
         error = 300 * d_bound * exact_certificate.KAPPA
-        lower = displacement_ball[0] - displacement_ball[1] - error
+        total_support_defect = row["diagnostics"]["total_support_defect"]
+        defect_penalty = d_bound * total_support_defect
+        lower = (displacement_ball[0] - displacement_ball[1] -
+                 defect_penalty - error)
         result = {
             "accepted": lower >= 0,
             "chart": chart,
@@ -1251,6 +1264,8 @@ def atlas_projective_global_triangle(
                 "coefficient_balls": coefficient_balls,
                 "displacement_ball": displacement_ball,
                 "d_bound": d_bound,
+                "total_support_defect": total_support_defect,
+                "defect_penalty": defect_penalty,
                 "error": error,
                 "lower_bound": lower,
             },
@@ -1293,12 +1308,13 @@ def projective_global_candidate_center_margin(
 
 def atlas_projective_global_float_screen(
         chart, relative_center, relative_radii, triangle,
-        cone_samples=4, candidate_limit=1, candidates=None):
+        cone_samples=4, candidate_limit=1, candidates=None,
+        allow_support_defect=True):
     """Fast floating mirror of the moving balanced-triple checker."""
     inherited = candidates is not None
     if candidates is None:
         candidates = projective_global_float_candidates(
-            triangle, cone_samples)
+            triangle, cone_samples, allow_support_defect)
     if not candidates:
         return None
     view_center = [sum(float(corner[c]) for corner in triangle) / 3
@@ -1312,6 +1328,9 @@ def atlas_projective_global_float_screen(
     view_radii = [(hi-lo)/2 for lo, hi in zip(view_lo, view_hi)]
     relative_center_f = tuple(map(float, relative_center))
     relative_radii_f = tuple(map(float, relative_radii))
+    endpoint_abs = [max(abs(c-r), abs(c+r)) for c, r in
+                    zip(relative_center_f, relative_radii_f)]
+    d_bound = 1+sum(value*value for value in endpoint_abs)
     x0, y0, z0 = relative_center_f
     numerator0 = (
         (1+x0*x0-y0*y0-z0*z0, 2*(x0*y0-z0), 2*(x0*z0+y0)),
@@ -1352,8 +1371,26 @@ def atlas_projective_global_float_screen(
                    dot3(view_center, cross3(edges[0], edges[1]))]
         score = sum(weight*center_data(contact)[0]
                     for weight, contact in zip(weights, contacts))
+        score -= d_bound * sum(
+            max(0.0, weight) * contact.get("support_defect", 0.0)
+            for weight, contact in zip(weights, contacts))
         ranked.append((score, candidate))
     ranked.sort(key=lambda item: item[0], reverse=True)
+    if allow_support_defect:
+        strict_ranked = [item for item in ranked if all(
+            contact.get("support_defect", 0.0) == 0.0
+            for contact in item[1]["contacts"])]
+        defect_ranked = [item for item in ranked if any(
+            contact.get("support_defect", 0.0) != 0.0
+            for contact in item[1]["contacts"])]
+        # Preserve the old checker as an exact subset of the stronger one:
+        # audit a full quota of strict triples as well as a full quota of new
+        # defect triples.  A large transition-candidate pool therefore cannot
+        # crowd out the best strict certificate.
+        ranked = (strict_ranked[:candidate_limit] +
+                  defect_ranked[:candidate_limit])
+    else:
+        ranked = ranked[:candidate_limit]
 
     def fadd(a, b):
         return a[0]+b[0], a[1]+b[1]
@@ -1363,7 +1400,6 @@ def atlas_projective_global_float_screen(
                 abs(a[0])*b[1] + abs(b[0])*a[1] + a[1]*b[1])
 
     best = None
-    audited = 0
     for _, candidate in ranked:
         contacts = candidate["contacts"]
         edges = [center_data(contact)[3] for contact in contacts]
@@ -1374,9 +1410,12 @@ def atlas_projective_global_float_screen(
                             for corner in triangle_f) -
                         float(PROJECTIVE_SUPPORT_ERROR)
                         for coefficient in weight_coefficients]
+        weight_upper = [max(dot3(corner, coefficient)
+                            for corner in triangle_f) +
+                        float(PROJECTIVE_SUPPORT_ERROR)
+                        for coefficient in weight_coefficients]
         if min(weight_lower) < 0 or max(weight_lower) <= 0:
             continue
-        audited += 1
         contact_polynomials = [atlas_mixed_contact_qpolys(
             chart, tuple(center_data(contact)[2]), center_data(contact)[1],
             contact["vertex"]) for contact in contacts]
@@ -1420,19 +1459,19 @@ def atlas_projective_global_float_screen(
             ((multiplier, adjusted_total(multiplier))
              for multiplier in multiplier_candidates),
             key=lambda item: item[1][0]-item[1][1])
-        endpoint_abs = [max(abs(c-r), abs(c+r)) for c, r in variables]
-        d_bound = 1+sum(value*value for value in endpoint_abs)
-        lower = total[0]-total[1]-300*d_bound*float(exact_certificate.KAPPA)
+        total_support_defect = sum(
+            upper * contact.get("support_defect", 0.0)
+            for upper, contact in zip(weight_upper, contacts))
+        lower = (total[0] - total[1] - d_bound*total_support_defect -
+                 300*d_bound*float(exact_certificate.KAPPA))
         if best is None or lower > best[0]:
             best = (lower, candidate, ball_multiplier)
-        if audited >= candidate_limit:
-            break
     if best is None:
         return None
     if inherited and best[0] <= 1e-8:
         return atlas_projective_global_float_screen(
             chart, relative_center, relative_radii, triangle,
-            cone_samples, candidate_limit, None)
+            cone_samples, candidate_limit, None, allow_support_defect)
     return {"lower_bound": best[0], "candidate": best[1],
             "ball_multiplier": best[2],
             "feasible_candidates": len(candidates),
@@ -1440,8 +1479,15 @@ def atlas_projective_global_float_screen(
 
 
 @functools.lru_cache(maxsize=None)
-def projective_global_float_candidates(triangle, cone_samples=4):
-    """Triangle-valid support triples without local-variation calculations."""
+def projective_global_float_candidates(
+        triangle, cone_samples=4, allow_support_defect=True):
+    """Triangle-valid balanced triples without local-variation calculations.
+
+    When ``allow_support_defect`` is true, a mixed edge may cross a silhouette
+    transition inside the triangle.  Its worst support excess is retained as
+    a defect instead of rejecting the contact; the balanced displacement must
+    later pay for the weighted defect.
+    """
     triangle_f = [[float(x) for x in corner] for corner in triangle]
     centroid = [sum(corner[c] for corner in triangle_f)/3
                 for c in range(3)]
@@ -1452,7 +1498,8 @@ def projective_global_float_candidates(triangle, cone_samples=4):
     for contact in contacts:
         edge = [float(x) for x in projective_mixed_edge_q(contact)]
         selected = contact["vertex"]
-        ok = True
+        maximum_upper = 0.0
+        minimum_upper = math.inf
         for k, vertex in enumerate(VERTICES):
             if k == selected:
                 continue
@@ -1462,11 +1509,14 @@ def projective_global_float_candidates(triangle, cone_samples=4):
                         fdot(triangle_f[1], coefficient),
                         fdot(triangle_f[2], coefficient)) + \
                 float(PROJECTIVE_SUPPORT_ERROR)
-            if upper > 0:
-                ok = False
-                break
-        if ok:
-            valid.append((contact, edge))
+            maximum_upper = max(maximum_upper, upper)
+            minimum_upper = min(minimum_upper, upper)
+        if minimum_upper >= 0:
+            continue
+        if maximum_upper <= 0 or allow_support_defect:
+            enriched = dict(contact)
+            enriched["support_defect"] = max(0.0, maximum_upper)
+            valid.append((enriched, edge))
     feasible = []
     for indices in itertools.combinations(range(len(valid)), 3):
         chosen = [valid[index] for index in indices]
@@ -3120,38 +3170,49 @@ def generate_atlas_projective_table(
                 counts["edge"] += 1
                 continue
             counts["exact_rejections"] += 1
-        if edge_float["minimum_strict_support_lower"] > 0:
-            global_float = atlas_projective_global_float_screen(
-                chart, center, widths, triangle,
-                candidate_limit=64 if view_depth >= 7 else 1,
-                candidates=inherited_global_candidates)
-            if (global_float is not None and
-                    global_float["lower_bound"] > 1e-8):
-                exact = atlas_projective_global_triangle(
-                    chart, center, widths, root, triangle,
-                    selected_candidate=global_float["candidate"])
-                if exact is not None and exact["accepted"]:
-                    axis = exact["certificate"]
-                    axis_keys = ("edge_start", "edge_finish",
-                                 "edge_start2", "edge_finish2", "mix",
-                                 "support_index", "nonzero_witness", "B")
-                    rows[row_id] = {**common, "kind": "global",
-                        "certificate": {
-                            "axis": {key: axis[key] for key in axis_keys},
-                            "inner_index": exact["inner_index"],
-                            "ball_multiplier": exact["ball_multiplier"]}}
-                    counts["global"] += 1
-                    continue
-                counts["exact_rejections"] += 1
+        global_float = atlas_projective_global_float_screen(
+            chart, center, widths, triangle,
+            candidate_limit=64 if view_depth >= 7 else 1,
+            candidates=inherited_global_candidates)
+        if (global_float is not None and
+                global_float["lower_bound"] > 1e-8):
+            exact = atlas_projective_global_triangle(
+                chart, center, widths, root, triangle,
+                selected_candidate=global_float["candidate"])
+            if exact is not None and exact["accepted"]:
+                axis = exact["certificate"]
+                axis_keys = ("edge_start", "edge_finish",
+                             "edge_start2", "edge_finish2", "mix",
+                             "support_index", "nonzero_witness", "B")
+                rows[row_id] = {**common, "kind": "global",
+                    "certificate": {
+                        "axis": {key: axis[key] for key in axis_keys},
+                        "inner_index": exact["inner_index"],
+                        "ball_multiplier": exact["ball_multiplier"]}}
+                counts["global"] += 1
+                continue
+            counts["exact_rejections"] += 1
 
         center_requires_view = False
         center_view_depth = min(max_view_depth, 8)
-        if (edge_float["minimum_strict_support_lower"] > 0 and
-                view_depth < center_view_depth):
+        if view_depth < center_view_depth:
             center_edge = atlas_simplex_float_screen(
                 chart, center, (Q(0), Q(0), Q(0)), triangle,
                 cycle=edge_float["cycle"])
             center_requires_view = center_edge["lower_bound"] <= 1e-8
+            if center_requires_view:
+                # A cycle certificate can fail at the center even though a
+                # balanced triple succeeds.  In that case relative-box
+                # refinement, not four-way view subdivision, is the useful
+                # next move.  This avoids taking a Cartesian product of a
+                # depth-eight view mesh with the Cayley-coordinate mesh.
+                center_global = atlas_projective_global_float_screen(
+                    chart, center, (Q(0), Q(0), Q(0)), triangle,
+                    candidate_limit=64,
+                    candidates=None if global_float is None else
+                        global_float["candidates"])
+                center_requires_view = (center_global is None or
+                    center_global["lower_bound"] <= 1e-8)
 
         support_transition = \
             edge_float["minimum_strict_support_lower"] <= 0

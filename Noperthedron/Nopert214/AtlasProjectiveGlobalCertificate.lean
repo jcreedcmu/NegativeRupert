@@ -58,6 +58,17 @@ def Box.weightLower (box : Box) (i : Fin 3) : ℚ :=
 def Box.weightUpper (box : Box) (i : Fin 3) : ℚ :=
   box.localShell.weightUpper 0 i
 
+/-- Worst excess above the selected outer support vertex.  The selected
+vertex itself contributes exactly zero, so this maximum is nonnegative. -/
+def Box.defect (box : Box) (i : Fin 3) : ℚ :=
+  (Finset.image (box.supportUpper i) Finset.univ).max' (by
+    simp only [Finset.image_nonempty]
+    exact Finset.univ_nonempty)
+
+/-- A uniform upper bound for the exact weighted support-defect charge. -/
+def Box.totalDefect (box : Box) : ℚ :=
+  ∑ i, box.weightUpper i * box.defect i
+
 def Box.contactQuadratic (box : Box) (i c : Fin 3) : RatQuadratic3 :=
   let edge := box.certificate.edgeQ i
   let d := AtlasQuadratic.displacementQuadratic box.chart
@@ -190,13 +201,12 @@ structure Box.Valid (box : Box) : Prop where
   triangle_valid : SignedTriangleValid box.root box.triangle
   weight_nonneg : ∀ i, 0 ≤ box.weightLower i
   weight_pos : ∃ i, 0 < box.weightLower i
-  support : ∀ i k, box.supportUpper i k ≤ 0
   direction_nonzero : ∀ i,
     box.supportUpper i (box.certificate.nonzeroWitness i) < 0
   ball_multiplier_nonneg : 0 ≤ box.ballMultiplier
   displacement : box.displacementError ≤
     box.adjustedDisplacementBall.center -
-      box.adjustedDisplacementBall.radius
+      box.adjustedDisplacementBall.radius - box.dBound * box.totalDefect
 
 instance (box : Box) : Decidable box.Valid :=
   decidable_of_iff _ (Box.valid_iff box).symm
@@ -236,7 +246,49 @@ theorem Box.valid_weight_pos (box : Box) (h : box.Valid)
   exact hiReal.trans_le
     (box.localShell.weightLower_le_exact hscale hmem 0 i)
 
-theorem Box.valid_support (box : Box) (h : box.Valid)
+theorem Box.supportUpper_le_defect (box : Box) (i : Fin 3)
+    (k : VertexIndex) :
+    box.supportUpper i k ≤ box.defect i := by
+  unfold Box.defect
+  exact Finset.le_max' _ _
+    (Finset.mem_image_of_mem (box.supportUpper i) (Finset.mem_univ k))
+
+theorem Box.supportUpper_self (box : Box) (i : Fin 3) :
+    box.supportUpper i (box.certificate.index i) = 0 := by
+  unfold Box.supportUpper
+  unfold AtlasProjectiveLocalCertificate.Box.supportUpper
+  rw [if_pos]
+  unfold AtlasProjectiveLocalCertificate.Box.exactSupportTie
+  change box.certificate.index i =
+    box.certificate.supportIndex box.localShell i
+  exact (box.localShell_supportIndex i).symm
+
+theorem Box.defect_nonneg (box : Box) (i : Fin 3) :
+    0 ≤ box.defect i := by
+  rw [← box.supportUpper_self i]
+  exact box.supportUpper_le_defect i (box.certificate.index i)
+
+theorem Box.weightUpper_nonneg (box : Box) (h : box.Valid) (i : Fin 3) :
+    0 ≤ box.weightUpper i := by
+  have hmin := min3_le (fun corner => box.localShell.weightAt 0 corner i) 0
+  have hmax := le_max3 (fun corner => box.localShell.weightAt 0 corner i) 0
+  have herr : 0 ≤ AtlasProjectiveLocalCertificate.supportError := by
+    norm_num [AtlasProjectiveLocalCertificate.supportError,
+      RationalApprox.κℚ]
+  have hnonneg := h.weight_nonneg i
+  unfold Box.weightLower at hnonneg
+  unfold Box.weightUpper
+  unfold AtlasProjectiveLocalCertificate.Box.weightLower
+    at hnonneg
+  unfold AtlasProjectiveLocalCertificate.Box.weightUpper
+  linarith
+
+theorem Box.totalDefect_nonneg (box : Box) (h : box.Valid) :
+    0 ≤ box.totalDefect := by
+  exact Finset.sum_nonneg fun i _ =>
+    mul_nonneg (box.weightUpper_nonneg h i) (box.defect_nonneg i)
+
+theorem Box.valid_support_with_defect (box : Box) (_h : box.Valid)
     {p : AtlasPose ℝ} (offset : ℝ²)
     (hscale : 1 ≤ viewScale box.root p)
     (hmem : InTriangle (toReal box.triangle)
@@ -247,15 +299,14 @@ theorem Box.valid_support (box : Box) (h : box.Valid)
           (exactVertex k)) ≤
       inner ℝ (direction box.root p (box.certificate.exactEdge i))
         (outerProjectionLinear (p.matrixPoseWithOffset box.chart offset)
-          (exactVertex (box.certificate.index i))) := by
+          (exactVertex (box.certificate.index i))) + (box.defect i : ℝ) := by
   have hscaleNe :=
     (lt_of_lt_of_le (by norm_num : (0 : ℝ) < 1) hscale).ne'
   have hupper := box.localShell.exactSupport_le_upper
     hscale hmem 0 i k
-  have hchecked := h.support i k
-  have hsigned : box.certificate.exactSupport box.localShell p i k ≤ 0 := by
-    apply hupper.trans
-    exact_mod_cast hchecked
+  have hdefect : box.certificate.exactSupport box.localShell p i k ≤
+      (box.defect i : ℝ) :=
+    hupper.trans (by exact_mod_cast box.supportUpper_le_defect i k)
   have hdiff :
       inner ℝ (direction box.root p (box.certificate.exactEdge i))
           ((outerProjectionLinear (p.matrixPoseWithOffset box.chart offset))
@@ -939,7 +990,8 @@ theorem Box.valid_exactClearedDisplacement (box : Box) (h : box.Valid)
     (hscale : 1 ≤ viewScale box.root p)
     (hmem : InTriangle (toReal box.triangle)
       (AtlasProjectiveView.normalizedView box.root p)) :
-    0 ≤ box.exactClearedDisplacement p := by
+    (box.dBound : ℝ) * (box.totalDefect : ℝ) ≤
+      box.exactClearedDisplacement p := by
   have hball := box.adjustedDisplacementBall_holds hp hmem
   have hlower := RatBall.lower_le_of_holds hball
   change (box.adjustedDisplacementBall.center -
@@ -949,7 +1001,8 @@ theorem Box.valid_exactClearedDisplacement (box : Box) (h : box.Valid)
   push_cast at hlower
   have hchecked : (box.displacementError : ℝ) ≤
       (box.adjustedDisplacementBall.center : ℝ) -
-        (box.adjustedDisplacementBall.radius : ℝ) := by
+        (box.adjustedDisplacementBall.radius : ℝ) -
+        (box.dBound : ℝ) * (box.totalDefect : ℝ) := by
     exact_mod_cast h.displacement
   have hconstraint : p.x ^ 2 + p.y ^ 2 + p.z ^ 2 - 3 ≤ 0 := by
     unfold AtlasPose.CayleyBounded at hbounded
@@ -970,10 +1023,17 @@ theorem Box.valid_actualClearedDisplacement (box : Box) (h : box.Valid)
     (hscale : 1 ≤ viewScale box.root p)
     (hmem : InTriangle (toReal box.triangle)
       (AtlasProjectiveView.normalizedView box.root p)) :
-    0 ≤ box.actualClearedDisplacement p := by
+    (box.totalDefect : ℝ) ≤ box.actualClearedDisplacement p := by
   have hexact := box.valid_exactClearedDisplacement h hp hbounded hscale hmem
   rw [box.exactClearedDisplacement_eq_denom_mul] at hexact
-  exact nonneg_of_mul_nonneg_right hexact (cayleyDenom_pos p.x p.y p.z)
+  have hcharge : cayleyDenom p.x p.y p.z * (box.totalDefect : ℝ) ≤
+      (box.dBound : ℝ) * (box.totalDefect : ℝ) :=
+    mul_le_mul_of_nonneg_right (box.denom_le_dBound hp)
+      (by exact_mod_cast box.totalDefect_nonneg h)
+  have hmul : cayleyDenom p.x p.y p.z * (box.totalDefect : ℝ) ≤
+      cayleyDenom p.x p.y p.z * box.actualClearedDisplacement p :=
+    hcharge.trans hexact
+  exact le_of_mul_le_mul_left hmul (cayleyDenom_pos p.x p.y p.z)
 
 theorem Box.valid_imp_not_translated_rupert (box : Box) (h : box.Valid) :
     ∀ p ∈ box.interval.toReal,
@@ -987,19 +1047,32 @@ theorem Box.valid_imp_not_translated_rupert (box : Box) (h : box.Valid) :
   intro p hp hbounded hscale hmem offset
   have hscaleNe : viewScale box.root p ≠ 0 :=
     (lt_of_lt_of_le (by norm_num : (0 : ℝ) < 1) hscale).ne'
-  apply AtlasProjectiveGlobalRigidity.not_rupertPose_of_projective_global_certificate
+  apply AtlasProjectiveGlobalRigidity.not_rupertPose_of_projective_global_certificate_with_defect
     box.root p box.chart offset (fun i => box.certificate.exactEdge i)
-    box.innerIndex box.certificate.index hscaleNe
+    box.innerIndex box.certificate.index (fun i => (box.defect i : ℝ))
+    hscaleNe
   · exact box.valid_direction_nonzero h offset hscale hmem
   · intro i
     simpa [AxisCertificate.exactWeight, Box.localShell] using
       box.valid_weight_nonneg h hscale hmem i
   · obtain ⟨i, hi⟩ := box.valid_weight_pos h hscale hmem
     exact ⟨i, by simpa [AxisCertificate.exactWeight, Box.localShell] using hi⟩
-  · exact box.valid_support h offset hscale hmem
+  · exact box.valid_support_with_defect h offset hscale hmem
   · have hactual := box.valid_actualClearedDisplacement h hp hbounded hscale hmem
     rw [box.actualClearedDisplacement_eq_pose offset hscaleNe] at hactual
-    simpa [AxisCertificate.exactWeight, Box.localShell] using hactual
+    have hweighted :
+        (∑ i, box.certificate.exactWeight box.localShell p i *
+          (box.defect i : ℝ)) ≤ (box.totalDefect : ℝ) := by
+      rw [Box.totalDefect]
+      push_cast
+      apply Finset.sum_le_sum
+      intro i _
+      apply mul_le_mul_of_nonneg_right _
+        (by exact_mod_cast box.defect_nonneg i)
+      simpa [Box.weightUpper, Box.localShell] using
+        box.localShell.exactWeight_le_upper hscale hmem 0 i
+    exact hweighted.trans (by
+      simpa [AxisCertificate.exactWeight, Box.localShell] using hactual)
 
 theorem Box.valid_imp_no_translated_rupert_in_interval
     (box : Box) (h : box.Valid) :
