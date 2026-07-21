@@ -103,7 +103,7 @@ def kernel_range_validity(rows, range_size, symmetry_index, radius):
             proof = "by\n  decide +kernel"
         name = f"rowsValidRange0_{block_id}"
         declarations.append(f"""private theorem {name} :
-    RowsValidRangeAt {symmetry_index} {q(radius)} getRow {size} {start} {count} := {proof}
+    SparseRowsValidRangeAt {symmetry_index} {q(radius)} getRow {size} {start} {count} := {proof}
 """)
         nodes.append((name, start, count))
         start += count
@@ -122,26 +122,30 @@ def kernel_range_validity(rows, range_size, symmetry_index, radius):
             name = f"rowsValidRange{level}_{pair_id // 2}"
             count = left[2] + right[2]
             declarations.append(f"""private theorem {name} :
-    RowsValidRangeAt {symmetry_index} {q(radius)} getRow {size} {left[1]} {count} :=
-  rowsValidRange_append {left[0]} {right[0]}
+    SparseRowsValidRangeAt {symmetry_index} {q(radius)} getRow {size} {left[1]} {count} :=
+  sparseRowsValidRange_append {left[0]} {right[0]}
 """)
             next_nodes.append((name, left[1], count))
         nodes = next_nodes
         level += 1
     if len(nodes) != 1 or nodes[0][1:] != (0, size):
         raise ValueError("kernel validity ranges do not cover the table")
-    declarations.append(f"""theorem table_valid_kernel : table.Valid := by
-  refine ⟨by decide, rowsValidAt_of_range {nodes[0][0]}, ?_, ?_⟩
+    declarations.append(f"""theorem table_sparse_valid_kernel :
+    SparseTableValid table := by
+  refine ⟨by decide, sparseRowsValidAt_of_range {nodes[0][0]}, ?_, ?_⟩
   · decide +kernel
   · decide +kernel
+
+theorem table_valid_kernel : table.Valid :=
+  Table.Valid.of_sparse table_sparse_valid_kernel
 """)
     return "\n".join(declarations)
 
 
 HEADER = """module
 
-public import Noperthedron.Nopert214.AtlasProjectiveLocalViewTree
-public meta import Noperthedron.Nopert214.AtlasProjectiveLocalViewTree
+public import Noperthedron.Nopert214.SparseLocalViewTree
+public meta import Noperthedron.Nopert214.SparseLocalViewTree
 
 @[expose] public section
 
@@ -149,6 +153,7 @@ namespace Noperthedron.Nopert214.{namespace}
 
 open AtlasProjectiveView AtlasProjectiveLocalCertificate
 open AtlasProjectiveLocalViewTree
+open SparseLocalViewTree
 open Noperthedron.SnubCube.ProjectiveView
 
 """
@@ -246,7 +251,10 @@ def main():
   get := getRow
   size := {len(rows)}
 
-theorem table_valid_native : table.Valid := by native_decide
+theorem table_sparse_valid_native : SparseTableValid table := by native_decide
+
+theorem table_valid_native : table.Valid :=
+  Table.Valid.of_sparse table_sparse_valid_native
 
 """)
         if not args.native_only:
