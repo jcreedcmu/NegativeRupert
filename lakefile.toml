@@ -52,9 +52,7 @@ name = "benchRows"
 root = "benchRows"
 buildType = "release"
 
-# Fast executable audit of the generated Nopert #214 local-view certificate.
-# This target is build-on-demand because its imported data module is generated
-# and intentionally not committed.
+# Executable audit of a packed Nopert #214 local-view certificate.
 [[lean_exe]]
 name = "checkNopert214Local2"
 root = "checkNopert214Local2"

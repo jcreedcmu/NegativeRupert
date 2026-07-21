@@ -34,10 +34,28 @@ def checkLocal (label : String) (taskCount : Nat)
     (table : AtlasProjectiveLocalViewTree.Table) : IO (PLift table.Valid) := do
   let start ← IO.monoNanosNow
   log s!"checking local {label}: {table.size} rows in {taskCount} native tasks"
-  if h : sparseTableValidParB table taskCount = true then
+  let chunkSize := table.size / taskCount + 1
+  let tasks := sparseTableTasks table taskCount
+  let total := tasks.length
+  for (task, index) in tasks.zipIdx do
+    unless task.get do
+      let first := index * chunkSize
+      let afterLast := min table.size (first + chunkSize)
+      throw (IO.userError (s!"local table {label} is invalid in rows " ++
+        s!"[{first}, {afterLast})"))
+    let completed := index + 1
+    if completed % 4 = 0 || completed = total then
+      let checkedRows := min table.size (completed * chunkSize)
+      let now ← IO.monoNanosNow
+      log (s!"local {label}: {checkedRows}/{table.size} rows joined " ++
+        s!"({(now - start) / 1000000} ms)")
+  if h : sparseTableValidWithTasksB table taskCount tasks = true then
     let finish ← IO.monoNanosNow
     log s!"valid local {label}: {(finish - start) / 1000000} ms"
-    pure ⟨Table.Valid.of_sparseParB h⟩
+    have h' : sparseTableValidWithTasksB table taskCount
+        (sparseTableTasks table taskCount) = true := by
+      simpa only [tasks] using h
+    pure ⟨Table.Valid.of_sparseWithTasksB h'⟩
   else
     throw (IO.userError s!"local table {label} is not valid")
 

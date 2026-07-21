@@ -254,6 +254,25 @@ def sparseTableValidParB (table : Table) (taskCount : ℕ) : Bool :=
   sparseRowsValidAtParB table.symmetryIndex table.r table.get table.size
     taskCount
 
+/-- The native row-checking tasks used by `sparseTableValidParB`, exposed so
+an executable can report progress while joining them. -/
+def sparseTableTasks (table : Table) (taskCount : ℕ) : List (Task Bool) :=
+  let chunkSize := table.size / taskCount + 1
+  (List.range taskCount).map fun task =>
+    Task.spawn fun _ => sparseChunkValidB table.symmetryIndex table.r
+      table.get table.size (task * chunkSize) chunkSize
+
+/-- The same full checker as `sparseTableValidParB`, supplied with its already
+spawned row tasks. This lets an executable join each task for progress output
+and then reuse the cached `Task.get` results. -/
+def sparseTableValidWithTasksB (table : Table) (taskCount : ℕ)
+    (tasks : List (Task Bool)) : Bool :=
+  let chunkSize := table.size / taskCount + 1
+  decide (0 < table.size ∧
+    (table.get 0).root = table.root ∧
+    (table.get 0).triangle = table.triangle) &&
+  (decide (table.size ≤ taskCount * chunkSize) && tasks.all Task.get)
+
 theorem sparseTableValid_of_parB {table : Table} {taskCount : ℕ}
     (h : sparseTableValidParB table taskCount = true) :
     SparseTableValid table := by
@@ -264,6 +283,12 @@ theorem sparseTableValid_of_parB {table : Table} {taskCount : ℕ}
 theorem Table.Valid.of_sparseParB {table : Table} {taskCount : ℕ}
     (h : sparseTableValidParB table taskCount = true) : table.Valid :=
   Table.Valid.of_sparse (sparseTableValid_of_parB h)
+
+theorem Table.Valid.of_sparseWithTasksB {table : Table} {taskCount : ℕ}
+    (h : sparseTableValidWithTasksB table taskCount
+      (sparseTableTasks table taskCount) = true) : table.Valid := by
+  apply Table.Valid.of_sparseParB
+  exact h
 
 end Noperthedron.Nopert214.SparseLocalViewTree
 
