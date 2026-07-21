@@ -867,8 +867,11 @@ def atlas_projective_local_smoke(
 
 def projective_local_float_candidates(triangle, cone_samples=4,
                                       include_boundaries=False,
-                                      include_corner_cycles=False):
+                                      include_corner_cycles=False,
+                                      screen_support_error=None):
     """Fast conservative prefilter for exact mixed-edge local rows."""
+    if screen_support_error is None:
+        screen_support_error = PROJECTIVE_SUPPORT_ERROR
     centroid = [sum(float(corner[i]) for corner in triangle)/3
                 for i in range(3)]
     sample_views = [centroid]
@@ -908,7 +911,7 @@ def projective_local_float_candidates(triangle, cone_samples=4,
             coefficient = cross3(edge, delta)
             upper = max(dot3(corner, coefficient)
                         for corner in triangle_f) + \
-                float(PROJECTIVE_SUPPORT_ERROR)
+                float(screen_support_error)
             strict_slack = min(strict_slack, -upper)
             if upper > 0:
                 support_ok = False
@@ -935,7 +938,7 @@ def projective_local_float_candidates(triangle, cone_samples=4,
         weights_at = [[dot3(corner, coefficient)
                        for corner in triangle_f]
                       for coefficient in weight_coefficients]
-        weight_lower = [min(values)-float(PROJECTIVE_SUPPORT_ERROR)
+        weight_lower = [min(values)-float(screen_support_error)
                         for values in weights_at]
         if min(weight_lower) < 0 or max(weight_lower) <= 0:
             continue
@@ -945,7 +948,7 @@ def projective_local_float_candidates(triangle, cone_samples=4,
         n = centroid
         weights = [dot3(n, coefficient)
                    for coefficient in weight_coefficients]
-        B = 2*sum(max(values)+float(PROJECTIVE_SUPPORT_ERROR)
+        B = 2*sum(max(values)+float(screen_support_error)
                   for values in weights_at)
         variation = [0.0, 0.0, 0.0]
         for weight, edge, selected in zip(weights, edges, supports):
@@ -968,10 +971,12 @@ def projective_local_float_candidates(triangle, cone_samples=4,
 def choose_projective_local_tetrahedron(triangle, cone_samples=4,
                                          trials=200_000, seed=214,
                                          include_boundaries=False,
-                                         include_corner_cycles=False):
+                                         include_corner_cycles=False,
+                                         screen_support_error=None):
     """Choose a well-conditioned tetrahedron after triangle-wide filtering."""
     candidates = projective_local_float_candidates(
-        triangle, cone_samples, include_boundaries, include_corner_cycles)
+        triangle, cone_samples, include_boundaries, include_corner_cycles,
+        screen_support_error)
     if len(candidates) < 4:
         return None, candidates
     total = math.comb(len(candidates), 4)
@@ -1041,12 +1046,14 @@ def choose_projective_local_tetrahedron(triangle, cone_samples=4,
 def projective_local_geometry(triangle, symmetry_index,
                               cone_samples=4, trials=200_000,
                               include_boundaries=False,
-                              include_corner_cycles=False):
+                              include_corner_cycles=False,
+                              screen_support_error=None):
     """Cache the view-dependent part of a projective-local certificate."""
     chosen, candidates = choose_projective_local_tetrahedron(
         triangle, cone_samples, trials,
         include_boundaries=include_boundaries,
-        include_corner_cycles=include_corner_cycles)
+        include_corner_cycles=include_corner_cycles,
+        screen_support_error=screen_support_error)
     if chosen is None:
         return None
     (_, _), indices, _ = chosen
@@ -1093,11 +1100,12 @@ def projective_local_geometry(triangle, symmetry_index,
 def atlas_projective_local_triangle(
         chart, relative_center, relative_radii, root, triangle,
         symmetry_index, cone_samples=4, trials=200_000,
-        include_boundaries=False, include_corner_cycles=False):
+        include_boundaries=False, include_corner_cycles=False,
+        screen_support_error=None):
     """Generate and exactly audit a projective-local leaf on any atlas cell."""
     geometry = projective_local_geometry(
         triangle, symmetry_index, cone_samples, trials, include_boundaries,
-        include_corner_cycles)
+        include_corner_cycles, screen_support_error)
     if geometry is None:
         return None
     c = geometry["c"]
@@ -3996,10 +4004,23 @@ def projective_local_candidate(task):
                 (result is None or corner_result["c"] > result["c"])):
             result = corner_result
     if ((result is None or result["c"] < target_c) and depth >= 10):
-        # The tight rational support allowance exposes additional narrow
-        # cone families at a silhouette transition.  Seven cone samples are
-        # expensive, so reserve this deterministic hull search for the tiny
-        # set of cells that defeated all cheaper variants.
+        # The floating hull heuristic normalizes each candidate by an error-
+        # inflated remainder budget.  On an exceptionally thin balanced
+        # tetrahedron that perturbation can make the hull search choose the
+        # wrong four axes even though a robust exact certificate is present.
+        # Use the zero-error geometry only to nominate four candidates, then
+        # rebuild and audit every row with the real formal support error.
+        zero_guided_result = atlas_projective_local_triangle(
+            0, (Q(0), Q(0), Q(0)), (Q(0), Q(0), Q(0)),
+            0, triangle, 0, cone_samples=7, trials=200_000,
+            include_boundaries=True, include_corner_cycles=True,
+            screen_support_error=Q(0))
+        if (zero_guided_result is not None and
+                (result is None or zero_guided_result["c"] > result["c"])):
+            result = zero_guided_result
+    if ((result is None or result["c"] < target_c) and depth >= 10):
+        # If even the zero-guided hull fails, retain the ordinary seven-sample
+        # search as a final independent candidate ordering.
         fine_boundary_result = atlas_projective_local_triangle(
             0, (Q(0), Q(0), Q(0)), (Q(0), Q(0), Q(0)),
             0, triangle, 0, cone_samples=7, trials=200_000,
@@ -4091,15 +4112,17 @@ def generate_projective_local_view_table(
                   tuple(tuple(map(Q, corner)) for corner in state[1]),
                   state[2]) for state in saved["pending"]]
         failures = saved["failures"]
-        if saved["max_depth"] < max_depth:
-            # A capped leaf is an unresolved search cell, not a rejected
-            # certificate.  Reopen it when the user raises the depth cap.
-            stack.extend((failure["id"],
-                          tuple(tuple(map(Q, corner))
-                                for corner in failure["triangle"]),
-                          failure["depth"])
-                         for failure in failures)
-            failures = []
+        # A capped leaf is an unresolved search cell, not a rejected
+        # certificate.  Reopen it on every explicit resume: improved
+        # candidate selection can close it at the same depth, as happens for
+        # zero-guided balanced hulls, without disguising the fix as deeper
+        # subdivision.
+        stack.extend((failure["id"],
+                      tuple(tuple(map(Q, corner))
+                            for corner in failure["triangle"]),
+                      failure["depth"])
+                     for failure in failures)
+        failures = []
         counts = saved["counts"]
     else:
         rows = [None]
