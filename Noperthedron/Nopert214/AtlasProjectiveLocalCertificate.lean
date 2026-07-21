@@ -142,7 +142,12 @@ def Box.supportAt (box : Box) (j : Fin 4) (corner : Fin 3)
 /-- The selected support vertex gives an exact zero displacement. -/
 def Box.exactSupportTie (box : Box) (j : Fin 4) (i : Fin 3)
     (k : VertexIndex) : Prop :=
-  k = (box.certificate j).supportIndex box i
+  let cert := box.certificate j
+  k = cert.supportIndex box i ∨
+    (cert.mix i = 1000 ∧ cert.supportIndex box i = cert.edgeFinish i ∧
+      k = cert.edgeStart i) ∨
+    (cert.mix i = 0 ∧ cert.supportIndex box i = cert.edgeStart₂ i ∧
+      k = cert.edgeFinish₂ i)
 
 instance (box : Box) (j : Fin 4) (i : Fin 3) (k : VertexIndex) :
     Decidable (box.exactSupportTie j i k) := by
@@ -871,14 +876,29 @@ theorem Box.exactSupport_eq_zero_of_tie (box : Box) {p : AtlasPose ℝ}
     (j : Fin 4) (i : Fin 3) (k : VertexIndex)
     (htie : box.exactSupportTie j i k) :
     (box.certificate j).exactSupport box p i k = 0 := by
-  subst k
-  have hdelta :
-      (box.certificate j).exactDelta box i
-          ((box.certificate j).supportIndex box i) = 0 := by
-    simp [AxisCertificate.exactDelta, AxisCertificate.exactSelectedVertex]
-  unfold AxisCertificate.exactSupport
-  rw [hdelta]
-  simp [linearValue, cross3]
+  let cert := box.certificate j
+  change cert.exactSupport box p i k = 0
+  change k = cert.supportIndex box i ∨
+      (cert.mix i = 1000 ∧ cert.supportIndex box i = cert.edgeFinish i ∧
+        k = cert.edgeStart i) ∨
+      (cert.mix i = 0 ∧ cert.supportIndex box i = cert.edgeStart₂ i ∧
+        k = cert.edgeFinish₂ i) at htie
+  rcases htie with hselected | hfirst | hsecond
+  · subst k
+    have hdelta :
+        cert.exactDelta box i (cert.supportIndex box i) = 0 := by
+      simp [AxisCertificate.exactDelta, AxisCertificate.exactSelectedVertex]
+    unfold AxisCertificate.exactSupport
+    rw [hdelta]
+    simp [linearValue, cross3]
+  · rcases hfirst with ⟨hmix, hselected, rfl⟩
+    simp [AxisCertificate.exactSupport, AxisCertificate.exactEdge,
+      AxisCertificate.exactDelta, AxisCertificate.exactSelectedVertex,
+      AxisCertificate.mixQ, hmix, hselected, linearValue, cross3]
+  · rcases hsecond with ⟨hmix, hselected, rfl⟩
+    simp [AxisCertificate.exactSupport, AxisCertificate.exactEdge,
+      AxisCertificate.exactDelta, AxisCertificate.exactSelectedVertex,
+      AxisCertificate.mixQ, hmix, hselected, linearValue, cross3]
 
 theorem Box.exactSupport_le_upper (box : Box)
     {p : AtlasPose ℝ}

@@ -119,6 +119,14 @@ structure Box.SparseViewValid (box : Box) : Prop where
   support_generators : ∀ j i generator,
     box.supportUpper j i
       (supportGenerator ((box.certificate j).supportIndex box i) generator) ≤ 0
+  /-- Exact cone-boundary directions can tie a second edge endpoint.  The
+  tangent-generator reduction spends strict approximation slack and therefore
+  cannot propagate through that zero-slack generator; for just these rare
+  axes, check all twenty support vertices directly. -/
+  support_boundary : ∀ j i,
+    ((box.certificate j).mix i = 0 ∨
+      (box.certificate j).mix i = 1000) →
+    ∀ target, box.supportUpper j i target ≤ 0
   direction_nonzero : ∀ j i,
     box.supportUpper j i ((box.certificate j).nonzeroWitness i) < 0
   budget : ∀ j, box.weightBudget j ≤ (box.certificate j).B
@@ -137,60 +145,68 @@ theorem Box.SparseViewValid.support_all {box : Box}
     (htangent : TangentTableValid combination) :
     ∀ j i target, box.supportUpper j i target ≤ 0 := by
   intro j i target
-  let base := (box.certificate j).supportIndex box i
-  by_cases htie : target = base
-  · simp [Box.supportUpper, Box.exactSupportTie, base, htie]
-  · let selected := combination base target
-    have htie' : target ≠ (box.certificate j).supportIndex box i := by
-      simpa [base] using htie
-    have hselected : selected.Valid base target := htangent base target htie
-    have hat (corner : Fin 3) :
-        box.supportAt j corner i target ≤ -supportError := by
-      rw [supportAt_eq_sum selected box j corner i target hselected]
-      calc
-        ∑ l, selected.coefficient l *
-              box.supportAt j corner i
-                (supportGenerator base (selected.generator l)) ≤
-            ∑ l, selected.coefficient l * (-supportError) := by
-          apply Finset.sum_le_sum
-          intro l _
-          by_cases hzero : selected.coefficient l = 0
-          · simp [hzero]
-          · have hgenerator :
-                supportGenerator base (selected.generator l) ≠ base :=
-              hselected.2.2.1 l hzero
-            have hsparse := h.support_generators j i (selected.generator l)
-            have hgenerator' :
-                supportGenerator
-                    ((box.certificate j).supportIndex box i)
-                    (selected.generator l) ≠
-                  (box.certificate j).supportIndex box i := by
-              simpa [base] using hgenerator
-            have hcorner := AtlasProjectiveEdgeCertificate.le_max3
-              (fun c => box.supportAt j c i
-                (supportGenerator base (selected.generator l))) corner
-            have hraw : box.supportAt j corner i
+  by_cases hboundary : (box.certificate j).mix i = 0 ∨
+      (box.certificate j).mix i = 1000
+  · exact h.support_boundary j i hboundary target
+  · have hzero : (box.certificate j).mix i ≠ 0 :=
+      fun hz => hboundary (Or.inl hz)
+    have hthousand : (box.certificate j).mix i ≠ 1000 :=
+      fun ht => hboundary (Or.inr ht)
+    let base := (box.certificate j).supportIndex box i
+    by_cases htie : target = base
+    · simp [Box.supportUpper, Box.exactSupportTie, base, htie]
+    · let selected := combination base target
+      have htie' : target ≠ (box.certificate j).supportIndex box i := by
+        simpa [base] using htie
+      have hselected : selected.Valid base target := htangent base target htie
+      have hat (corner : Fin 3) :
+          box.supportAt j corner i target ≤ -supportError := by
+        rw [supportAt_eq_sum selected box j corner i target hselected]
+        calc
+          ∑ l, selected.coefficient l *
+                box.supportAt j corner i
                   (supportGenerator base (selected.generator l)) ≤
-                -supportError := by
-              simp only [Box.supportUpper, Box.exactSupportTie,
-                if_neg hgenerator'] at hsparse
-              linarith
-            exact mul_le_mul_of_nonneg_left hraw (hselected.1 l)
-        _ = -supportError * ∑ l, selected.coefficient l := by
-          simp only [Fin.sum_univ_three]
-          ring
-        _ ≤ -supportError := by
-          have herror : 0 < supportError := by
-            norm_num [supportError, tightVertexErrorQ]
-          nlinarith [hselected.2.1]
-    simp only [Box.supportUpper, Box.exactSupportTie, if_neg htie']
-    have hmax :
-        AtlasProjectiveEdgeCertificate.max3
-            (fun corner => box.supportAt j corner i target) ≤
-          -supportError := by
-      simp only [AtlasProjectiveEdgeCertificate.max3, max_le_iff]
-      exact ⟨hat 0, hat 1, hat 2⟩
-    linarith
+              ∑ l, selected.coefficient l * (-supportError) := by
+            apply Finset.sum_le_sum
+            intro l _
+            by_cases hcoefficient : selected.coefficient l = 0
+            · simp [hcoefficient]
+            · have hgenerator :
+                  supportGenerator base (selected.generator l) ≠ base :=
+                hselected.2.2.1 l hcoefficient
+              have hsparse := h.support_generators j i (selected.generator l)
+              have hgenerator' :
+                  supportGenerator
+                      ((box.certificate j).supportIndex box i)
+                      (selected.generator l) ≠
+                    (box.certificate j).supportIndex box i := by
+                simpa [base] using hgenerator
+              have hcorner := AtlasProjectiveEdgeCertificate.le_max3
+                (fun c => box.supportAt j c i
+                  (supportGenerator base (selected.generator l))) corner
+              have hraw : box.supportAt j corner i
+                    (supportGenerator base (selected.generator l)) ≤
+                  -supportError := by
+                simp [Box.supportUpper, Box.exactSupportTie, hgenerator',
+                  hzero, hthousand] at hsparse
+                linarith
+              exact mul_le_mul_of_nonneg_left hraw (hselected.1 l)
+          _ = -supportError * ∑ l, selected.coefficient l := by
+            simp only [Fin.sum_univ_three]
+            ring
+          _ ≤ -supportError := by
+            have herror : 0 < supportError := by
+              norm_num [supportError, tightVertexErrorQ]
+            nlinarith [hselected.2.1]
+      simp [Box.supportUpper, Box.exactSupportTie, htie', hzero,
+        hthousand]
+      have hmax :
+          AtlasProjectiveEdgeCertificate.max3
+              (fun corner => box.supportAt j corner i target) ≤
+            -supportError := by
+        simp only [AtlasProjectiveEdgeCertificate.max3, max_le_iff]
+        exact ⟨hat 0, hat 1, hat 2⟩
+      linarith
 
 theorem Box.SparseViewValid.toViewValid {box : Box}
     (h : Box.SparseViewValid box)

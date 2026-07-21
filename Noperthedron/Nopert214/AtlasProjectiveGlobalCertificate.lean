@@ -355,9 +355,7 @@ theorem Box.supportUpper_self (box : Box) (i : Fin 3) :
   unfold AtlasProjectiveLocalCertificate.Box.supportUpper
   rw [if_pos]
   unfold AtlasProjectiveLocalCertificate.Box.exactSupportTie
-  change box.certificate.index i =
-    box.certificate.supportIndex box.localShell i
-  exact (box.localShell_supportIndex i).symm
+  exact Or.inl (box.localShell_supportIndex i).symm
 
 theorem Box.defect_nonneg (box : Box) (i : Fin 3) :
     0 ≤ box.defect i := by
@@ -442,9 +440,7 @@ theorem Box.actualDefect_nonneg (box : Box) (p : AtlasPose ℝ)
   have htie : box.localShell.exactSupportTie 0 i
       (box.certificate.index i) := by
     unfold AtlasProjectiveLocalCertificate.Box.exactSupportTie
-    change box.certificate.index i =
-      box.certificate.supportIndex box.localShell i
-    exact (box.localShell_supportIndex i).symm
+    exact Or.inl (box.localShell_supportIndex i).symm
   rw [← box.localShell.exactSupport_eq_zero_of_tie 0 i
     (box.certificate.index i) htie]
   exact box.exactSupport_le_actualDefect p i (box.certificate.index i)
@@ -969,9 +965,7 @@ theorem Box.exactWeight_mul_exactSupport_le_contactDefect
     have hlocalTie : box.localShell.exactSupportTie 0 i
         (box.certificate.index i) := by
       unfold AtlasProjectiveLocalCertificate.Box.exactSupportTie
-      change box.certificate.index i =
-        box.certificate.supportIndex box.localShell i
-      exact (box.localShell_supportIndex i).symm
+      exact Or.inl (box.localShell_supportIndex i).symm
     have hzero : box.certificate.exactSupport box.localShell p i
         (box.certificate.index i) = 0 := by
       simpa [Box.localShell] using

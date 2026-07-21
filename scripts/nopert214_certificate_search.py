@@ -558,12 +558,12 @@ def projective_local_axis_candidates(view, cone_samples=1,
         samples = [(sample + 1) / (cone_samples + 1)
                    for sample in range(cone_samples)]
         if include_boundaries:
-            # Exact edge normals (0 and 1) have support ties that cannot
-            # survive the rational-vertex approximation allowance.  Include
-            # the nearest representable interior direction at each boundary:
-            # limiting LP duals often live on an edge normal, and a uniform
-            # cone grid otherwise approaches them far too slowly.
-            near = [1 / 1000]
+            # At an exact boundary the selected vertex and the other endpoint
+            # of the corresponding exact polyhedron edge have identically
+            # equal support: cross(edge, +/-edge) = 0.  Keep the previous
+            # near-boundary samples as well, since they can be better
+            # conditioned away from a silhouette transition.
+            near = [0, 1 / 1000]
             samples = sorted(set(
                 [*near, *samples, *(1-value for value in near)]))
         for lam in samples:
@@ -675,6 +675,19 @@ def projective_mixed_edge_q(contact):
     return [lam*a + (1-lam)*b for a, b in zip(first, second)]
 
 
+def projective_contact_exact_tie(contact, target):
+    """Whether a support comparison is an algebraic exact-edge tie."""
+    if target == contact["vertex"]:
+        return True
+    if (contact["mix"] == 1000 and
+            contact["vertex"] == contact["edge_finish"] and
+            target == contact["edge_start"]):
+        return True
+    return (contact["mix"] == 0 and
+            contact["vertex"] == contact["edge_start2"] and
+            target == contact["edge_finish2"])
+
+
 def projective_local_axis_row_mixed(triangle, contacts, symmetry_index=0,
                                     allow_support_defect=False):
     """Exactly audit one mixed-edge projective-local axis certificate."""
@@ -703,10 +716,10 @@ def projective_local_axis_row_mixed(triangle, contacts, symmetry_index=0,
 
     support_upper = []
     witnesses = []
-    for edge, selected in zip(edges, supports):
+    for contact, edge, selected in zip(contacts, edges, supports):
         values = []
         for k in range(len(VERTICES_Q)):
-            if k == selected:
+            if projective_contact_exact_tie(contact, k):
                 upper = Q(0)
             else:
                 delta = [x-y for x, y in zip(
@@ -905,7 +918,7 @@ def projective_local_float_candidates(triangle, cone_samples=4,
         strict_slack = math.inf
         support_ok = True
         for k, vertex in enumerate(VERTICES):
-            if k == selected:
+            if projective_contact_exact_tie(contact, k):
                 continue
             delta = [a-b for a, b in zip(vertex, VERTICES[selected])]
             coefficient = cross3(edge, delta)
@@ -3979,9 +3992,11 @@ def projective_local_candidate(task):
         result = atlas_projective_local_triangle(
             0, (Q(0), Q(0), Q(0)), (Q(0), Q(0), Q(0)),
             0, triangle, 0, cone_samples=5, trials=5000)
-    if ((result is None or result["c"] < target_c) and depth >= 10):
+    if ((result is None or result["c"] < target_c) and depth >= 4):
         # Near a silhouette transition the limiting dual may lie almost on
-        # an edge normal.  Endpoint-enriched sampling is the cheap fallback.
+        # an edge normal.  Exact endpoint ties make cone-boundary contacts
+        # sound, and trying them early avoids refining along an entire
+        # silhouette-transition curve.
         boundary_result = atlas_projective_local_triangle(
             0, (Q(0), Q(0), Q(0)), (Q(0), Q(0), Q(0)),
             0, triangle, 0, cone_samples=4, trials=1,
