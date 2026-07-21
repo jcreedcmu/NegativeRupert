@@ -6,6 +6,7 @@ public import Noperthedron.Nopert214.AtlasLocalCertificate
 public import Noperthedron.Nopert214.AtlasProjectiveLocalCertificate
 public import Noperthedron.Nopert214.AtlasProjectiveLocalViewTree
 public import Noperthedron.Nopert214.AtlasProjectiveGlobalCertificate
+public import Noperthedron.ParallelBool
 
 @[expose] public section
 
@@ -413,6 +414,60 @@ def Table.Valid (table : Table) : Prop :=
 instance (table : Table) : Decidable table.Valid := by
   unfold Table.Valid
   infer_instance
+
+/-! ## Parallel executable checker -/
+
+/-- One global-tree row check as a Boolean, vacuously true past `size`. -/
+def validIxAtB (chart : ChartIndex) (get : ℕ → Row) (size : ℕ)
+    (shared : SharedLocalTables) (i : ℕ) : Bool :=
+  if i < size then
+    decide ((get i).id = i ∧ (get i).ValidAt chart get size shared)
+  else true
+
+theorem validIxAtB_eq_true_iff (chart : ChartIndex) (get : ℕ → Row)
+    (size : ℕ) (shared : SharedLocalTables) (i : ℕ) :
+    validIxAtB chart get size shared i = true ↔
+      (i < size → (get i).id = i ∧
+        (get i).ValidAt chart get size shared) := by
+  unfold validIxAtB
+  split
+  · rename_i h
+    rw [decide_eq_true_iff]
+    exact ⟨fun hv _ => hv, fun hv => hv h⟩
+  · rename_i h
+    simp only [true_iff]
+    exact fun h' => absurd h' h
+
+/-- Native parallel Boolean check of every row in a global chart table. -/
+def rowsValidAtParB (chart : ChartIndex) (get : ℕ → Row) (size : ℕ)
+    (shared : SharedLocalTables) (taskCount : ℕ) : Bool :=
+  Noperthedron.ParallelBool.allParB
+    (validIxAtB chart get size shared) size taskCount
+
+theorem rowsValidAt_of_parB {chart : ChartIndex} {get : ℕ → Row}
+    {size : ℕ} {shared : SharedLocalTables} {taskCount : ℕ}
+    (h : rowsValidAtParB chart get size shared taskCount = true) :
+    RowsValidAt chart get size shared := by
+  intro i
+  have hindex := Noperthedron.ParallelBool.all_of_parB h i.val i.isLt
+  rw [validIxAtB_eq_true_iff] at hindex
+  exact hindex i.isLt
+
+/-- Check the computational portion of `Table.Valid`.  Validity of shared
+local tables is supplied separately, so chart 0 does not recompute them. -/
+def tableCoreValidParB (table : Table) (taskCount : ℕ) : Bool :=
+  decide (0 < table.size ∧
+    (table.get 0).interval =
+      AtlasFundamentalPrune.restrictedRootInterval table.chart ∧
+    (table.get 0).region = .sphere) &&
+  rowsValidAtParB table.chart table.get table.size table.sharedLocal taskCount
+
+theorem Table.Valid.of_parB {table : Table} {taskCount : ℕ}
+    (hshared : SharedLocalValid table.sharedLocal)
+    (h : tableCoreValidParB table taskCount = true) : table.Valid := by
+  unfold tableCoreValidParB at h
+  rw [Bool.and_eq_true, decide_eq_true_iff] at h
+  exact ⟨h.1.1, rowsValidAt_of_parB h.2, h.1.2.1, h.1.2.2, hshared⟩
 
 theorem Table.valid_imp_no_chart_translated_pose
     (table : Table) (h : table.Valid) :
