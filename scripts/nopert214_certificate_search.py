@@ -3203,10 +3203,18 @@ def atlas_projective_state_action(task):
         return answer("view_split", assign_shared=True, inherited=None)
     if interval_outside_cayley_ball(center, widths):
         return answer("terminal", row_kind="radius", extra={})
-    if restricted_fundamental_root and chart != 3:
+    if restricted_fundamental_root and chart == 0:
+        # The chart-0 slab is already a close approximation to the exact
+        # fivefold Dirichlet cell, and resolving its curved boundary before
+        # isolating the identity symmetry tube creates needless subdivisions.
         fundamental_status = "inside"
         fundamental_direction = None
     else:
+        # The analogous chart-1 and chart-2 slabs are much coarser
+        # supersets.  In particular, large boxes in those slabs can lie
+        # wholly outside the exact max-trace cell.  Run the already-formalized
+        # trace-advantage test there: one fundamental-prune row can replace a
+        # six-figure geometric subtree.
         fundamental_status, fundamental_direction, _ = \
             atlas_fundamental_status(chart, center, widths)
         if fundamental_status == "outside":
@@ -3336,6 +3344,21 @@ def atlas_projective_state_action(task):
                 if local is None:
                     local = atlas_projective_local_triangle(
                         chart, center, widths, root, triangle,
+                        symmetry_index, cone_samples=4, trials=1000,
+                        include_boundaries=True)
+                if local is None:
+                    local = atlas_projective_local_triangle(
+                        chart, center, widths, root, triangle,
+                        symmetry_index, cone_samples=5, trials=1000,
+                        include_boundaries=True)
+                if local is None:
+                    local = atlas_projective_local_triangle(
+                        chart, center, widths, root, triangle,
+                        symmetry_index, cone_samples=6, trials=1000,
+                        include_boundaries=True)
+                if local is None:
+                    local = atlas_projective_local_triangle(
+                        chart, center, widths, root, triangle,
                         symmetry_index, cone_samples=5, trials=50_000)
                 if local is not None and local["accepted"]:
                     return answer("terminal", row_kind="local", extra={
@@ -3376,7 +3399,19 @@ def atlas_projective_state_action(task):
     if mismatch_radius < Q(1, 20):
         local = atlas_projective_local_triangle(
             chart, center, widths, root, triangle, symmetry_index,
-            cone_samples=5, trials=500_000)
+            cone_samples=4, trials=1000, include_boundaries=True)
+        if local is None:
+            local = atlas_projective_local_triangle(
+                chart, center, widths, root, triangle, symmetry_index,
+                cone_samples=5, trials=1000, include_boundaries=True)
+        if local is None:
+            local = atlas_projective_local_triangle(
+                chart, center, widths, root, triangle, symmetry_index,
+                cone_samples=6, trials=1000, include_boundaries=True)
+        if local is None:
+            local = atlas_projective_local_triangle(
+                chart, center, widths, root, triangle, symmetry_index,
+                cone_samples=5, trials=500_000)
         if local is not None and local["accepted"]:
             return answer("terminal", row_kind="local", extra={
                 "certificate": {
@@ -3667,12 +3702,14 @@ def generate_atlas_projective_table(
             rows[row_id] = {**common, "kind": "radius"}
             counts["radius"] += 1
             continue
-        if restricted_fundamental_root and chart != 3:
-            # Every fundamental-domain point is already in the restricted
-            # rational root.  Certifying its superset directly avoids an
-            # expensive axis-aligned approximation to the irrational cone.
+        if restricted_fundamental_root and chart == 0:
+            # The chart-0 slab is already a close approximation to the exact
+            # cell.  Preserve its direct symmetry-tube path rather than
+            # resolving the curved boundary first.
             fundamental_status = "inside"
         else:
+            # The chart-1 and chart-2 slabs are coarse supersets of the exact
+            # cell, so retain exact fundamental pruning inside them.
             fundamental_status, fundamental_direction, fundamental_bounds = \
                 atlas_fundamental_status(chart, center, widths)
             if fundamental_status == "outside":
