@@ -29,6 +29,8 @@ def main():
     parser.add_argument("--target-c", default="51/10000000")
     parser.add_argument("--split-failures", action="store_true",
                         help="also test all four children of failed cells")
+    parser.add_argument("--parents", action="store_true",
+                        help="test leaf-child patterns on completed parents")
     args = parser.parse_args()
 
     with open(args.checkpoint, encoding="utf-8") as source:
@@ -39,6 +41,39 @@ def main():
         if row is not None and row.get("kind") == "view_local":
             resolved.append((triangle_center_float(row["triangle"]),
                              row["certificate"], row["id"]))
+    if args.parents:
+        parents = []
+        for row in data["rows"]:
+            if row is None or row.get("kind") != "view_split":
+                continue
+            certificates = [data["rows"][child]["certificate"]
+                            for child in row["children"]
+                            if (data["rows"][child] is not None and
+                                data["rows"][child].get("kind") ==
+                                "view_local")]
+            if certificates:
+                parents.append((int(row["depth"]), int(row["id"]),
+                                row["triangle"], certificates))
+        parents.sort(reverse=True)
+        start = time.monotonic()
+        accepted = 0
+        attempts = 0
+        for depth, row_id, triangle_raw, certificates in parents[:args.sample]:
+            triangle = triangle_q(triangle_raw)
+            for certificate in certificates:
+                attempts += 1
+                result = projective_local_reaudit_certificate(
+                    triangle, certificate)
+                if result is not None and result["c"] >= target_c:
+                    accepted += 1
+                    print(f"parent {row_id} depth {depth} reuses child "
+                          f"pattern with c={result['c']}")
+                    break
+        elapsed = time.monotonic()-start
+        print(f"accepted {accepted}/{min(args.sample, len(parents))} "
+              f"leaf-adjacent parents from {attempts} attempts in "
+              f"{elapsed:.3f}s; eligible parents {len(parents)}")
+        return
     pending = sorted(data["pending"], key=lambda state: state[2],
                      reverse=True)[:args.sample]
 

@@ -65,6 +65,11 @@ name = "benchmarkNopert214Global"
 root = "benchmarkNopert214Global"
 buildType = "release"
 
+[[lean_exe]]
+name = "benchmarkNopert214Local"
+root = "benchmarkNopert214Local"
+buildType = "release"
+
 # Full native proof constructor for Nopert #214. It reads large ignored packed
 # certificate artifacts at runtime, so this target is built on demand.
 [[lean_exe]]
