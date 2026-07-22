@@ -57,10 +57,13 @@ def main():
 
         rows = data["rows"]
         rows_by_id = {row["id"]: row for row in rows if row is not None}
-        pending_ids = {item[0] for item in data.get("pending", ())}
+        first = rows_by_id[0]
+        pending = data.get("pending", ())
+        pending_ids = {item[0] for item in pending}
+        depth_index = 5 if first["kind"] == "view_root" else 2
+        pending_depths = {item[0]: item[depth_index] for item in pending}
         failures = data.get("failures", ())
 
-        first = rows_by_id[0]
         top_roots = top_level_roots(first, rows_by_id)
 
         print(
@@ -79,8 +82,15 @@ def main():
             kind_summary = ",".join(
                 f"{kind}={count}" for kind, count in sorted(kinds.items())
             )
+            depths = Counter(
+                pending_depths[row_id] for row_id in subtree & pending_ids
+            )
+            depth_summary = ",".join(
+                f"{depth}:{count}" for depth, count in sorted(depths.items())
+            )
             print(f"  root {root_id}: cells={len(subtree)} "
-                  f"pending={len(subtree & pending_ids)} {kind_summary}")
+                  f"pending={len(subtree & pending_ids)} "
+                  f"depths={depth_summary or '-'} {kind_summary}")
 
         bookkeeping = set(rows_by_id) - covered
         if bookkeeping:
