@@ -15,7 +15,7 @@ from nopert214_certificate_search import (
 def upgrade(data):
     chart = int(data.get("chart", -1))
     if chart not in (1, 2):
-        raise ValueError("cone-10 migration requires chart 1 or 2")
+        raise ValueError("strong-cone migration requires chart 1 or 2")
 
     rows = data["rows"]
     pending_by_id = {int(state[0]): state for state in data["pending"]}
@@ -23,8 +23,8 @@ def upgrade(data):
         int(failure["id"]): failure for failure in data.get("failures", [])
     }
     replacements = {}
-    attempts = 0
-    positive_screens = 0
+    attempts = {10: 0, 16: 0}
+    positive_screens = {10: 0, 16: 0}
     exact_rejections = 0
 
     def geometry(row_id):
@@ -49,7 +49,7 @@ def upgrade(data):
     visited = set()
 
     def revisit(row_id):
-        nonlocal attempts, positive_screens, exact_rejections
+        nonlocal exact_rejections
         if row_id in visited:
             raise ValueError(f"tree row {row_id} is reachable more than once")
         visited.add(row_id)
@@ -60,21 +60,26 @@ def upgrade(data):
                 ("view_split", "relative_split")):
             widths = tuple(map(Q, node["widths"]))
             view_depth = int(node["view_depth"])
-            use_cone10 = (
-                (chart == 1 and view_depth >= 4 and
-                 max(widths) <= Q(1, 16)) or
-                (chart == 2 and view_depth == 1 and
-                 max(widths) == Q(1, 16)))
-            if use_cone10:
-                attempts += 1
+            policies = []
+            if ((chart == 1 and view_depth >= 4 and
+                    max(widths) <= Q(1, 16)) or
+                    (chart == 2 and view_depth == 1 and
+                     max(widths) == Q(1, 16))):
+                policies.append(10)
+            if (chart == 1 and view_depth >= 4 and
+                    max(widths) <= Q(1, 96)):
+                policies.append(16)
+            for cone_samples in policies:
+                attempts[cone_samples] += 1
                 center = tuple(map(Q, node["center"]))
                 triangle = tuple(
                     tuple(map(Q, corner)) for corner in node["triangle"])
                 screen = atlas_projective_global_float_screen(
-                    chart, center, widths, triangle, cone_samples=10,
+                    chart, center, widths, triangle,
+                    cone_samples=cone_samples,
                     candidate_limit=64, candidates=None)
                 if screen is not None and screen["lower_bound"] > 1e-8:
-                    positive_screens += 1
+                    positive_screens[cone_samples] += 1
                     exact = atlas_projective_global_triangle(
                         chart, center, widths, int(node["root"]), triangle,
                         selected_candidate=screen["candidate"])
@@ -181,7 +186,9 @@ def upgrade(data):
             "local", "radius", "fundamental_prune", "symmetry_tube"):
         data["counts"][kind] = row_kinds.get(kind, 0)
     data["counts"]["global_cone10"] = (
-        data["counts"].get("global_cone10", 0) + attempts)
+        data["counts"].get("global_cone10", 0) + attempts[10])
+    data["counts"]["global_cone16"] = (
+        data["counts"].get("global_cone16", 0) + attempts[16])
     data["counts"]["exact_rejections"] = (
         data["counts"].get("exact_rejections", 0) + exact_rejections)
     return {
