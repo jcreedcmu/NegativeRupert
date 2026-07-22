@@ -4150,12 +4150,14 @@ def projective_local_candidate(task):
     # the original exact-boundary table.  In their transition bands, a weak
     # depth-14 candidate is normally evidence that the triangle is still too
     # wide, not that another 500,000 tetrahedra should be sampled.  Subdivide
-    # four more times first: many children then coincide with reusable exact
+    # six more times first: many children then coincide with reusable exact
     # seed leaves, and the genuinely exceptional survivors still receive the
-    # exhaustive fallbacks below.  Retain the earlier threshold for the
-    # smaller-margin search, where those fallbacks were needed to prevent a
-    # much larger refinement tree.
-    exhaustive_depth = (14 if target_c <= Q(51, 1_000_000_000) else 18)
+    # exhaustive fallbacks below.  At depth 18 a live 32-cell worker batch
+    # spent over fourteen minutes inside the large candidate pools without
+    # reaching a checkpoint; two more cheap subdivisions avoid that long
+    # tail. Retain the earlier threshold for the smaller-margin search, where
+    # those fallbacks were needed to prevent a much larger refinement tree.
+    exhaustive_depth = (14 if target_c <= Q(51, 1_000_000_000) else 20)
     trials = 100 if depth < 4 else 1000
     result = atlas_projective_local_triangle(
         0, (Q(0), Q(0), Q(0)), (Q(0), Q(0), Q(0)),
