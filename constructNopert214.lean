@@ -17,7 +17,12 @@ open Noperthedron.Nopert214.NativeExecutable
 
 /-- A completed local-table audit found 64 chunks materially faster than 512
 for these comparatively expensive exact-rational rows. -/
-private def taskCount : Nat := 64
+private def localTaskCount : Nat := 64
+
+/-- Global tables are much larger, and chart 0's expensive projective-local
+leaves occupy relatively few contiguous ranges.  Finer chunks improve tail
+load balancing without imposing the local checker's tiny-chunk overhead. -/
+private def globalTaskCount : Nat := 256
 
 private def readArtifact (directory name : String) : IO String :=
   IO.FS.readFile s!"{directory}/{name}"
@@ -47,7 +52,7 @@ def main (args : List String) : IO Unit := do
         PackedSolutionTree.decodeTable 1 shared chart1Data,
         PackedSolutionTree.decodeTable 2 shared chart2Data,
         { FundamentalChart3.table with sharedLocal := shared }]
-  let checked ← constructProof taskCount
+  let checked ← constructProof localTaskCount globalTaskCount
     localTables globalTables
     (by intro shared chart; fin_cases chart <;> rfl)
     (by intro shared chart; fin_cases chart <;> rfl)
