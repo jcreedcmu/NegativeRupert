@@ -53,6 +53,17 @@ private def checkKind (table : Table) (kind : String) (limit : Nat) : IO Unit :=
     s!"{(finish - start) / 1000000} ms")
   (← IO.getStdout).flush
 
+private def checkRow (table : Table) (index : Nat) : IO Unit := do
+  unless index < table.size do
+    throw (IO.userError s!"row {index} is outside table of size {table.size}")
+  let start ← IO.monoNanosNow
+  let valid := validIxAtB table.chart table.get table.size table.sharedLocal index
+  let finish ← IO.monoNanosNow
+  unless valid do
+    throw (IO.userError s!"row {index} is invalid")
+  IO.println (s!"row {index} ({rowKind? (table.get index)}): valid in " ++
+    s!"{(finish - start) / 1000000} ms")
+
 private def parseChart (value : String) : IO CayleyAtlas.ChartIndex := do
   match value.toNat? with
   | some 0 => pure 0
@@ -61,20 +72,26 @@ private def parseChart (value : String) : IO CayleyAtlas.ChartIndex := do
   | _ => throw (IO.userError "chart must be 0, 1, or 2")
 
 def main (args : List String) : IO Unit := do
-  let (chartText, path, limitText) ← match args with
-    | [chart, path, limit] => pure (chart, path, limit)
-    | _ => throw (IO.userError "expects CHART PACK SAMPLE_COUNT")
+  let (chartText, path, selection, rowMode) ← match args with
+    | [chart, path, limit] => pure (chart, path, limit, false)
+    | [chart, path, "row", index] => pure (chart, path, index, true)
+    | _ => throw (IO.userError
+        "expects CHART PACK SAMPLE_COUNT or CHART PACK row ROW")
   let chart ← parseChart chartText
-  let limit ← match limitText.toNat? with
+  let selected ← match selection.toNat? with
     | some limit =>
         if 0 < limit then pure limit
+        else if rowMode then pure 0
         else throw (IO.userError "sample count must be positive")
-    | none => throw (IO.userError "sample count must be a natural number")
+    | none => throw (IO.userError "selection must be a natural number")
   let packed ← IO.FS.readFile path
   let shared : SharedLocalTables := fun _ => none
   let table := PackedSolutionTree.decodeTable chart shared packed
   IO.println s!"decoded benchmark chart {chart}: {table.size} rows"
   (← IO.getStdout).flush
+  if rowMode then
+    checkRow table selected
+    return
   for kind in ["edge", "global", "mixed-global", "local",
       "symmetry-local", "radius", "fundamental"] do
-    checkKind table kind limit
+    checkKind table kind selected
