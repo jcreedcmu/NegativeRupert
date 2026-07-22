@@ -63,6 +63,24 @@ def encode_row(row, paths):
     raise ValueError(f"unsupported local-view row kind: {row['kind']}")
 
 
+def write_packed(path, groups):
+    natural_count = 0
+    buffer = []
+    with open(path, "w", encoding="utf-8") as output:
+        for values in groups:
+            for value in values:
+                buffer.append(str(value))
+                natural_count += 1
+                if len(buffer) == 8192:
+                    output.write(",".join(buffer))
+                    output.write(",")
+                    buffer.clear()
+        if buffer:
+            output.write(",".join(buffer))
+            output.write(",")
+    return natural_count, Path(path).stat().st_size
+
+
 DATA_HEADER = """module
 
 public import Noperthedron.Nopert214.PackedLocalViewTree
@@ -110,13 +128,6 @@ def main():
         raise SystemExit("--table-index does not match input initial_child")
 
     paths = triangle_paths(rows, args.table_index)
-    values = []
-    for row in rows:
-        values.extend(encode_row(row, paths))
-    packed = ",".join(str(value) for value in values) + ","
-    chunks = [packed[start:start + args.string_chunk_size]
-              for start in range(0, len(packed), args.string_chunk_size)]
-
     first_certificate = next(row for row in rows
                              if row["kind"] == "view_local")
     symmetry_index = first_certificate["symmetry_index"]
@@ -124,15 +135,28 @@ def main():
     radius_lean = (str(radius.numerator) if radius.denominator == 1 else
                    f"({radius.numerator} / {radius.denominator})")
 
+    raw_header = [len(rows), int(symmetry_index), *encoded_rat(radius)]
+    if args.raw_only:
+        def raw_groups():
+            yield raw_header
+            for row in rows:
+                yield encode_row(row, paths)
+
+        raw_count, raw_size = write_packed(
+            args.raw_output, raw_groups())
+        print(f"encoded {len(rows)} rows as {raw_count} naturals, "
+              f"{raw_size} bytes, raw only")
+        return
+
+    values = []
+    for row in rows:
+        values.extend(encode_row(row, paths))
+    packed = ",".join(str(value) for value in values) + ","
+    chunks = [packed[start:start + args.string_chunk_size]
+              for start in range(0, len(packed), args.string_chunk_size)]
+
     if args.raw_output:
-        raw_values = [len(rows), int(symmetry_index),
-                      *encoded_rat(radius), *values]
-        raw_packed = ",".join(str(value) for value in raw_values) + ","
-        Path(args.raw_output).write_text(raw_packed, encoding="utf-8")
-        if args.raw_only:
-            print(f"encoded {len(rows)} rows as {len(raw_values)} naturals, "
-                  f"{len(raw_packed)} bytes, raw only")
-            return
+        write_packed(args.raw_output, (raw_header, values))
 
     destination = Path(args.output)
     data_namespace = f"{args.namespace}Data"
