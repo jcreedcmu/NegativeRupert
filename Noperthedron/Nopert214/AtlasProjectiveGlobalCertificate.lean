@@ -294,18 +294,27 @@ def Box.displacementError (box : Box) : ℚ :=
   300 * box.dBound * RationalApprox.κℚ
 
 @[mk_iff]
-structure Box.Valid (box : Box) : Prop where
+structure Box.Admissible (box : Box) : Prop where
   triangle_valid : SignedTriangleValid box.root box.triangle
   weight_nonneg : ∀ i, 0 ≤ box.weightLower i
   weight_pos : ∃ i, 0 < box.weightLower i
   direction_nonzero : ∀ i,
     box.supportUpper i (box.certificate.nonzeroWitness i) < 0
   ball_multiplier_nonneg : 0 ≤ box.ballMultiplier
+
+instance (box : Box) : Decidable box.Admissible :=
+  decidable_of_iff _ (Box.admissible_iff box).symm
+
+@[mk_iff]
+structure Box.Valid (box : Box) : Prop extends Box.Admissible box where
   displacement : box.displacementError ≤
     box.certifiedDisplacementLower - box.dBound * box.weightedDefectUpper
 
 instance (box : Box) : Decidable box.Valid :=
   decidable_of_iff _ (Box.valid_iff box).symm
+
+instance (box : Box) : Coe box.Valid box.Admissible :=
+  ⟨Box.Valid.toAdmissible⟩
 
 @[simp] theorem Box.localShell_supportIndex (box : Box) (i : Fin 3) :
     box.certificate.supportIndex box.localShell i = box.certificate.index i := by
@@ -319,7 +328,7 @@ instance (box : Box) : Decidable box.Valid :=
   rw [horbit]
   exact indexEquiv.symm_apply_apply (box.certificate.index i)
 
-theorem Box.valid_weight_nonneg (box : Box) (h : box.Valid)
+theorem Box.valid_weight_nonneg (box : Box) (h : box.Admissible)
     {p : AtlasPose ℝ}
     (hscale : 1 ≤ viewScale box.root p)
     (hmem : InTriangle (toReal box.triangle)
@@ -330,7 +339,7 @@ theorem Box.valid_weight_nonneg (box : Box) (h : box.Valid)
   apply hlower.trans
   exact box.localShell.weightLower_le_exact hscale hmem 0 i
 
-theorem Box.valid_weight_pos (box : Box) (h : box.Valid)
+theorem Box.valid_weight_pos (box : Box) (h : box.Admissible)
     {p : AtlasPose ℝ}
     (hscale : 1 ≤ viewScale box.root p)
     (hmem : InTriangle (toReal box.triangle)
@@ -362,7 +371,7 @@ theorem Box.defect_nonneg (box : Box) (i : Fin 3) :
   rw [← box.supportUpper_self i]
   exact box.supportUpper_le_defect i (box.certificate.index i)
 
-theorem Box.weightUpper_nonneg (box : Box) (h : box.Valid) (i : Fin 3) :
+theorem Box.weightUpper_nonneg (box : Box) (h : box.Admissible) (i : Fin 3) :
     0 ≤ box.weightUpper i := by
   have hmin := min3_le (fun corner => box.localShell.weightAt 0 corner i) 0
   have hmax := le_max3 (fun corner => box.localShell.weightAt 0 corner i) 0
@@ -377,7 +386,7 @@ theorem Box.weightUpper_nonneg (box : Box) (h : box.Valid) (i : Fin 3) :
   unfold AtlasProjectiveLocalCertificate.Box.weightUpper
   linarith
 
-theorem Box.totalDefect_nonneg (box : Box) (h : box.Valid) :
+theorem Box.totalDefect_nonneg (box : Box) (h : box.Admissible) :
     0 ≤ box.totalDefect := by
   exact Finset.sum_nonneg fun i _ =>
     mul_nonneg (box.weightUpper_nonneg h i) (box.defect_nonneg i)
@@ -391,7 +400,7 @@ theorem Box.weightedDefectUpper_nonneg (box : Box) :
   unfold Box.weightedDefectUpper
   exact Finset.sum_nonneg fun i _ => box.contactDefectUpper_nonneg i
 
-theorem Box.valid_support_with_defect (box : Box) (_h : box.Valid)
+theorem Box.valid_support_with_defect (box : Box) (_h : box.Admissible)
     {p : AtlasPose ℝ} (offset : ℝ²)
     (hscale : 1 ≤ viewScale box.root p)
     (hmem : InTriangle (toReal box.triangle)
@@ -445,7 +454,7 @@ theorem Box.actualDefect_nonneg (box : Box) (p : AtlasPose ℝ)
     (box.certificate.index i) htie]
   exact box.exactSupport_le_actualDefect p i (box.certificate.index i)
 
-theorem Box.valid_support_with_actualDefect (box : Box) (_h : box.Valid)
+theorem Box.valid_support_with_actualDefect (box : Box) (_h : box.Admissible)
     {p : AtlasPose ℝ} (offset : ℝ²)
     (hscale : 1 ≤ viewScale box.root p)
     (_hmem : InTriangle (toReal box.triangle)
@@ -477,7 +486,7 @@ theorem Box.valid_support_with_actualDefect (box : Box) (_h : box.Valid)
   rw [inner_sub_right] at hdiff
   linarith
 
-theorem Box.valid_direction_nonzero (box : Box) (h : box.Valid)
+theorem Box.valid_direction_nonzero (box : Box) (h : box.Admissible)
     {p : AtlasPose ℝ} (offset : ℝ²)
     (hscale : 1 ≤ viewScale box.root p)
     (hmem : InTriangle (toReal box.triangle)
@@ -951,7 +960,7 @@ theorem Box.weightedSupportControl_sum (box : Box) (i : Fin 3)
   rw [hleft, hright]
 
 theorem Box.exactWeight_mul_exactSupport_le_contactDefect
-    (box : Box) (h : box.Valid) {p : AtlasPose ℝ}
+    (box : Box) (h : box.Admissible) {p : AtlasPose ℝ}
     (hscale : 1 ≤ viewScale box.root p)
     (hmem : InTriangle (toReal box.triangle)
       (AtlasProjectiveView.normalizedView box.root p))
@@ -1055,7 +1064,7 @@ theorem Box.exactWeight_mul_exactSupport_le_contactDefect
         exact_mod_cast box.weightedSupportUpper_le_contactDefect i k))
 
 theorem Box.exactWeight_mul_actualDefect_le_contactDefect
-    (box : Box) (h : box.Valid) {p : AtlasPose ℝ}
+    (box : Box) (h : box.Admissible) {p : AtlasPose ℝ}
     (hscale : 1 ≤ viewScale box.root p)
     (hmem : InTriangle (toReal box.triangle)
       (AtlasProjectiveView.normalizedView box.root p))
@@ -1077,7 +1086,7 @@ theorem Box.exactWeight_mul_actualDefect_le_contactDefect
   exact box.exactWeight_mul_exactSupport_le_contactDefect
     h hscale hmem i k
 
-theorem Box.exactWeightedActualDefect_le (box : Box) (h : box.Valid)
+theorem Box.exactWeightedActualDefect_le (box : Box) (h : box.Admissible)
     {p : AtlasPose ℝ}
     (hscale : 1 ≤ viewScale box.root p)
     (hmem : InTriangle (toReal box.triangle)
