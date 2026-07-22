@@ -4413,6 +4413,59 @@ def split_projective_triangle(triangle):
     return ((a, ab, ca), (ab, b, bc), (ca, bc, c), (ab, bc, ca))
 
 
+def projective_local_contacts_from_axis(axis):
+    """Recover the three exact contact records stored in a compact axis."""
+    return tuple({
+        "edge_start": int(axis["edge_start"][i]),
+        "edge_finish": int(axis["edge_finish"][i]),
+        "edge_start2": int(axis["edge_start2"][i]),
+        "edge_finish2": int(axis["edge_finish2"][i]),
+        "mix": Q(axis["mix"][i]),
+        "vertex": int(axis["support_index"][i]),
+    } for i in range(3))
+
+
+def projective_local_reaudit_certificate(triangle, certificate):
+    """Rebuild a nearby leaf's four contact patterns on a new triangle.
+
+    This is certificate discovery, not certificate reuse by assertion: every
+    mixed axis, support inequality, projective error bound, and balanced hull
+    condition is recomputed exactly for ``triangle``.  A successful result is
+    therefore identical in status to one returned by the ordinary candidate
+    search and is checked again by Lean in the emitted table.
+    """
+    try:
+        rows = [projective_local_axis_row_mixed(
+            triangle, projective_local_contacts_from_axis(axis), 0)
+                for axis in certificate]
+    except RuntimeError:
+        return None
+    delta = max(row["delta"] for row in rows)
+    centers = [row["normalized_center"] for row in rows]
+    axis_radius = exact_certificate.exact_tetrahedron_axis_radius(centers)
+    if axis_radius <= 0:
+        return None
+    cover_radius = Q(19, 20) * Q(4, 7) * axis_radius
+    c = exact_certificate.floor_to(
+        cover_radius-delta, PROJECTIVE_CERTIFICATE_DENOMINATOR)
+    if c <= 0:
+        return None
+    target_length = Q(7, 4)*(c+delta)
+    for axis in range(3):
+        for sign in (1, -1):
+            target = [Q(0)]*3
+            target[axis] = sign*target_length
+            lam = exact_certificate.barycentric(centers, target)
+            if min(lam) < 0 or sum(lam, Q(0)) != 1:
+                return None
+    return {"certificates": rows, "c": c, "delta": delta}
+
+
+def projective_triangle_center_float(triangle):
+    return tuple(sum(float(corner[i]) for corner in triangle) / 3
+                 for i in range(3))
+
+
 def projective_local_candidate(task):
     """Search one local-view triangle; suitable for a process-pool worker."""
     triangle, depth, target_c = task
@@ -4619,6 +4672,7 @@ def generate_projective_local_view_table(
         failures = []
         counts = saved["counts"]
         counts.setdefault("reused_certificates", 0)
+        counts.setdefault("nearby_reused_certificates", 0)
     else:
         rows = [None]
         if initial_child is None:
@@ -4631,7 +4685,8 @@ def generate_projective_local_view_table(
         stack = [(0, initial_triangle, initial_depth)]
         failures = []
         counts = {"view_split": 0, "certificate": 0,
-                  "weak_rejections": 0, "reused_certificates": 0}
+                  "weak_rejections": 0, "reused_certificates": 0,
+                  "nearby_reused_certificates": 0}
 
     seed_results = {}
     if seed_checkpoint is not None:
@@ -4653,6 +4708,39 @@ def generate_projective_local_view_table(
                 "c": c,
                 "delta": Q(row["delta"]),
             }
+
+    # Depth-first neighbors usually retain the same four silhouette-contact
+    # patterns.  Keep a bounded recent pool and try the eight geometrically
+    # nearest patterns before launching the large randomized searches.  The
+    # fast path rebuilds and exactly audits every axis on the new triangle;
+    # it never copies a neighboring row's numerical bounds.
+    nearby_reuse = []
+    for row in rows:
+        if row is None or row.get("kind") != "view_local":
+            continue
+        triangle = tuple(tuple(map(Q, corner))
+                         for corner in row["triangle"])
+        nearby_reuse.append((projective_triangle_center_float(triangle),
+                             row["certificate"]))
+    nearby_reuse = nearby_reuse[-4096:]
+
+    def try_nearby_reuse(triangle):
+        if not nearby_reuse:
+            return None
+        center = projective_triangle_center_float(triangle)
+        candidates = heapq.nsmallest(
+            min(8, len(nearby_reuse)), nearby_reuse,
+            key=lambda candidate: sum((a-b)*(a-b) for a, b in
+                                      zip(center, candidate[0])))
+        for _, certificate in candidates:
+            result = projective_local_reaudit_certificate(
+                triangle, certificate)
+            if (result is not None and result["c"] >= target_c and
+                    tube_radius*tube_radius *
+                    (1+result["c"]*result["c"]) <=
+                    4*result["c"]*result["c"]):
+                return result
+        return None
 
     def allocate(count):
         children = list(range(len(rows), len(rows)+count))
@@ -4703,12 +4791,18 @@ def generate_projective_local_view_table(
             search_tasks = []
             for index, task in enumerate(tasks):
                 seed_result = seed_results.get(task[0])
-                if seed_result is None:
+                nearby_result = (None if seed_result is not None or
+                                  task[1] < 14 else
+                                 try_nearby_reuse(task[0]))
+                if seed_result is None and nearby_result is None:
                     search_indices.append(index)
                     search_tasks.append(task)
-                else:
+                elif seed_result is not None:
                     evaluated[index] = (seed_result, False)
                     counts["reused_certificates"] += 1
+                else:
+                    evaluated[index] = (nearby_result, False)
+                    counts["nearby_reused_certificates"] += 1
             searched = ([projective_local_candidate(task)
                          for task in search_tasks] if pool is None else
                         pool.map(projective_local_candidate, search_tasks))
@@ -4738,6 +4832,11 @@ def generate_projective_local_view_table(
                         ],
                         "c": result["c"], "delta": result["delta"]}
                     counts["certificate"] += 1
+                    nearby_reuse.append((
+                        projective_triangle_center_float(triangle),
+                        rows[row_id]["certificate"]))
+                    if len(nearby_reuse) > 8192:
+                        del nearby_reuse[:-4096]
                 elif depth < max_depth:
                     children = allocate(4)
                     rows[row_id] = {
