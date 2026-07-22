@@ -105,7 +105,9 @@ def select_representatives(candidates, point, limit):
     # cap tends to discard the rarer local/tube candidates behind plentiful
     # edge leaves, even though the families certify different strata.
     selected = []
-    for kind in ("global", "edge", "local", "tube"):
+    # Edge audits are substantially cheaper than polynomial-global audits
+    # and dominate successful view-parent collapses, so try them first.
+    for kind in ("edge", "global", "local", "tube"):
         same_kind = [candidate for candidate in candidates
                      if candidate[1] == kind]
         same_kind.sort(key=lambda candidate:
