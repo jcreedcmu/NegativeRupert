@@ -29,8 +29,8 @@ pack_chart() {
   mv -f "$output.new" "$output"
 }
 
-pack_local 0 local-view-exact-boundary-child0.json
-pack_local 1 local-view-r100-child1.json
+pack_local 0 local-view-r10-child0.json
+pack_local 1 local-view-r10-child1.json
 pack_local 2 local-view-r10-child2.json
 pack_local 3 local-view-r10-child3.json
 
