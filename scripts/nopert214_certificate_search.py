@@ -4461,6 +4461,20 @@ def projective_local_reaudit_certificate(triangle, certificate):
     return {"certificates": rows, "c": c, "delta": delta}
 
 
+def projective_local_reaudit_candidates(task):
+    """Exactly try a preselected nearby-pattern list in a pool worker."""
+    triangle, certificates, target_c, tube_radius = task
+    for certificate in certificates:
+        result = projective_local_reaudit_certificate(
+            triangle, certificate)
+        if (result is not None and result["c"] >= target_c and
+                tube_radius*tube_radius *
+                (1+result["c"]*result["c"]) <=
+                4*result["c"]*result["c"]):
+            return result
+    return None
+
+
 def projective_triangle_center_float(triangle):
     return tuple(sum(float(corner[i]) for corner in triangle) / 3
                  for i in range(3))
@@ -4473,13 +4487,15 @@ def projective_local_candidate(task):
     # the original exact-boundary table.  In their transition bands, a weak
     # depth-14 candidate is normally evidence that the triangle is still too
     # wide, not that another 500,000 tetrahedra should be sampled.  Subdivide
-    # six more times first: many children then coincide with reusable exact
+    # further first: many children then coincide with reusable exact
     # seed leaves, and the genuinely exceptional survivors still receive the
     # exhaustive fallbacks below.  At depth 18 a live 32-cell worker batch
     # spent over fourteen minutes inside the large candidate pools without
-    # reaching a checkpoint; two more cheap subdivisions avoid that long
-    # tail. Retain the earlier threshold for the smaller-margin search, where
-    # those fallbacks were needed to prevent a much larger refinement tree.
+    # reaching a checkpoint.  A depth-24 survivor later reproduced the same
+    # tail, while the limiting margin probe remained safely above the reduced
+    # 9e-6-tube target.  Defer the exhaustive pools through depth 26.  Retain
+    # the earlier threshold for the smaller-margin search, where those
+    # fallbacks were needed to prevent a much larger refinement tree.
     exhaustive_depth = (14 if target_c <= Q(51, 1_000_000_000) else 20)
     trials = 100 if depth < 4 else 1000
     result = atlas_projective_local_triangle(
@@ -4502,14 +4518,14 @@ def projective_local_candidate(task):
                 (result is None or boundary_result["c"] > result["c"])):
             result = boundary_result
     if (target_c > Q(51, 1_000_000_000) and
-            14 <= depth < 23 and
+            14 <= depth < 27 and
             (result is None or result["c"] < target_c)):
-        # For the radius-1e-5 table, a weak cell in this depth band is much
-        # cheaper to subdivide than to run the five- and six-cone pools.  A
-        # live depth-19 batch spent about eleven minutes producing 42 weak
+        # For the roughly 1e-5-radius table, a weak cell in this depth band is
+        # much cheaper to subdivide than to run the five- and six-cone pools.
+        # A live depth-19 batch spent about eleven minutes producing 42 weak
         # rejections; its children then closed in the exact nearby-reuse path
         # without one additional weak rejection.  Keep the cheap four-cone
-        # and endpoint audit above, but defer the larger pools until depth 23.
+        # and endpoint audit above, but defer the larger pools until depth 27.
         return None, result is not None
     if ((result is None or result["c"] < target_c) and depth >= 10):
         # A five-sample boundary grid catches the remaining alternating cone
@@ -4735,27 +4751,14 @@ def generate_projective_local_view_table(
     nearby_reuse = nearby_reuse[-4096:]
     nearby_reuse_cache = {}
 
-    def try_nearby_reuse(triangle):
-        cached = nearby_reuse_cache.get(triangle)
-        if cached is not None:
-            return cached
+    def nearby_candidates(triangle, limit=8):
         if not nearby_reuse:
-            return None
+            return []
         center = projective_triangle_center_float(triangle)
-        candidates = heapq.nsmallest(
-            min(8, len(nearby_reuse)), nearby_reuse,
+        return [certificate for _, certificate in heapq.nsmallest(
+            min(limit, len(nearby_reuse)), nearby_reuse,
             key=lambda candidate: sum((a-b)*(a-b) for a, b in
-                                      zip(center, candidate[0])))
-        for _, certificate in candidates:
-            result = projective_local_reaudit_certificate(
-                triangle, certificate)
-            if (result is not None and result["c"] >= target_c and
-                    tube_radius*tube_radius *
-                    (1+result["c"]*result["c"]) <=
-                    4*result["c"]*result["c"]):
-                nearby_reuse_cache[triangle] = result
-                return result
-        return None
+                                      zip(center, candidate[0])))]
 
     def allocate(count):
         children = list(range(len(rows), len(rows)+count))
@@ -4796,42 +4799,66 @@ def generate_projective_local_view_table(
             # batch left eleven workers idle behind a single multi-minute
             # straggler.  Results are still applied in deterministic DFS
             # order below, and the final bound retains the soft row cap.
-            batch_size = min(4*workers, len(stack),
+            tasks_per_worker = 2 if stack[-1][2] >= 18 else 4
+            batch_size = min(tasks_per_worker*workers, len(stack),
                              max(1, (remaining+3)//4))
             batch = [stack.pop() for _ in range(batch_size)]
             tasks = [(triangle, depth, target_c)
                      for _, triangle, depth in batch]
             evaluated = [None] * len(tasks)
+            batch_seed_results = [seed_results.get(task[0])
+                                  for task in tasks]
+            batch_nearby_results = [None] * len(tasks)
+            nearby_indices = []
+            nearby_tasks = []
+            for index, task in enumerate(tasks):
+                if batch_seed_results[index] is not None or task[1] < 14:
+                    continue
+                cached = nearby_reuse_cache.get(task[0])
+                if cached is not None:
+                    batch_nearby_results[index] = cached
+                    continue
+                # A miss in the fast-refinement band is discharged by a
+                # theorem-neutral split below, and its smaller children get
+                # their own exact audits.  Trying all eight neighboring
+                # contact patterns here made a 32-cell batch take more than
+                # twelve minutes.  The nearest pattern captures the common
+                # smooth-cell case; at the exhaustive depths, try one
+                # alternate before handing a miss to the ordinary parallel
+                # candidate search.
+                candidate_limit = 1 if 16 <= task[1] < 27 else 2
+                certificates = nearby_candidates(task[0], candidate_limit)
+                if certificates:
+                    nearby_indices.append(index)
+                    nearby_tasks.append((task[0], certificates,
+                                         target_c, tube_radius))
+            nearby_checked = ([projective_local_reaudit_candidates(task)
+                for task in nearby_tasks] if pool is None else
+                pool.map(projective_local_reaudit_candidates, nearby_tasks))
+            for index, result in zip(nearby_indices, nearby_checked):
+                batch_nearby_results[index] = result
+                if result is not None:
+                    nearby_reuse_cache[tasks[index][0]] = result
             search_indices = []
             search_tasks = []
             forced_split_indices = set()
             for index, task in enumerate(tasks):
-                seed_result = seed_results.get(task[0])
-                nearby_result = (None if seed_result is not None or
-                                  task[1] < 14 else
-                                 try_nearby_reuse(task[0]))
+                seed_result = batch_seed_results[index]
+                nearby_result = batch_nearby_results[index]
                 if (seed_result is None and nearby_result is None and
-                        16 <= task[1] < max_depth):
-                    child_results = [try_nearby_reuse(child)
-                                     for child in
-                                     split_projective_triangle(task[0])]
-                    if all(result is not None for result in child_results):
-                        forced_split_indices.add(index)
-                        evaluated[index] = (None, False)
-                        counts.setdefault("nearby_forced_splits", 0)
-                        counts["nearby_forced_splits"] += 1
-                    elif 20 <= task[1] < 23:
-                        # At this scale the high-margin transition cells gain
-                        # the missing 1e-8--2e-7 margin within at most two
-                        # subdivisions.  Searching a reuse miss here has a
-                        # multi-minute tail, while the depth-23 children pass
-                        # the cheap exact audit.  Structural subdivision is
-                        # theorem-neutral and keeps the exhaustive depth-23
-                        # search as a backstop.
-                        forced_split_indices.add(index)
-                        evaluated[index] = (None, False)
-                        counts.setdefault("fast_refinement_splits", 0)
-                        counts["fast_refinement_splits"] += 1
+                        16 <= task[1] < 27):
+                    # These high-margin transition cells gain their missing
+                    # margin under refinement, with depth 27 retaining the
+                    # exhaustive backstop.  Do not audit all four children
+                    # eagerly here.  A failed
+                    # child audit is otherwise repeated when that child is
+                    # processed, and the four audits run serially in the
+                    # coordinator.  Install the theorem-neutral split now;
+                    # every child gets one ordinary nearby audit in turn.
+                    forced_split_indices.add(index)
+                    evaluated[index] = (None, False)
+                    counts.setdefault("fast_refinement_splits", 0)
+                    counts["fast_refinement_splits"] += 1
                 if (seed_result is None and nearby_result is None and
                         index not in forced_split_indices):
                     search_indices.append(index)
@@ -4839,7 +4866,7 @@ def generate_projective_local_view_table(
                 elif seed_result is not None:
                     evaluated[index] = (seed_result, False)
                     counts["reused_certificates"] += 1
-                else:
+                elif nearby_result is not None:
                     evaluated[index] = (nearby_result, False)
                     counts["nearby_reused_certificates"] += 1
             searched = ([projective_local_candidate(task)
