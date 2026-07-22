@@ -19,6 +19,7 @@ TAGS = {
     "symmetry_tube": 6,
     "radius": 7,
     "fundamental_prune": 8,
+    "mixed_global": 9,
 }
 
 
@@ -73,6 +74,20 @@ def encode_row(row, interval_ids, triangle_ids):
                 *encode_axis(certificate["axis"]),
                 *(int(value) for value in certificate["inner_index"]),
                 *encoded_rat(certificate["ball_multiplier"])]
+    if kind == "mixed_global":
+        components = certificate["components"]
+        weights = certificate["weights"]
+        if len(components) != 4 or len(weights) != 4:
+            raise ValueError("mixed global certificates require four slots")
+        encoded_components = []
+        for component in components:
+            encoded_components.extend(encode_axis(component["axis"]))
+            encoded_components.extend(
+                int(value) for value in component["inner_index"])
+            encoded_components.extend(
+                encoded_rat(component["ball_multiplier"]))
+        return [*result, root, triangle_id, *encode_rats(weights),
+                *encoded_components]
     if kind == "local":
         axes = []
         for axis in certificate["certificates"]:

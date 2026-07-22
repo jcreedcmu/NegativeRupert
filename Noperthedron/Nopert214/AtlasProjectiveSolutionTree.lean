@@ -6,6 +6,7 @@ public import Noperthedron.Nopert214.AtlasLocalCertificate
 public import Noperthedron.Nopert214.AtlasProjectiveLocalCertificate
 public import Noperthedron.Nopert214.AtlasProjectiveLocalViewTree
 public import Noperthedron.Nopert214.AtlasProjectiveGlobalCertificate
+public import Noperthedron.Nopert214.AtlasProjectiveMixedGlobalCertificate
 public import Noperthedron.ParallelBool
 
 @[expose] public section
@@ -156,6 +157,8 @@ inductive Row where
   | projective (id : ℕ) (box : AtlasProjectiveEdgeCertificate.Box)
   | projectiveGlobal (id : ℕ)
       (box : AtlasProjectiveGlobalCertificate.Box)
+  | projectiveMixedGlobal (id : ℕ)
+      (box : AtlasProjectiveMixedGlobalCertificate.Box)
   | symmetryLocal (id : ℕ) (box : AtlasLocalCertificate.Box)
       (region : Region)
   | projectiveLocal (id : ℕ) (box : AtlasProjectiveLocalCertificate.Box)
@@ -168,6 +171,7 @@ inductive Row where
 def Row.id : Row → ℕ
   | .cayleySplit id .. | .viewRoot id .. | .viewSplit id .. |
       .projective id .. | .projectiveGlobal id .. |
+      .projectiveMixedGlobal id .. |
       .symmetryLocal id .. | .radiusPrune id .. |
       .fundamentalPrune id .. | .symmetryTube id .. => id
   | .projectiveLocal id .. => id
@@ -178,6 +182,7 @@ def Row.interval : Row → Interval
   | .viewSplit _ _ interval _ _ => interval
   | .projective _ box => box.interval
   | .projectiveGlobal _ box => box.interval
+  | .projectiveMixedGlobal _ box => box.interval
   | .symmetryLocal _ box _ => box.interval
   | .projectiveLocal _ box => box.interval
   | .symmetryTube _ tube _ _ => tube.interval
@@ -190,6 +195,7 @@ def Row.region : Row → Region
   | .viewSplit _ _ _ root triangle => .triangle root triangle
   | .projective _ box => .triangle box.root box.triangle
   | .projectiveGlobal _ box => .triangle box.root box.triangle
+  | .projectiveMixedGlobal _ box => .triangle box.root box.triangle
   | .symmetryLocal _ _ region => region
   | .projectiveLocal _ box => .triangle box.root box.triangle
   | .symmetryTube _ _ _ region => region
@@ -231,6 +237,7 @@ def Row.ValidAt (chart : ChartIndex) (get : ℕ → Row)
         .triangle root (split triangle child)
   | .projective _ box => box.chart = chart ∧ box.Valid
   | .projectiveGlobal _ box => box.chart = chart ∧ box.Valid
+  | .projectiveMixedGlobal _ box => box.chart = chart ∧ box.Valid
   | .symmetryLocal _ box _ => box.chart = chart ∧ box.Valid
   | .projectiveLocal _ box => box.chart = chart ∧ box.Valid
   | .symmetryTube _ tube sharedIndex region =>
@@ -312,6 +319,13 @@ theorem valid_imp_noRupert_ix (chart : ChartIndex) (get : ℕ → Row)
       exact box.valid_imp_not_translated_rupert hbox hp hbounded offset
         hregion.1 hregion.2 hrupert
   | projectiveGlobal id box =>
+      unfold NoRupert
+      rintro ⟨p, hp, hbounded, -, -, -, offset, hregion, hrupert⟩
+      obtain ⟨hchart, hbox⟩ := hvalid
+      subst hchart
+      exact box.valid_imp_not_translated_rupert hbox p hp hbounded
+        hregion.1 hregion.2 offset hrupert
+  | projectiveMixedGlobal id box =>
       unfold NoRupert
       rintro ⟨p, hp, hbounded, -, -, -, offset, hregion, hrupert⟩
       obtain ⟨hchart, hbox⟩ := hvalid

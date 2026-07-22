@@ -206,6 +206,28 @@ def emit_row(row, chart, interval_ids, triangle_ids, edge_template_ids,
             row_id, iv, row["root"], tri,
             chart, selected_axis, selected_inner,
             q(certificate["ball_multiplier"]))
+    if kind == "mixed_global":
+        certificate = row["certificate"]
+        components = []
+        for component in certificate["components"]:
+            selected_axis = axis_ids[axis_value_key(component["axis"])]
+            selected_inner = global_inner_ids[
+                tuple(component["inner_index"])]
+            components.append("""{
+        certificate := axis%d
+        innerIndex := globalInner%d
+        ballMultiplier := %s }""" % (
+                selected_axis, selected_inner,
+                q(component["ball_multiplier"])))
+        return """.projectiveMixedGlobal %d {
+      interval := %s
+      root := %d
+      triangle := %s
+      chart := %d
+      component := ![%s]
+      weight := %s }""" % (
+            row_id, iv, row["root"], tri, chart,
+            ", ".join(components), vector(certificate["weights"]))
     if kind == "local":
         certificate = row["certificate"]
         template_id = local_template_ids[local_template_key(row)]
@@ -526,6 +548,16 @@ def main():
             if key not in global_inner_ids:
                 global_inner_ids[key] = len(global_inner_values)
                 global_inner_values.append(key)
+        if row["kind"] == "mixed_global":
+            for component in row["certificate"]["components"]:
+                key = axis_value_key(component["axis"])
+                if key not in axis_ids:
+                    axis_ids[key] = len(axis_values)
+                    axis_values.append(component["axis"])
+                key = tuple(component["inner_index"])
+                if key not in global_inner_ids:
+                    global_inner_ids[key] = len(global_inner_values)
+                    global_inner_values.append(key)
         if row["kind"] == "local":
             for axis in row["certificate"]["certificates"]:
                 key = axis_value_key(axis)

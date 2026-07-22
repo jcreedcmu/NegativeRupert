@@ -8,6 +8,7 @@ import os
 from nopert214_certificate_search import (
     Q,
     atlas_projective_global_float_screen,
+    atlas_projective_global_mixed_screen,
     atlas_projective_global_triangle,
 )
 
@@ -26,6 +27,8 @@ def upgrade(data):
     attempts = {10: 0, 16: 0, 64: 0, 4096: 0}
     positive_screens = {10: 0, 16: 0, 64: 0, 4096: 0}
     exact_rejections = 0
+    mixed_attempts = 0
+    mixed_replacements = 0
 
     def geometry(row_id):
         row = rows[row_id]
@@ -95,7 +98,7 @@ def upgrade(data):
         return True
 
     def revisit(row_id):
-        nonlocal exact_rejections
+        nonlocal exact_rejections, mixed_attempts, mixed_replacements
         if row_id in visited:
             raise ValueError(f"tree row {row_id} is reachable more than once")
         visited.add(row_id)
@@ -149,6 +152,28 @@ def upgrade(data):
                 if screen is not None and screen["lower_bound"] > 1e-8:
                     positive_screens[screen_kind] += 1
                     if install_global(row_id, node, view_depth, screen):
+                        return
+                if (ordinary is not None and
+                        ordinary["lower_bound"] > -2e-3):
+                    mixed_attempts += 1
+                    mixed = atlas_projective_global_mixed_screen(
+                        chart, center, widths, int(node["root"]), triangle,
+                        ordinary["candidates"])
+                    if mixed is not None and mixed["accepted"]:
+                        replacements[row_id] = {
+                            "id": row_id,
+                            "kind": "mixed_global",
+                            "center": node["center"],
+                            "widths": node["widths"],
+                            "root": node["root"],
+                            "triangle": node["triangle"],
+                            "view_depth": view_depth,
+                            "certificate": {
+                                "components": mixed["components"],
+                                "weights": mixed["weights"],
+                            },
+                        }
+                        mixed_replacements += 1
                         return
 
         if row is None:
@@ -225,7 +250,8 @@ def upgrade(data):
             row_kinds[row["kind"]] = row_kinds.get(row["kind"], 0) + 1
     for kind in (
             "view_root", "view_split", "relative_split", "edge", "global",
-            "local", "radius", "fundamental_prune", "symmetry_tube"):
+            "mixed_global", "local", "radius", "fundamental_prune",
+            "symmetry_tube"):
         data["counts"][kind] = row_kinds.get(kind, 0)
     data["counts"]["global_cone10"] = (
         data["counts"].get("global_cone10", 0) + attempts[10])
@@ -235,12 +261,16 @@ def upgrade(data):
         data["counts"].get("global_audit64", 0) + attempts[64])
     data["counts"]["global_audit4096"] = (
         data["counts"].get("global_audit4096", 0) + attempts[4096])
+    data["counts"]["global_mixed"] = (
+        data["counts"].get("global_mixed", 0) + mixed_attempts)
     data["counts"]["exact_rejections"] = (
         data["counts"].get("exact_rejections", 0) + exact_rejections)
     return {
         "attempts": attempts,
         "positive_screens": positive_screens,
         "exact_rejections": exact_rejections,
+        "mixed_attempts": mixed_attempts,
+        "mixed_replacements": mixed_replacements,
         "replacement_rows": len(replacements),
         "pruned_rows": rows_before - len(compact_rows),
     }

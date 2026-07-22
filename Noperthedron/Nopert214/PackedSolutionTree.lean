@@ -136,6 +136,35 @@ def readGlobalRow (chart : CayleyAtlas.ChartIndex)
     innerIndex
     ballMultiplier })
 
+def readMixedComponent :
+    Decoder AtlasProjectiveMixedGlobalCertificate.Component := do
+  let certificate ← readAxis
+  let innerIndex ← readVertices
+  let ballMultiplier ← readRat
+  pure { certificate, innerIndex, ballMultiplier }
+
+def readMixedGlobalRow (chart : CayleyAtlas.ChartIndex)
+    (triangles : Array AtlasProjectiveSolutionTree.Triangle)
+    (id : Nat) (interval : AtlasProjectiveSolutionTree.Interval) :
+    Decoder Row := do
+  let root ← readNat
+  let triangleIndex ← readNat
+  let w0 ← readRat
+  let w1 ← readRat
+  let w2 ← readRat
+  let w3 ← readRat
+  let c0 ← readMixedComponent
+  let c1 ← readMixedComponent
+  let c2 ← readMixedComponent
+  let c3 ← readMixedComponent
+  pure (.projectiveMixedGlobal id {
+    interval
+    root := fin8 root
+    triangle := triangleAt triangles triangleIndex
+    chart
+    component := ![c0, c1, c2, c3]
+    weight := ![w0, w1, w2, w3] })
+
 def readLocalRow (chart : CayleyAtlas.ChartIndex)
     (triangles : Array AtlasProjectiveSolutionTree.Triangle)
     (id : Nat) (interval : AtlasProjectiveSolutionTree.Interval) :
@@ -203,7 +232,7 @@ def readRow (chart : CayleyAtlas.ChartIndex)
   else if tag = 7 then
     let region ← readRegion triangles
     pure (.radiusPrune id interval region)
-  else
+  else if tag = 8 then
     let direction ← readNat
     let region ← readRegion triangles
     pure (.fundamentalPrune id {
@@ -211,6 +240,8 @@ def readRow (chart : CayleyAtlas.ChartIndex)
       chart
       direction := if direction = 1 then .positive else .negative }
       region)
+  else
+    readMixedGlobalRow chart triangles id interval
 
 def readRows (chart : CayleyAtlas.ChartIndex)
     (intervals : Array AtlasProjectiveSolutionTree.Interval)

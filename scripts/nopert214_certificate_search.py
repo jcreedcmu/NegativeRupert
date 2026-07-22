@@ -2798,6 +2798,157 @@ def atlas_projective_global_simplex_bernstein_lower_float(
         multiplier))
 
 
+def atlas_projective_global_mixed_candidate_column(
+        chart, centers, radii, triangle, candidate):
+    """One candidate's penalized Bernstein controls for mixture search."""
+    triangle_f = tuple(tuple(map(float, corner)) for corner in triangle)
+    centers_f = tuple(map(float, centers))
+    radii_f = tuple(map(float, radii))
+    view_center = tuple(sum(corner[c] for corner in triangle_f) / 3
+                        for c in range(3))
+    edges_q = [projective_mixed_edge_q(contact)
+               for contact in candidate["contacts"]]
+    edges = [tuple(map(float, edge)) for edge in edges_q]
+    weight_coefficients = [cross3(edges[1], edges[2]),
+                           cross3(edges[2], edges[0]),
+                           cross3(edges[0], edges[1])]
+    weight_lower = [min(dot3(corner, coefficient)
+                        for corner in triangle_f) -
+                    float(PROJECTIVE_SUPPORT_ERROR)
+                    for coefficient in weight_coefficients]
+    if min(weight_lower) < 0 or max(weight_lower) <= 0:
+        return None
+
+    inner_indices = []
+    for contact, edge_q in zip(candidate["contacts"], edges_q):
+        best = None
+        for inner in range(len(VERTICES_Q)):
+            components = atlas_mixed_contact_qpolys(
+                chart, tuple(edge_q), inner, contact["vertex"])
+            value = sum(view_center[c] *
+                        qpoly_eval_centered_float_py(
+                            tuple(map(float, components[c])),
+                            centers_f, (0.0, 0.0, 0.0))[0]
+                        for c in range(3))
+            if best is None or value > best[0]:
+                best = value, inner
+        inner_indices.append(best[1])
+
+    controls = atlas_projective_global_simplex_bernstein_controls_float(
+        chart, centers_f, radii_f, triangle_f, candidate,
+        inner_indices, 0.0)
+    endpoint_abs = [max(abs(c-r), abs(c+r))
+                    for c, r in zip(centers_f, radii_f)]
+    d_bound = 1 + sum(value*value for value in endpoint_abs)
+    defect = atlas_projective_global_weighted_defect_upper_float(
+        triangle_f, candidate)
+    penalty = d_bound*defect + 300*d_bound*float(exact_certificate.KAPPA)
+    return {
+        "candidate": candidate,
+        "inner_indices": inner_indices,
+        "controls": [value-penalty for value in controls],
+    }
+
+
+def atlas_projective_global_mixed_screen(
+        chart, centers, radii, root, triangle, candidates,
+        iterations=20_000, component_limit=4):
+    """Discover and exactly audit a convex mixture of global axes.
+
+    Brown--Robinson fictitious play solves the small zero-sum game between
+    162 tensor-Bernstein controls and the available balanced axes.  Only the
+    heaviest four empirical components are retained; exact rational controls
+    and exact support-defect penalties make the final acceptance decision.
+    """
+    metadata = []
+    columns = []
+    for candidate in candidates:
+        result = atlas_projective_global_mixed_candidate_column(
+            chart, centers, radii, triangle, candidate)
+        if result is not None:
+            metadata.append(result)
+            columns.append(result["controls"])
+    if not columns:
+        return None
+
+    row_count = len(columns[0])
+    column_scores = [sum(column) for column in columns]
+    accumulated = [0.0] * row_count
+    counts = {}
+    for _ in range(iterations):
+        chosen = max(range(len(columns)), key=column_scores.__getitem__)
+        column = columns[chosen]
+        counts[chosen] = counts.get(chosen, 0) + 1
+        accumulated = [value+sample
+                       for value, sample in zip(accumulated, column)]
+        worst = min(range(row_count), key=accumulated.__getitem__)
+        column_scores = [score+candidate[worst]
+                         for score, candidate in zip(column_scores, columns)]
+
+    selected = sorted(counts.items(), key=lambda item: item[1], reverse=True)[
+        :component_limit]
+    denominator = sum(count for _, count in selected)
+    weights = [Q(count, denominator) for _, count in selected]
+    exact_controls = None
+    weighted_defect = Q(0)
+    components = []
+    axis_keys = ("edge_start", "edge_finish", "edge_start2",
+                 "edge_finish2", "mix", "support_index",
+                 "nonzero_witness", "B")
+    for (column_index, _), weight in zip(selected, weights):
+        item = metadata[column_index]
+        candidate = item["candidate"]
+        inner_indices = item["inner_indices"]
+        try:
+            axis = projective_local_axis_row_mixed(
+                triangle, candidate["contacts"], allow_support_defect=True)
+        except RuntimeError:
+            return None
+        controls = atlas_projective_global_simplex_bernstein_controls(
+            chart, centers, radii, triangle, candidate, inner_indices, Q(0))
+        if exact_controls is None:
+            exact_controls = [Q(0)] * len(controls)
+        exact_controls = [value+weight*sample for value, sample in
+                          zip(exact_controls, controls)]
+        weighted_defect += weight * \
+            atlas_projective_global_weighted_defect_upper(
+                triangle, candidate)
+        components.append({
+            "axis": {key: axis[key] for key in axis_keys},
+            "inner_index": inner_indices,
+            "ball_multiplier": Q(0),
+        })
+
+    endpoint_abs = [max(abs(c-r), abs(c+r))
+                    for c, r in zip(centers, radii)]
+    d_bound = 1 + sum(value*value for value in endpoint_abs)
+    exact_lower = (min(exact_controls) - d_bound*weighted_defect -
+                   300*d_bound*exact_certificate.KAPPA)
+    if exact_lower < 0:
+        return None
+    while len(components) < 4:
+        components.append(components[0])
+        weights.append(Q(0))
+    return {
+        "accepted": True,
+        "chart": chart,
+        "relative_center": centers,
+        "relative_radii": radii,
+        "root": root,
+        "triangle": triangle,
+        "components": components,
+        "weights": weights,
+        "diagnostics": {
+            "candidate_count": len(candidates),
+            "valid_candidate_count": len(columns),
+            "active_count": len(counts),
+            "retained_count": len(selected),
+            "iterations": iterations,
+            "exact_lower_bound": exact_lower,
+        },
+    }
+
+
 def qpoly_box_lower_float(coefficients, centers, radii):
     return max(qpoly_centered_lower_tight_float(coefficients, centers, radii),
                qpoly_bernstein_lower_float(coefficients, centers, radii))
@@ -3211,7 +3362,8 @@ def atlas_projective_state_action(task):
                     "global_audit8": 0, "global_audit64": 0,
                     "global_audit4096": 0,
                     "global_cone5": 0, "global_cone6": 0,
-                    "global_cone10": 0, "global_cone16": 0}
+                    "global_cone10": 0, "global_cone16": 0,
+                    "global_mixed": 0}
 
     def answer(kind, **fields):
         return {"action": kind, "count_deltas": count_deltas, **fields}
@@ -3345,6 +3497,21 @@ def atlas_projective_state_action(task):
         global_float = atlas_projective_global_float_screen(
             chart, center, widths, triangle, cone_samples=6,
             candidate_limit=8, candidates=None)
+    if (chart == 2 and max(widths) <= Q(1, 256) and
+            ordinary_global_float is not None and
+            ordinary_global_float["lower_bound"] > -2e-3 and
+            (global_float is None or
+             global_float["lower_bound"] <= 1e-8)):
+        count_deltas["global_mixed"] += 1
+        mixed = atlas_projective_global_mixed_screen(
+            chart, center, widths, root, triangle,
+            ordinary_global_float["candidates"])
+        if mixed is not None and mixed["accepted"]:
+            return answer("terminal", row_kind="mixed_global", extra={
+                "certificate": {
+                    "components": mixed["components"],
+                    "weights": mixed["weights"],
+                }})
     use_cone10 = (
         (chart == 1 and view_depth >= 4 and max(widths) <= Q(1, 16)) or
         (chart == 2 and view_depth == 1 and max(widths) == Q(1, 16)))
@@ -3594,6 +3761,8 @@ def generate_atlas_projective_table(
         counts.setdefault("global_cone6", 0)
         counts.setdefault("global_cone10", 0)
         counts.setdefault("global_cone16", 0)
+        counts.setdefault("global_mixed", 0)
+        counts.setdefault("mixed_global", 0)
         failures = []
     else:
         rows = [None]
@@ -3617,7 +3786,8 @@ def generate_atlas_projective_table(
                   "global_audit64": 0, "global_audit4096": 0,
                   "global_cone5": 0,
                   "global_cone6": 0, "global_cone10": 0,
-                  "global_cone16": 0}
+                  "global_cone16": 0, "global_mixed": 0,
+                  "mixed_global": 0}
         failures = []
 
     def allocate(count):
@@ -3956,6 +4126,23 @@ def generate_atlas_projective_table(
             global_float = atlas_projective_global_float_screen(
                 chart, center, widths, triangle, cone_samples=6,
                 candidate_limit=8, candidates=None)
+        if (chart == 2 and max(widths) <= Q(1, 256) and
+                ordinary_global_float is not None and
+                ordinary_global_float["lower_bound"] > -2e-3 and
+                (global_float is None or
+                 global_float["lower_bound"] <= 1e-8)):
+            counts["global_mixed"] += 1
+            mixed = atlas_projective_global_mixed_screen(
+                chart, center, widths, root, triangle,
+                ordinary_global_float["candidates"])
+            if mixed is not None and mixed["accepted"]:
+                rows[row_id] = {**common, "kind": "mixed_global",
+                    "certificate": {
+                        "components": mixed["components"],
+                        "weights": mixed["weights"],
+                    }}
+                counts["mixed_global"] += 1
+                continue
         use_cone10 = (
             (chart == 1 and view_depth >= 4 and
              max(widths) <= Q(1, 16)) or
