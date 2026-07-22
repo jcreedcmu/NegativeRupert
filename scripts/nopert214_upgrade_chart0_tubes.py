@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
-"""Increase chart-0 shared-local tube radii in a search checkpoint.
+"""Change chart-0 shared-local tube radii in a search checkpoint.
 
 Existing symmetry-tube leaves remain valid at a larger radius, but the formal
 global checker requires each leaf radius to equal its referenced local table
 radius exactly.  This migration updates both the checkpoint configuration and
 those already-emitted leaves after rechecking their exact mismatch bounds.
 
-It also revisits expanded tree nodes.  If a larger tube certifies such a node,
+It also revisits expanded tree nodes.  If a new tube certifies such a node,
 the whole descendant subtree is unreachable and can be replaced by one tube
 leaf.  Compacting those descendants is important both for search throughput
 and for the eventual native checker, which otherwise audits every stored row.
+
+Shrinking is opt-in.  A stored tube leaf that no longer fits is safely reopened
+as a pending generator state; no terminal certificate is retained by fiat.
 """
 
 import argparse
@@ -22,7 +25,7 @@ from nopert214_certificate_search import (
 )
 
 
-def upgrade(data, radii):
+def upgrade(data, radii, allow_decrease=False):
     if data.get("chart") != 0:
         raise ValueError("tube-radius migration requires chart 0")
     old_values = data.get("chart0_origin_tube_radii")
@@ -31,11 +34,17 @@ def upgrade(data, radii):
     old_radii = tuple(map(Q, old_values))
     if len(radii) != 4:
         raise ValueError("exactly four new radii are required")
-    if any(new < old for new, old in zip(radii, old_radii)):
-        raise ValueError("this migration may only increase tube radii")
+    if any(radius <= 0 for radius in radii):
+        raise ValueError("tube radii must be positive")
+    if (not allow_decrease and
+            any(new < old for new, old in zip(radii, old_radii))):
+        raise ValueError(
+            "decreasing a tube radius requires --allow-decrease")
 
+    rows = data["rows"]
     updated = 0
-    for row in data["rows"]:
+    reopened = []
+    for row in list(rows):
         if row is None or row.get("kind") != "symmetry_tube":
             continue
         index = int(row["shared_index"])
@@ -49,12 +58,19 @@ def upgrade(data, radii):
             raise ValueError(
                 f"existing tube row {row['id']} fails its stored radius")
         if mismatch > radii[index]:
-            raise ValueError(
-                f"tube row {row['id']} fails new radius {radii[index]}")
+            if not allow_decrease:
+                raise ValueError(
+                    f"tube row {row['id']} fails new radius {radii[index]}")
+            reopened.append([
+                int(row["id"]), row["center"], row["widths"],
+                int(row["root"]), row["triangle"],
+                int(row["view_depth"]), index])
+            rows[int(row["id"])] = None
+            continue
         row["radius"] = str(radii[index])
         updated += 1
 
-    rows = data["rows"]
+    data["pending"].extend(reopened)
     pending_by_id = {int(state[0]): state for state in data["pending"]}
     failures_by_id = {
         int(failure["id"]): failure for failure in data.get("failures", [])}
@@ -207,6 +223,7 @@ def upgrade(data, radii):
     data["chart0_origin_tube_radii"] = [str(radius) for radius in radii]
     return {
         "updated_tube_rows": updated,
+        "reopened_tube_rows": len(reopened),
         "replacement_tube_rows": len(replacement_rows),
         "pruned_rows": rows_before-len(compact_rows),
     }
@@ -219,12 +236,15 @@ def main():
     parser.add_argument(
         "--radii", required=True,
         help="four comma-separated rational radii")
+    parser.add_argument(
+        "--allow-decrease", action="store_true",
+        help="reopen any stored tube leaf that fails a smaller new radius")
     args = parser.parse_args()
     radii = tuple(Q(value) for value in args.radii.split(","))
 
     with open(args.input, encoding="utf-8") as source:
         data = json.load(source)
-    result = upgrade(data, radii)
+    result = upgrade(data, radii, args.allow_decrease)
     temporary = args.output + ".tmp"
     with open(temporary, "w", encoding="utf-8") as output:
         json.dump(data, output)

@@ -4820,6 +4820,18 @@ def generate_projective_local_view_table(
                         evaluated[index] = (None, False)
                         counts.setdefault("nearby_forced_splits", 0)
                         counts["nearby_forced_splits"] += 1
+                    elif 20 <= task[1] < 23:
+                        # At this scale the high-margin transition cells gain
+                        # the missing 1e-8--2e-7 margin within at most two
+                        # subdivisions.  Searching a reuse miss here has a
+                        # multi-minute tail, while the depth-23 children pass
+                        # the cheap exact audit.  Structural subdivision is
+                        # theorem-neutral and keeps the exhaustive depth-23
+                        # search as a backstop.
+                        forced_split_indices.add(index)
+                        evaluated[index] = (None, False)
+                        counts.setdefault("fast_refinement_splits", 0)
+                        counts["fast_refinement_splits"] += 1
                 if (seed_result is None and nearby_result is None and
                         index not in forced_split_indices):
                     search_indices.append(index)
