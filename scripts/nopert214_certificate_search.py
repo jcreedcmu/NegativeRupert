@@ -4723,8 +4723,12 @@ def generate_projective_local_view_table(
         nearby_reuse.append((projective_triangle_center_float(triangle),
                              row["certificate"]))
     nearby_reuse = nearby_reuse[-4096:]
+    nearby_reuse_cache = {}
 
     def try_nearby_reuse(triangle):
+        cached = nearby_reuse_cache.get(triangle)
+        if cached is not None:
+            return cached
         if not nearby_reuse:
             return None
         center = projective_triangle_center_float(triangle)
@@ -4739,6 +4743,7 @@ def generate_projective_local_view_table(
                     tube_radius*tube_radius *
                     (1+result["c"]*result["c"]) <=
                     4*result["c"]*result["c"]):
+                nearby_reuse_cache[triangle] = result
                 return result
         return None
 
@@ -4789,12 +4794,24 @@ def generate_projective_local_view_table(
             evaluated = [None] * len(tasks)
             search_indices = []
             search_tasks = []
+            forced_split_indices = set()
             for index, task in enumerate(tasks):
                 seed_result = seed_results.get(task[0])
                 nearby_result = (None if seed_result is not None or
                                   task[1] < 14 else
                                  try_nearby_reuse(task[0]))
-                if seed_result is None and nearby_result is None:
+                if (seed_result is None and nearby_result is None and
+                        16 <= task[1] < max_depth):
+                    child_results = [try_nearby_reuse(child)
+                                     for child in
+                                     split_projective_triangle(task[0])]
+                    if all(result is not None for result in child_results):
+                        forced_split_indices.add(index)
+                        evaluated[index] = (None, False)
+                        counts.setdefault("nearby_forced_splits", 0)
+                        counts["nearby_forced_splits"] += 1
+                if (seed_result is None and nearby_result is None and
+                        index not in forced_split_indices):
                     search_indices.append(index)
                     search_tasks.append(task)
                 elif seed_result is not None:
