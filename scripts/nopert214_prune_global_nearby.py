@@ -219,7 +219,10 @@ def compact(data, representatives_per_kind):
             continue
         candidates = []
         for child in row["children"]:
-            candidates.extend(representatives.get(int(child), ()))
+            # Every generated row has exactly one parent.  Once that parent
+            # consumes a child's representatives, retaining them only makes
+            # the auxiliary map grow linearly with a six-figure table.
+            candidates.extend(representatives.pop(int(child), ()))
         point = cell_point(row)
         candidates = select_representatives(
             candidates, point, representatives_per_kind)
