@@ -3314,7 +3314,10 @@ def atlas_projective_state_action(task):
         global_float = atlas_projective_global_float_screen(
             chart, center, widths, triangle, cone_samples=6,
             candidate_limit=8, candidates=None)
-    if (chart == 1 and view_depth >= 4 and max(widths) <= Q(1, 16) and
+    use_cone10 = (
+        (chart == 1 and view_depth >= 4 and max(widths) <= Q(1, 16)) or
+        (chart == 2 and view_depth == 1 and max(widths) == Q(1, 16)))
+    if (use_cone10 and
             (global_float is None or
              global_float["lower_bound"] <= 1e-8)):
         # A chart-1 transition family survives hundreds of thousands of
@@ -3323,7 +3326,9 @@ def atlas_projective_state_action(task):
         # several smaller transition families before they begin. The
         # selected certificate has
         # the same formal axis format; the extra samples only strengthen
-        # discovery.
+        # discovery. The targeted chart-2 depth-one scale similarly closes
+        # about one third of the surviving 1/16 boxes, with every positive
+        # screen in the reference audit accepted by the exact checker.
         count_deltas["global_cone10"] += 1
         global_float = atlas_projective_global_float_screen(
             chart, center, widths, triangle, cone_samples=10,
@@ -3896,8 +3901,12 @@ def generate_atlas_projective_table(
             global_float = atlas_projective_global_float_screen(
                 chart, center, widths, triangle, cone_samples=6,
                 candidate_limit=8, candidates=None)
-        if (chart == 1 and view_depth >= 4 and
-                max(widths) <= Q(1, 16) and
+        use_cone10 = (
+            (chart == 1 and view_depth >= 4 and
+             max(widths) <= Q(1, 16)) or
+            (chart == 2 and view_depth == 1 and
+             max(widths) == Q(1, 16)))
+        if (use_cone10 and
                 (global_float is None or
                  global_float["lower_bound"] <= 1e-8)):
             counts["global_cone10"] += 1

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Replace chart-1 split subtrees certified by stronger balanced cones."""
+"""Replace chart-1/2 split subtrees certified by stronger balanced cones."""
 
 import argparse
 import json
@@ -13,8 +13,9 @@ from nopert214_certificate_search import (
 
 
 def upgrade(data):
-    if data.get("chart") != 1:
-        raise ValueError("cone-10 migration requires chart 1")
+    chart = int(data.get("chart", -1))
+    if chart not in (1, 2):
+        raise ValueError("cone-10 migration requires chart 1 or 2")
 
     rows = data["rows"]
     pending_by_id = {int(state[0]): state for state in data["pending"]}
@@ -59,18 +60,23 @@ def upgrade(data):
                 ("view_split", "relative_split")):
             widths = tuple(map(Q, node["widths"]))
             view_depth = int(node["view_depth"])
-            if view_depth >= 4 and max(widths) <= Q(1, 16):
+            use_cone10 = (
+                (chart == 1 and view_depth >= 4 and
+                 max(widths) <= Q(1, 16)) or
+                (chart == 2 and view_depth == 1 and
+                 max(widths) == Q(1, 16)))
+            if use_cone10:
                 attempts += 1
                 center = tuple(map(Q, node["center"]))
                 triangle = tuple(
                     tuple(map(Q, corner)) for corner in node["triangle"])
                 screen = atlas_projective_global_float_screen(
-                    1, center, widths, triangle, cone_samples=10,
+                    chart, center, widths, triangle, cone_samples=10,
                     candidate_limit=64, candidates=None)
                 if screen is not None and screen["lower_bound"] > 1e-8:
                     positive_screens += 1
                     exact = atlas_projective_global_triangle(
-                        1, center, widths, int(node["root"]), triangle,
+                        chart, center, widths, int(node["root"]), triangle,
                         selected_candidate=screen["candidate"])
                     if exact is not None and exact["accepted"]:
                         axis = exact["certificate"]
