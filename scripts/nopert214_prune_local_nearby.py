@@ -3,6 +3,7 @@
 
 import argparse
 import json
+import os
 import time
 
 from nopert214_certificate_search import (
@@ -131,8 +132,10 @@ def main():
     data["counts"]["certificate"] = sum(
         row["kind"] == "view_local" for row in compact_rows)
     data["counts"]["nearby_parent_prunes"] = replacements
-    with open(args.output, "w", encoding="utf-8") as output:
+    temporary = args.output + ".tmp"
+    with open(temporary, "w", encoding="utf-8") as output:
         json.dump(data, output, default=str)
+    os.replace(temporary, args.output)
     elapsed = time.monotonic()-started
     print(f"compacted {len(rows)} to {len(compact_rows)} rows using "
           f"{replacements} exact parent replacements and {attempts} "

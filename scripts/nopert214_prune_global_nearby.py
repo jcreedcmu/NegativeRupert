@@ -10,6 +10,7 @@ floating-point search result or child validity is used as proof of a parent.
 
 import argparse
 import json
+import os
 import time
 
 from nopert214_certificate_search import (
@@ -310,8 +311,10 @@ def main():
 
     before, after, replacements, attempts, elapsed = compact(
         data, args.representatives)
-    with open(args.output, "w", encoding="utf-8") as output:
+    temporary = args.output + ".tmp"
+    with open(temporary, "w", encoding="utf-8") as output:
         json.dump(data, output, default=str)
+    os.replace(temporary, args.output)
     print(f"compacted {before} to {after} rows using {replacements} exact "
           f"parent replacements and {attempts} candidate audits in "
           f"{elapsed:.3f}s")
