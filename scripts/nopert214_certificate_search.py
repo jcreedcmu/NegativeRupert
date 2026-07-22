@@ -4501,6 +4501,16 @@ def projective_local_candidate(task):
         if (boundary_result is not None and
                 (result is None or boundary_result["c"] > result["c"])):
             result = boundary_result
+    if (target_c > Q(51, 1_000_000_000) and
+            14 <= depth < 23 and
+            (result is None or result["c"] < target_c)):
+        # For the radius-1e-5 table, a weak cell in this depth band is much
+        # cheaper to subdivide than to run the five- and six-cone pools.  A
+        # live depth-19 batch spent about eleven minutes producing 42 weak
+        # rejections; its children then closed in the exact nearby-reuse path
+        # without one additional weak rejection.  Keep the cheap four-cone
+        # and endpoint audit above, but defer the larger pools until depth 23.
+        return None, result is not None
     if ((result is None or result["c"] < target_c) and depth >= 10):
         # A five-sample boundary grid catches the remaining alternating cone
         # pattern cheaply before the much larger corner-cycle searches.
