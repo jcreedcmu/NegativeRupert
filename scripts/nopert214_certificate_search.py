@@ -1352,7 +1352,7 @@ def projective_global_candidate_center_margin(
 def atlas_projective_global_float_screen(
         chart, relative_center, relative_radii, triangle,
         cone_samples=4, candidate_limit=1, candidates=None,
-        allow_support_defect=True):
+        allow_support_defect=True, retry_inherited=True):
     """Fast floating mirror of the moving balanced-triple checker."""
     inherited = candidates is not None
     if candidates is None:
@@ -1520,10 +1520,11 @@ def atlas_projective_global_float_screen(
             best = (lower, candidate, ball_multiplier)
     if best is None:
         return None
-    if inherited and best[0] <= 1e-8:
+    if inherited and retry_inherited and best[0] <= 1e-8:
         return atlas_projective_global_float_screen(
             chart, relative_center, relative_radii, triangle,
-            cone_samples, candidate_limit, None, allow_support_defect)
+            cone_samples, candidate_limit, None, allow_support_defect,
+            retry_inherited)
     return {"lower_bound": best[0], "candidate": best[1],
             "ball_multiplier": best[2],
             "feasible_candidates": len(candidates),
@@ -2242,10 +2243,10 @@ def qpoly_bernstein_lower(coefficients, centers, radii):
         for i in range(3) for j in range(3) for k in range(3))
 
 
-def atlas_projective_global_simplex_bernstein_lower(
+def atlas_projective_global_simplex_bernstein_controls(
         chart, centers, radii, triangle, candidate, inner_indices,
         multiplier):
-    """Exact degree-two view-simplex × relative-box Bernstein bound."""
+    """Exact controls for a degree-two view-simplex × relative box."""
     edges = [projective_mixed_edge_q(contact)
              for contact in candidate["contacts"]]
     weight_coefficients = [cross3(edges[1], edges[2]),
@@ -2278,21 +2279,28 @@ def atlas_projective_global_simplex_bernstein_lower(
             midpoint = tuple((a+b)/2 for a, b in
                              zip(triangle[i], triangle[j]))
             midpoint_polynomials[(i, j)] = polynomial_at_view(midpoint)
-    answer = None
+    answer = []
     for relative_index in itertools.product(range(3), repeat=3):
         corner = [qpoly_bernstein_control(
             polynomial, centers, radii, *relative_index)
             for polynomial in corner_polynomials]
-        controls = list(corner)
+        answer.extend(corner)
         for i in range(3):
             for j in range(i+1, 3):
                 middle = qpoly_bernstein_control(
                     midpoint_polynomials[(i, j)], centers, radii,
                     *relative_index)
-                controls.append(2*middle-(corner[i]+corner[j])/2)
-        value = min(controls)
-        answer = value if answer is None else min(answer, value)
+                answer.append(2*middle-(corner[i]+corner[j])/2)
     return answer
+
+
+def atlas_projective_global_simplex_bernstein_lower(
+        chart, centers, radii, triangle, candidate, inner_indices,
+        multiplier):
+    """Exact degree-two view-simplex × relative-box Bernstein bound."""
+    return min(atlas_projective_global_simplex_bernstein_controls(
+        chart, centers, radii, triangle, candidate, inner_indices,
+        multiplier))
 
 
 def qpoly_box_lower(coefficients, centers, radii):
@@ -2734,7 +2742,7 @@ def qpoly_bernstein_lower_float(coefficients, centers, radii):
         for i in range(3) for j in range(3) for k in range(3))
 
 
-def atlas_projective_global_simplex_bernstein_lower_float(
+def atlas_projective_global_simplex_bernstein_controls_float(
         chart, centers, radii, triangle, candidate, inner_indices,
         multiplier):
     edges_q = [projective_mixed_edge_q(contact)
@@ -2767,19 +2775,27 @@ def atlas_projective_global_simplex_bernstein_lower_float(
             midpoint = tuple((a+b)/2 for a, b in
                              zip(triangle[i], triangle[j]))
             midpoint_polynomials[(i, j)] = polynomial_at_view(midpoint)
-    answer = math.inf
+    answer = []
     for relative_index in itertools.product(range(3), repeat=3):
         corner = [qpoly_bernstein_control_float(
             polynomial, centers, radii, *relative_index)
             for polynomial in corner_polynomials]
-        answer = min(answer, *corner)
+        answer.extend(corner)
         for i in range(3):
             for j in range(i+1, 3):
                 middle = qpoly_bernstein_control_float(
                     midpoint_polynomials[(i, j)], centers, radii,
                     *relative_index)
-                answer = min(answer, 2*middle-(corner[i]+corner[j])/2)
+                answer.append(2*middle-(corner[i]+corner[j])/2)
     return answer
+
+
+def atlas_projective_global_simplex_bernstein_lower_float(
+        chart, centers, radii, triangle, candidate, inner_indices,
+        multiplier):
+    return min(atlas_projective_global_simplex_bernstein_controls_float(
+        chart, centers, radii, triangle, candidate, inner_indices,
+        multiplier))
 
 
 def qpoly_box_lower_float(coefficients, centers, radii):
@@ -3193,6 +3209,7 @@ def atlas_projective_state_action(task):
      chart0_origin_tube_radii) = task
     count_deltas = {"exact_rejections": 0,
                     "global_audit8": 0, "global_audit64": 0,
+                    "global_audit4096": 0,
                     "global_cone5": 0, "global_cone6": 0,
                     "global_cone10": 0, "global_cone16": 0}
 
@@ -3291,6 +3308,20 @@ def atlas_projective_state_action(task):
             chart, center, widths, triangle, candidate_limit=64,
             candidates=None if global_float is None else
                 global_float["candidates"])
+    ordinary_global_float = global_float
+    if (chart == 2 and max(widths) <= Q(1, 256) and
+            ordinary_global_float is not None and
+            -Q(1, 500) < ordinary_global_float["lower_bound"] <= 1e-8):
+        # Candidate ranking by center margin can hide the best whole-box
+        # Bernstein certificate surprisingly far down the list.  On the
+        # chart-2 hard frontier, auditing up to 4,096 four-sample candidates
+        # certified 17 of the 20 largest split subtrees exactly, replacing
+        # 4,938 rows, while taking 1--8 seconds per attempted parent.
+        count_deltas["global_audit4096"] += 1
+        global_float = atlas_projective_global_float_screen(
+            chart, center, widths, triangle, candidate_limit=4096,
+            candidates=ordinary_global_float["candidates"],
+            retry_inherited=False)
     if (chart0_origin_tube_radii is None and allow_global_audit and
             max(widths) <= Q(1, 256) and
             (global_float is None or
@@ -3558,6 +3589,7 @@ def generate_atlas_projective_table(
         counts.setdefault("fundamental_prune", 0)
         counts.setdefault("global_audit8", 0)
         counts.setdefault("global_audit64", 0)
+        counts.setdefault("global_audit4096", 0)
         counts.setdefault("global_cone5", 0)
         counts.setdefault("global_cone6", 0)
         counts.setdefault("global_cone10", 0)
@@ -3582,7 +3614,8 @@ def generate_atlas_projective_table(
                   "edge": 0, "global": 0, "local": 0, "radius": 0,
                   "fundamental_prune": 0, "symmetry_tube": 0,
                   "exact_rejections": 0, "global_audit8": 0,
-                  "global_audit64": 0, "global_cone5": 0,
+                  "global_audit64": 0, "global_audit4096": 0,
+                  "global_cone5": 0,
                   "global_cone6": 0, "global_cone10": 0,
                   "global_cone16": 0}
         failures = []
@@ -3898,6 +3931,15 @@ def generate_atlas_projective_table(
                 chart, center, widths, triangle, candidate_limit=64,
                 candidates=None if global_float is None else
                     global_float["candidates"])
+        ordinary_global_float = global_float
+        if (chart == 2 and max(widths) <= Q(1, 256) and
+                ordinary_global_float is not None and
+                -Q(1, 500) < ordinary_global_float["lower_bound"] <= 1e-8):
+            counts["global_audit4096"] += 1
+            global_float = atlas_projective_global_float_screen(
+                chart, center, widths, triangle, candidate_limit=4096,
+                candidates=ordinary_global_float["candidates"],
+                retry_inherited=False)
         if (chart0_origin_tube_radii is None and allow_global_audit and
                 max(widths) <= Q(1, 256) and
                 (global_float is None or

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Replace chart-1/2 split subtrees certified by stronger balanced cones."""
+"""Replace split subtrees found by deeper balanced-certificate searches."""
 
 import argparse
 import json
@@ -23,8 +23,8 @@ def upgrade(data):
         int(failure["id"]): failure for failure in data.get("failures", [])
     }
     replacements = {}
-    attempts = {10: 0, 16: 0}
-    positive_screens = {10: 0, 16: 0}
+    attempts = {10: 0, 16: 0, 64: 0, 4096: 0}
+    positive_screens = {10: 0, 16: 0, 64: 0, 4096: 0}
     exact_rejections = 0
 
     def geometry(row_id):
@@ -46,7 +46,53 @@ def upgrade(data):
             return failure
         raise ValueError(f"unresolved row {row_id} has no frontier state")
 
+    subtree_sizes = {}
+
+    def subtree_size(row_id):
+        row = rows[row_id]
+        if row is None:
+            answer = 1
+        elif row.get("kind") == "view_root":
+            answer = 1 + subtree_size(int(row["child"]))
+        else:
+            answer = 1 + sum(subtree_size(int(child))
+                             for child in row.get("children", []))
+        subtree_sizes[row_id] = answer
+        return answer
+
+    subtree_size(0)
+
     visited = set()
+
+    def install_global(row_id, node, view_depth, screen):
+        nonlocal exact_rejections
+        exact = atlas_projective_global_triangle(
+            chart, tuple(map(Q, node["center"])),
+            tuple(map(Q, node["widths"])), int(node["root"]),
+            tuple(tuple(map(Q, corner)) for corner in node["triangle"]),
+            selected_candidate=screen["candidate"])
+        if exact is None or not exact["accepted"]:
+            exact_rejections += 1
+            return False
+        axis = exact["certificate"]
+        axis_keys = (
+            "edge_start", "edge_finish", "edge_start2", "edge_finish2",
+            "mix", "support_index", "nonzero_witness", "B")
+        replacements[row_id] = {
+            "id": row_id,
+            "kind": "global",
+            "center": node["center"],
+            "widths": node["widths"],
+            "root": node["root"],
+            "triangle": node["triangle"],
+            "view_depth": view_depth,
+            "certificate": {
+                "axis": {key: axis[key] for key in axis_keys},
+                "inner_index": exact["inner_index"],
+                "ball_multiplier": exact["ball_multiplier"],
+            },
+        }
+        return True
 
     def revisit(row_id):
         nonlocal exact_rejections
@@ -60,6 +106,9 @@ def upgrade(data):
                 ("view_split", "relative_split")):
             widths = tuple(map(Q, node["widths"]))
             view_depth = int(node["view_depth"])
+            center = tuple(map(Q, node["center"]))
+            triangle = tuple(
+                tuple(map(Q, corner)) for corner in node["triangle"])
             policies = []
             if ((chart == 1 and view_depth >= 4 and
                     max(widths) <= Q(1, 16)) or
@@ -71,43 +120,36 @@ def upgrade(data):
                 policies.append(16)
             for cone_samples in policies:
                 attempts[cone_samples] += 1
-                center = tuple(map(Q, node["center"]))
-                triangle = tuple(
-                    tuple(map(Q, corner)) for corner in node["triangle"])
                 screen = atlas_projective_global_float_screen(
                     chart, center, widths, triangle,
                     cone_samples=cone_samples,
                     candidate_limit=64, candidates=None)
                 if screen is not None and screen["lower_bound"] > 1e-8:
                     positive_screens[cone_samples] += 1
-                    exact = atlas_projective_global_triangle(
-                        chart, center, widths, int(node["root"]), triangle,
-                        selected_candidate=screen["candidate"])
-                    if exact is not None and exact["accepted"]:
-                        axis = exact["certificate"]
-                        axis_keys = (
-                            "edge_start", "edge_finish", "edge_start2",
-                            "edge_finish2", "mix", "support_index",
-                            "nonzero_witness", "B")
-                        replacements[row_id] = {
-                            "id": row_id,
-                            "kind": "global",
-                            "center": node["center"],
-                            "widths": node["widths"],
-                            "root": node["root"],
-                            "triangle": node["triangle"],
-                            "view_depth": view_depth,
-                            "certificate": {
-                                "axis": {
-                                    key: axis[key] for key in axis_keys
-                                },
-                                "inner_index": exact["inner_index"],
-                                "ball_multiplier":
-                                    exact["ball_multiplier"],
-                            },
-                        }
+                    if install_global(row_id, node, view_depth, screen):
                         return
-                    exact_rejections += 1
+
+            if (chart == 2 and max(widths) <= Q(1, 256) and
+                    subtree_sizes[row_id] >= 100):
+                attempts[64] += 1
+                ordinary = atlas_projective_global_float_screen(
+                    chart, center, widths, triangle,
+                    candidate_limit=64, candidates=None)
+                screen = ordinary
+                screen_kind = 64
+                if (ordinary is not None and
+                        -Q(1, 500) < ordinary["lower_bound"] <= 1e-8):
+                    attempts[4096] += 1
+                    screen = atlas_projective_global_float_screen(
+                        chart, center, widths, triangle,
+                        candidate_limit=4096,
+                        candidates=ordinary["candidates"],
+                        retry_inherited=False)
+                    screen_kind = 4096
+                if screen is not None and screen["lower_bound"] > 1e-8:
+                    positive_screens[screen_kind] += 1
+                    if install_global(row_id, node, view_depth, screen):
+                        return
 
         if row is None:
             return
@@ -189,6 +231,10 @@ def upgrade(data):
         data["counts"].get("global_cone10", 0) + attempts[10])
     data["counts"]["global_cone16"] = (
         data["counts"].get("global_cone16", 0) + attempts[16])
+    data["counts"]["global_audit64"] = (
+        data["counts"].get("global_audit64", 0) + attempts[64])
+    data["counts"]["global_audit4096"] = (
+        data["counts"].get("global_audit4096", 0) + attempts[4096])
     data["counts"]["exact_rejections"] = (
         data["counts"].get("exact_rejections", 0) + exact_rejections)
     return {
