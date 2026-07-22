@@ -58,6 +58,13 @@ name = "checkNopert214Local2"
 root = "checkNopert214Local2"
 buildType = "release"
 
+# Non-proof timing audit for representative resolved rows in an incomplete
+# packed global checkpoint.
+[[lean_exe]]
+name = "benchmarkNopert214Global"
+root = "benchmarkNopert214Global"
+buildType = "release"
+
 # Full native proof constructor for Nopert #214. It reads large ignored packed
 # certificate artifacts at runtime, so this target is built on demand.
 [[lean_exe]]

@@ -106,24 +106,39 @@ def main():
     parser.add_argument("output")
     parser.add_argument("--unchecked-prefix", type=int,
                         help="pack this many nonempty rows for decoder testing")
+    parser.add_argument(
+        "--fill-pending", action="store_true",
+        help=("pack an incomplete checkpoint for native benchmarking, "
+              "preserving row indices by replacing pending slots with "
+              "deliberately invalid self-loop rows"))
     args = parser.parse_args()
+
+    if args.unchecked_prefix is not None and args.fill_pending:
+        parser.error("--unchecked-prefix and --fill-pending are exclusive")
 
     with open(args.input, "r", encoding="utf-8") as source:
         data = json.load(source)
-    if args.unchecked_prefix is None and not data.get("complete"):
+    if (args.unchecked_prefix is None and not args.fill_pending and
+            not data.get("complete")):
         raise SystemExit("refusing to pack an incomplete table")
     rows = data["rows"]
     if args.unchecked_prefix is not None:
         rows = [row for row in rows if row is not None][
             :args.unchecked_prefix]
-    if any(row is None for row in rows):
+    if not args.fill_pending and any(row is None for row in rows):
         raise SystemExit("table contains unfilled rows")
+
+    first_row = next((row for row in rows if row is not None), None)
+    if first_row is None:
+        raise SystemExit("table contains no resolved rows")
 
     intervals = []
     interval_ids = {}
     triangles = []
     triangle_ids = {}
     for row in rows:
+        if row is None:
+            continue
         ikey = interval_key(row)
         if ikey not in interval_ids:
             interval_ids[ikey] = len(intervals)
@@ -154,14 +169,23 @@ def main():
         for triangle in triangles:
             emit(encode_rats(
                 value for corner in triangle for value in corner))
-        for row in rows:
-            emit(encode_row(row, interval_ids, triangle_ids))
+        dummy_interval_id = interval_ids[interval_key(first_row)]
+        for row_id, row in enumerate(rows):
+            if row is None:
+                # Tag 0 is a view-root row.  A self-loop is intentionally not
+                # a valid certificate, but it is compact and total to decode.
+                # Benchmark clients select only resolved terminal leaves, so
+                # the placeholder is never accepted as proof data.
+                emit((TAGS["view_root"], row_id, dummy_interval_id, row_id))
+            else:
+                emit(encode_row(row, interval_ids, triangle_ids))
         if buffer:
             output.write(",".join(buffer))
             output.write(",")
 
     packed_size = Path(args.output).stat().st_size
-    print(f"packed {len(rows)} rows, {len(intervals)} intervals, "
+    mode = "benchmark " if args.fill_pending else ""
+    print(f"packed {mode}{len(rows)} rows, {len(intervals)} intervals, "
           f"{len(triangles)} triangles as {natural_count} naturals, "
           f"{packed_size} bytes")
 
