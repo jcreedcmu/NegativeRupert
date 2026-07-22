@@ -2363,6 +2363,25 @@ def atlas_fundamental_status(chart, centers, radii):
     return "boundary", None, bounds
 
 
+def atlas_fundamental_outside_float(chart, centers, radii):
+    """Cheap nomination for an exact fivefold-domain pruning audit.
+
+    A positive answer is never itself a certificate.  The caller must run
+    ``atlas_fundamental_status`` and accept only its exact ``outside`` result.
+    The small positive margin avoids spending exact rational work on boxes
+    whose floating lower bound merely touches zero.
+    """
+    centers = tuple(map(float, centers))
+    radii = tuple(map(float, radii))
+    error = float(FUNDAMENTAL_APPROXIMATION_ERROR)
+    for direction in (-1, 1):
+        polynomial = tuple(map(
+            float, atlas_fundamental_advantage_qpoly(chart, direction)))
+        if qpoly_box_lower_float(polynomial, centers, radii) - error > 1e-8:
+            return direction
+    return None
+
+
 def view_qpoly(view, component_polynomials):
     total = exact_certificate.qpoly_zero()
     for coefficient, polynomial in zip(view, component_polynomials):
@@ -3359,6 +3378,7 @@ def atlas_projective_state_action(task):
      min_relative_half_width, restricted_fundamental_root,
      chart0_origin_tube_radii) = task
     count_deltas = {"exact_rejections": 0,
+                    "fundamental_audit": 0,
                     "global_audit8": 0, "global_audit64": 0,
                     "global_audit4096": 0,
                     "global_cone5": 0, "global_cone6": 0,
@@ -3375,10 +3395,19 @@ def atlas_projective_state_action(task):
         return answer("terminal", row_kind="radius", extra={})
     if restricted_fundamental_root and chart == 0:
         # The chart-0 slab is already a close approximation to the exact
-        # fivefold Dirichlet cell, and resolving its curved boundary before
-        # isolating the identity symmetry tube creates needless subdivisions.
+        # fivefold Dirichlet cell.  A cheap floating screen now nominates only
+        # boxes already separated from its curved boundary; exact rational
+        # auditing then installs the same formal prune leaf used by charts 1
+        # and 2.  Boxes near the identity tube are never nominated.
         fundamental_status = "inside"
         fundamental_direction = None
+        if atlas_fundamental_outside_float(chart, center, widths) is not None:
+            count_deltas["fundamental_audit"] += 1
+            exact_status, exact_direction, _ = atlas_fundamental_status(
+                chart, center, widths)
+            if exact_status == "outside":
+                return answer("terminal", row_kind="fundamental_prune",
+                              extra={"direction": exact_direction})
     else:
         # The analogous chart-1 and chart-2 slabs are much coarser
         # supersets.  In particular, large boxes in those slabs can lie
@@ -3754,6 +3783,7 @@ def generate_atlas_projective_table(
         counts.setdefault("local", 0)
         counts.setdefault("symmetry_tube", 0)
         counts.setdefault("fundamental_prune", 0)
+        counts.setdefault("fundamental_audit", 0)
         counts.setdefault("global_audit8", 0)
         counts.setdefault("global_audit64", 0)
         counts.setdefault("global_audit4096", 0)
@@ -3782,6 +3812,7 @@ def generate_atlas_projective_table(
         counts = {"view_root": 1, "view_split": 0, "relative_split": 0,
                   "edge": 0, "global": 0, "local": 0, "radius": 0,
                   "fundamental_prune": 0, "symmetry_tube": 0,
+                  "fundamental_audit": 0,
                   "exact_rejections": 0, "global_audit8": 0,
                   "global_audit64": 0, "global_audit4096": 0,
                   "global_cone5": 0,
@@ -3967,10 +3998,20 @@ def generate_atlas_projective_table(
             counts["radius"] += 1
             continue
         if restricted_fundamental_root and chart == 0:
-            # The chart-0 slab is already a close approximation to the exact
-            # cell.  Preserve its direct symmetry-tube path rather than
-            # resolving the curved boundary first.
+            # Preserve the direct symmetry-tube path while cheaply pruning
+            # boxes already separated from the exact curved boundary.
             fundamental_status = "inside"
+            if atlas_fundamental_outside_float(
+                    chart, center, widths) is not None:
+                counts["fundamental_audit"] += 1
+                exact_status, exact_direction, _ = atlas_fundamental_status(
+                    chart, center, widths)
+                if exact_status == "outside":
+                    rows[row_id] = {
+                        **common, "kind": "fundamental_prune",
+                        "direction": exact_direction}
+                    counts["fundamental_prune"] += 1
+                    continue
         else:
             # The chart-1 and chart-2 slabs are coarse supersets of the exact
             # cell, so retain exact fundamental pruning inside them.
