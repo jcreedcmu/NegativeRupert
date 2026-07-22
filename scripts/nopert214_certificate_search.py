@@ -3193,7 +3193,8 @@ def atlas_projective_state_action(task):
      chart0_origin_tube_radii) = task
     count_deltas = {"exact_rejections": 0,
                     "global_audit8": 0, "global_audit64": 0,
-                    "global_cone5": 0, "global_cone6": 0}
+                    "global_cone5": 0, "global_cone6": 0,
+                    "global_cone10": 0}
 
     def answer(kind, **fields):
         return {"action": kind, "count_deltas": count_deltas, **fields}
@@ -3313,6 +3314,20 @@ def atlas_projective_state_action(task):
         global_float = atlas_projective_global_float_screen(
             chart, center, widths, triangle, cone_samples=6,
             candidate_limit=8, candidates=None)
+    if (chart == 1 and view_depth >= 4 and max(widths) <= Q(1, 16) and
+            (global_float is None or
+             global_float["lower_bound"] <= 1e-8)):
+        # A chart-1 transition family survives hundreds of thousands of
+        # six-sample descendants even though a ten-sample balanced cone
+        # certifies its 1/64-scale ancestor. Starting at 1/16 also closes
+        # several smaller transition families before they begin. The
+        # selected certificate has
+        # the same formal axis format; the extra samples only strengthen
+        # discovery.
+        count_deltas["global_cone10"] += 1
+        global_float = atlas_projective_global_float_screen(
+            chart, center, widths, triangle, cone_samples=10,
+            candidate_limit=64, candidates=None)
     if (global_float is not None and
             global_float["lower_bound"] > 1e-8):
         exact = atlas_projective_global_triangle(
@@ -3529,6 +3544,7 @@ def generate_atlas_projective_table(
         counts.setdefault("global_audit64", 0)
         counts.setdefault("global_cone5", 0)
         counts.setdefault("global_cone6", 0)
+        counts.setdefault("global_cone10", 0)
         failures = []
     else:
         rows = [None]
@@ -3550,7 +3566,7 @@ def generate_atlas_projective_table(
                   "fundamental_prune": 0, "symmetry_tube": 0,
                   "exact_rejections": 0, "global_audit8": 0,
                   "global_audit64": 0, "global_cone5": 0,
-                  "global_cone6": 0}
+                  "global_cone6": 0, "global_cone10": 0}
         failures = []
 
     def allocate(count):
@@ -3880,6 +3896,14 @@ def generate_atlas_projective_table(
             global_float = atlas_projective_global_float_screen(
                 chart, center, widths, triangle, cone_samples=6,
                 candidate_limit=8, candidates=None)
+        if (chart == 1 and view_depth >= 4 and
+                max(widths) <= Q(1, 16) and
+                (global_float is None or
+                 global_float["lower_bound"] <= 1e-8)):
+            counts["global_cone10"] += 1
+            global_float = atlas_projective_global_float_screen(
+                chart, center, widths, triangle, cone_samples=10,
+                candidate_limit=64, candidates=None)
         if (global_float is not None and
                 global_float["lower_bound"] > 1e-8):
             exact = atlas_projective_global_triangle(
