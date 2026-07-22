@@ -175,28 +175,28 @@ def constructProof (taskCount : Nat)
   have sharedValid : AtlasProjectiveSolutionTree.SharedLocalValid shared :=
     checkedLocal.sharedValid
   let table0 := globalTables shared 0
-  let table1 := globalTables shared 1
-  let table2 := globalTables shared 2
-  let table3 := globalTables shared 3
   have shared0 : AtlasProjectiveSolutionTree.SharedLocalValid
       table0.sharedLocal := by
     rw [hshared shared 0]
     exact sharedValid
+  let valid0 ← checkGlobal "0" taskCount table0 shared0
+  let table1 := globalTables shared 1
   have shared1 : AtlasProjectiveSolutionTree.SharedLocalValid
       table1.sharedLocal := by
     rw [hshared shared 1]
     exact sharedValid
+  let valid1 ← checkGlobal "1" taskCount table1 shared1
+  let table2 := globalTables shared 2
   have shared2 : AtlasProjectiveSolutionTree.SharedLocalValid
       table2.sharedLocal := by
     rw [hshared shared 2]
     exact sharedValid
+  let valid2 ← checkGlobal "2" taskCount table2 shared2
+  let table3 := globalTables shared 3
   have shared3 : AtlasProjectiveSolutionTree.SharedLocalValid
       table3.sharedLocal := by
     rw [hshared shared 3]
     exact sharedValid
-  let valid0 ← checkGlobal "0" taskCount table0 shared0
-  let valid1 ← checkGlobal "1" taskCount table1 shared1
-  let valid2 ← checkGlobal "2" taskCount table2 shared2
   let valid3 ← checkGlobal "3" taskCount table3 shared3
   let checkedCharts : CheckedChartTables := {
     tables := ![table0, table1, table2, table3]
