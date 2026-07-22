@@ -203,6 +203,7 @@ def exact_parent_leaf(chart, parent, candidates):
 
 def compact(data, representatives_per_kind):
     rows = data["rows"]
+    original_count = len(rows)
     chart = int(data["chart"])
     representatives = {}
     attempts = 0
@@ -258,7 +259,9 @@ def compact(data, representatives_per_kind):
     remap = {old: new for new, old in enumerate(old_ids)}
     compact_rows = []
     for old_id in old_ids:
-        row = dict(rows[old_id])
+        # Mutate and retain the existing row object instead of briefly
+        # duplicating every dictionary in a potentially million-row table.
+        row = rows[old_id]
         row["id"] = remap[old_id]
         if row["kind"] == "view_root":
             row["child"] = remap[int(row["child"])]
@@ -268,6 +271,10 @@ def compact(data, representatives_per_kind):
         compact_rows.append(row)
 
     data["rows"] = compact_rows
+    # `rows` is a distinct outer list.  Clearing it releases unreachable
+    # descendants before JSON serialization, when the output encoder itself
+    # needs additional buffers.
+    rows.clear()
     data["pending"] = []
     data["failures"] = []
     data["complete"] = True
@@ -278,7 +285,7 @@ def compact(data, representatives_per_kind):
                                     for row in compact_rows)
     data["counts"]["nearby_parent_prunes"] = replacements
     elapsed = time.monotonic()-started
-    return len(rows), len(compact_rows), replacements, attempts, elapsed
+    return original_count, len(compact_rows), replacements, attempts, elapsed
 
 
 def main():
