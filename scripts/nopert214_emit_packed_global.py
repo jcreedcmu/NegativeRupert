@@ -119,21 +119,36 @@ def main():
                 triangle_ids[tkey] = len(triangles)
                 triangles.append(tkey)
 
-    values = [len(rows), len(intervals)]
-    for center, widths in intervals:
-        values.extend(encode_rats([*center, *widths]))
-    values.append(len(triangles))
-    for triangle in triangles:
-        values.extend(encode_rats(
-            value for corner in triangle for value in corner))
-    for row in rows:
-        values.extend(encode_row(row, interval_ids, triangle_ids))
+    natural_count = 0
+    buffer = []
+    with open(args.output, "w", encoding="utf-8") as output:
+        def emit(values):
+            nonlocal natural_count
+            for value in values:
+                buffer.append(str(value))
+                natural_count += 1
+                if len(buffer) == 8192:
+                    output.write(",".join(buffer))
+                    output.write(",")
+                    buffer.clear()
 
-    packed = ",".join(str(value) for value in values) + ","
-    Path(args.output).write_text(packed, encoding="utf-8")
+        emit((len(rows), len(intervals)))
+        for center, widths in intervals:
+            emit(encode_rats([*center, *widths]))
+        emit((len(triangles),))
+        for triangle in triangles:
+            emit(encode_rats(
+                value for corner in triangle for value in corner))
+        for row in rows:
+            emit(encode_row(row, interval_ids, triangle_ids))
+        if buffer:
+            output.write(",".join(buffer))
+            output.write(",")
+
+    packed_size = Path(args.output).stat().st_size
     print(f"packed {len(rows)} rows, {len(intervals)} intervals, "
-          f"{len(triangles)} triangles as {len(values)} naturals, "
-          f"{len(packed)} bytes")
+          f"{len(triangles)} triangles as {natural_count} naturals, "
+          f"{packed_size} bytes")
 
 
 if __name__ == "__main__":
