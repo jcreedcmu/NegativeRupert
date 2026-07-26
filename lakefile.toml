@@ -76,3 +76,9 @@ buildType = "release"
 name = "constructNopert214"
 root = "constructNopert214"
 buildType = "release"
+
+# Full native proof constructor for Nopert #76 (same pattern as #214).
+[[lean_exe]]
+name = "constructNopert76"
+root = "constructNopert76"
+buildType = "release"
