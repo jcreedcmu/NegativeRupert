@@ -3471,7 +3471,9 @@ def atlas_projective_state_action(task):
     # At view depth one, a still-wide pose box rarely benefits from the
     # larger candidate pools.  Once the pose box is narrow, however, live
     # chart-2 cells are already certified exactly without another split.
-    allow_global_audit = (not near_chart0_local_tube and
+    razor_retry = (near_chart0_local_tube and
+        max(widths) <= Q(1, 8192) and view_depth >= 14)
+    allow_global_audit = ((not near_chart0_local_tube or razor_retry) and
         (view_depth >= 2 or
          (view_depth >= 1 and max(widths) <= Q(1, 256))))
     if (allow_global_audit and
@@ -3491,7 +3493,7 @@ def atlas_projective_state_action(task):
             candidates=None if global_float is None else
                 global_float["candidates"])
     ordinary_global_float = global_float
-    if (chart == 2 and max(widths) <= Q(1, 256) and
+    if (chart in (0, 2) and max(widths) <= Q(1, 256) and
             ordinary_global_float is not None and
             -Q(1, 500) < ordinary_global_float["lower_bound"] <= 1e-8):
         # Candidate ranking by center margin can hide the best whole-box
@@ -3504,7 +3506,7 @@ def atlas_projective_state_action(task):
             chart, center, widths, triangle, candidate_limit=4096,
             candidates=ordinary_global_float["candidates"],
             retry_inherited=False)
-    if (chart0_origin_tube_radii is None and allow_global_audit and
+    if ((chart0_origin_tube_radii is None or razor_retry) and allow_global_audit and
             max(widths) <= Q(1, 256) and
             (global_float is None or
              global_float["lower_bound"] <= 1e-8)):
@@ -3516,7 +3518,7 @@ def atlas_projective_state_action(task):
         global_float = atlas_projective_global_float_screen(
             chart, center, widths, triangle, cone_samples=5,
             candidate_limit=8, candidates=None)
-    if (chart0_origin_tube_radii is None and allow_global_audit and
+    if ((chart0_origin_tube_radii is None or razor_retry) and allow_global_audit and
             max(widths) <= Q(1, 256) and
             (global_float is None or
              global_float["lower_bound"] <= 1e-8)):
@@ -3527,7 +3529,7 @@ def atlas_projective_state_action(task):
         global_float = atlas_projective_global_float_screen(
             chart, center, widths, triangle, cone_samples=6,
             candidate_limit=8, candidates=None)
-    if (chart == 2 and max(widths) <= Q(1, 256) and
+    if (chart in (0, 2) and max(widths) <= Q(1, 256) and
             ordinary_global_float is not None and
             ordinary_global_float["lower_bound"] > -2e-3 and
             (global_float is None or
@@ -4124,7 +4126,9 @@ def generate_atlas_projective_table(
         global_float = atlas_projective_global_float_screen(
             chart, center, widths, triangle, candidate_limit=1,
             candidates=inherited_global_candidates)
-        allow_global_audit = (not near_chart0_local_tube and
+        razor_retry = (near_chart0_local_tube and
+            max(widths) <= Q(1, 8192) and view_depth >= 14)
+        allow_global_audit = ((not near_chart0_local_tube or razor_retry) and
             (view_depth >= 2 or
              (view_depth >= 1 and max(widths) <= Q(1, 256))))
         if (allow_global_audit and
@@ -4144,7 +4148,7 @@ def generate_atlas_projective_table(
                 candidates=None if global_float is None else
                     global_float["candidates"])
         ordinary_global_float = global_float
-        if (chart == 2 and max(widths) <= Q(1, 256) and
+        if (chart in (0, 2) and max(widths) <= Q(1, 256) and
                 ordinary_global_float is not None and
                 -Q(1, 500) < ordinary_global_float["lower_bound"] <= 1e-8):
             counts["global_audit4096"] += 1
@@ -4152,7 +4156,7 @@ def generate_atlas_projective_table(
                 chart, center, widths, triangle, candidate_limit=4096,
                 candidates=ordinary_global_float["candidates"],
                 retry_inherited=False)
-        if (chart0_origin_tube_radii is None and allow_global_audit and
+        if ((chart0_origin_tube_radii is None or razor_retry) and allow_global_audit and
                 max(widths) <= Q(1, 256) and
                 (global_float is None or
                  global_float["lower_bound"] <= 1e-8)):
@@ -4160,7 +4164,7 @@ def generate_atlas_projective_table(
             global_float = atlas_projective_global_float_screen(
                 chart, center, widths, triangle, cone_samples=5,
                 candidate_limit=8, candidates=None)
-        if (chart0_origin_tube_radii is None and allow_global_audit and
+        if ((chart0_origin_tube_radii is None or razor_retry) and allow_global_audit and
                 max(widths) <= Q(1, 256) and
                 (global_float is None or
                  global_float["lower_bound"] <= 1e-8)):
@@ -4168,7 +4172,7 @@ def generate_atlas_projective_table(
             global_float = atlas_projective_global_float_screen(
                 chart, center, widths, triangle, cone_samples=6,
                 candidate_limit=8, candidates=None)
-        if (chart == 2 and max(widths) <= Q(1, 256) and
+        if (chart in (0, 2) and max(widths) <= Q(1, 256) and
                 ordinary_global_float is not None and
                 ordinary_global_float["lower_bound"] > -2e-3 and
                 (global_float is None or
