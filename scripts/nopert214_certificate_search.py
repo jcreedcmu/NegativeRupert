@@ -83,6 +83,7 @@ VERTICES = vertices_float()
 
 PI_Q = Q("3.14159265358979323846")
 SYMMETRY_ERROR = exact_certificate.KAPPA / 2
+SYMMETRY_COUNT = 5
 
 
 def symmetry_action(index, vertex):
@@ -3612,7 +3613,7 @@ def atlas_projective_state_action(task):
         mismatch_candidates = sorted(
             (atlas_projective_mismatch_radius(
                 chart, symmetry_index, center, widths)[0], symmetry_index)
-            for symmetry_index in range(5))
+            for symmetry_index in range(SYMMETRY_COUNT))
         mismatch_radius, symmetry_index = mismatch_candidates[0]
         if mismatch_radius < Q(1, 20):
             if max(widths) <= Q(1, 2048):
@@ -3667,7 +3668,7 @@ def atlas_projective_state_action(task):
     mismatch_candidates = sorted(
         (atlas_projective_mismatch_radius(
             chart, symmetry_index, center, widths)[0], symmetry_index)
-        for symmetry_index in range(5))
+        for symmetry_index in range(SYMMETRY_COUNT))
     mismatch_radius, symmetry_index = mismatch_candidates[0]
     local_refinement_limit = Q(1, 4096)
     if (mismatch_radius < Q(1, 20) and
@@ -4253,7 +4254,7 @@ def generate_atlas_projective_table(
                 (atlas_projective_mismatch_radius(
                     chart, symmetry_index, center, widths)[0],
                  symmetry_index)
-                for symmetry_index in range(5))
+                for symmetry_index in range(SYMMETRY_COUNT))
             mismatch_radius, symmetry_index = mismatch_candidates[0]
             if mismatch_radius < Q(1, 20):
                 if max(widths) <= Q(1, 2048):
@@ -4342,7 +4343,7 @@ def generate_atlas_projective_table(
                 (atlas_projective_mismatch_radius(
                     chart, symmetry_index, center, widths)[0],
                  symmetry_index)
-                for symmetry_index in range(5))
+                for symmetry_index in range(SYMMETRY_COUNT))
             mismatch_radius, symmetry_index = mismatch_candidates[0]
             # The five exact symmetry rotations are isolated local-rigidity
             # centers.  Refine only their tiny neighborhoods past the normal
@@ -5126,7 +5127,7 @@ def nearest_symmetry_mismatch(center):
     inner = rot_rm(center[0], center[1], center[4])
     outer = rot_rm(center[2], center[3], 0.0)
     choices = []
-    for index in range(5):
+    for index in range(SYMMETRY_COUNT):
         target = matmul3(outer, symmetry_matrix(index))
         distance = math.sqrt(sum((inner[i][j] - target[i][j]) ** 2
                                  for i in range(3) for j in range(3)))
