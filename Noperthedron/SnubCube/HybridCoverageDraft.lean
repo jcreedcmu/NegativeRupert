@@ -1,0 +1,26 @@
+-- WORK IN PROGRESS: not imported by any module; drafting anchor for the
+-- snub cube wall-band bridge.
+--
+-- Goal: a hybrid variant of
+--   not_rupertPose_of_axisFree_geometric_certificates_of_cover_perturbation
+-- (LocalRigidity.lean) in which the coverage hypothesis
+--   hcover : ∀ axis, ‖axis‖ = 1 → ∃ j, c + δ ≤ ⟪axis, centerNormalizedA j⟫
+-- is weakened to a disjunction: every unit rotation axis is either
+-- (a) covered by a geometric certificate axis j as above, or
+-- (b) lies in the wall cone K (around the coordinate-plane seam), where
+--     the guarded Bernstein obstruction applies:
+--     the exact support defect in blowup coordinates satisfies
+--     0 ≤ d² · q(d, e, a, b, t) with q > 0 by
+--     ProjectiveTransitionGuardedGenerated (lower/middle/upper pieces),
+--     hence no RupertPose arises from perturbations along axes in K
+--     at any angle within the tube.
+-- Ingredients to connect:
+--   * ZAxisBox.factored_obstruction_nonnegative (exact defect ≥ 0 pattern)
+--   * ProjectiveTransitionGuarded.tLower/tMiddle/tUpper substitutions
+--   * the blowup chart semantics in ProjectiveTransitionBlowup
+--     (d = signed seam equation; x = d²a, y = d²b, z = dt, n_z = de)
+-- Proof plan: split RupertPose exclusion by axis membership in K;
+-- outside K use the existing theorem verbatim; inside K reduce the
+-- support-defect positivity to the Bernstein-certified polynomial via
+-- the blowup substitution lemmas, mirroring how the first-order theorem
+-- reduces to firstVariationVector bounds.
