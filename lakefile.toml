@@ -82,3 +82,8 @@ buildType = "release"
 name = "constructNopert76"
 root = "constructNopert76"
 buildType = "release"
+
+[[lean_exe]]
+name = "checkNopert76Local"
+root = "checkNopert76Local"
+buildType = "release"
