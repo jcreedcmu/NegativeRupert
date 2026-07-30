@@ -15,12 +15,12 @@ git = "https://github.com/PatrickMassot/checkdecls.git"
 [[require]]
 name = "tryAtEachStep"
 git = "https://github.com/dwrensha/tryAtEachStep"
-rev = "lean-v4.32.0"
+rev = "lean-v4.32.2"
 
 [[require]]
 name = "mathlib"
 git = "https://github.com/leanprover-community/mathlib4"
-rev = "v4.32.0"
+rev = "v4.32.2"
 
 [[lean_lib]]
 name = "Noperthedron"
@@ -47,6 +47,7 @@ weakLinkArgs = ["-lLake"]
 name = "constructValidTable"
 root = "constructValidTable"
 buildType = "release"
+
 [[lean_exe]]
 name = "benchRows"
 root = "benchRows"
