@@ -4,7 +4,7 @@ import Noperthedron.Nopert76.PackedSolutionTree
 
 /-!
 Native executable that reads and checks exact certificate data, then constructs
-a proof that the fivefold-symmetric Nopert #214 is not Rupert.
+a proof that the fivefold-symmetric Nopert #76 is not Rupert.
 
 This is analogous to `constructValidTable`: the expensive Boolean checks run
 as parallel native code, while kernel-proved bridge theorems turn success into
