@@ -18,6 +18,7 @@ from __future__ import annotations
 import argparse
 import fcntl
 import functools
+import gc
 import hashlib
 import heapq
 import itertools
@@ -3856,6 +3857,12 @@ def generate_atlas_projective_table(
     if workers < 0:
         raise ValueError("workers must be nonnegative")
     if workers:
+        # Forked workers inherit the (multi-GB) rows table but never read
+        # it; without a freeze, each worker's GC passes write into the
+        # inherited pages and privately copy nearly the whole parent heap
+        # (observed 9 GB per worker -> system OOM). Freezing exempts every
+        # pre-fork object from the children's GC scans.
+        gc.freeze()
         pool = (None if workers == 1 else
                 multiprocessing.get_context("fork").Pool(workers))
 
@@ -4791,6 +4798,9 @@ def generate_projective_local_view_table(
 
     if workers < 1:
         raise ValueError("workers must be positive")
+    # See the atlas generator: freeze pre-fork objects so worker GC passes
+    # don't copy-on-write the inherited table pages.
+    gc.freeze()
     pool = (None if workers == 1 else
             multiprocessing.get_context("fork").Pool(workers))
     processed_since_checkpoint = 0
