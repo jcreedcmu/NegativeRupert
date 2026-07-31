@@ -562,8 +562,7 @@ lemma global_theorem_inequality_ii {ι : Type} [Fintype ι] [Nonempty ι]
   refine h0.trans ?_
   have hcube : (εα + εθ₁ + εφ₁) ^ 3 / 6 * ‖pc.S‖ ≤ (εα + εθ₁ + εφ₁) ^ 3 / 6 := by
     nth_rewrite 2 [← mul_one ((εα + εθ₁ + εφ₁) ^ 3 / 6)]
-    exact mul_le_mul_of_nonneg_left S_norm_le_one
-      (div_nonneg (pow_nonneg (by linarith) 3) (by norm_num))
+    exact mul_le_mul_of_nonneg_left S_norm_le_one (by positivity)
   linarith
 
 /--
