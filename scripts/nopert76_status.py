@@ -11,10 +11,17 @@ invocations.  The --deep autopsy streams only the tail of the 2GB chart-0
 checkpoint, so it is cheap; a passage would show up there as a persistent,
 deepening pending cluster (view depth near the cap) — the healthy signature
 is shallow scattered cells and zero failures.
+
+Also reports the exact uncertified parameter-space volume per chart
+(sum over pending cells of 4^-view_depth * prod widths/root_widths).
+Volume measures coverage, not remaining work: the DFS drills the razor-thin
+hard cells first while most volume waits in fat, easy, unstarted cells that
+sweep out quickly at the end — expect ~100% for most of a run, then a cliff.
 """
 
 import argparse
 import json
+import mmap
 import math
 import re
 import subprocess
@@ -68,6 +75,59 @@ def chart_status(prev, now):
               f"pending {pending:,}{fmt_delta(pending, old.get('pending'), dt_h)}, "
               f"failures {failures}{flag}{done}{stale}")
         prev[f"chart{chart}"] = {"rows": rows, "pending": pending}
+
+
+# --restricted-fundamental-root Cayley boxes (see the generator).
+ROOT_WIDTHS = {0: (Q(1), Q(1), Q(1, 3)),
+               1: (Q(1), Q(1, 3), Q(1)),
+               2: (Q(1, 3), Q(1), Q(1))}
+
+
+def checkpoint_tail_array(buf, key):
+    """Decode a top-level array that follows the giant "rows" array."""
+    i = buf.rfind(b'"%s":' % key)
+    if i < 0:
+        raise ValueError(f"no {key.decode()} array in checkpoint")
+    text = buf[i + len(key) + 3:].decode()
+    value, _ = json.JSONDecoder().raw_decode(
+        text, len(text) - len(text.lstrip()))
+    return value
+
+
+def volume_status():
+    for chart in CHARTS:
+        path = ART / f"chart{chart}.json"
+        if not path.exists():
+            continue
+        try:
+            with open(path, "rb") as f:
+                buf = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
+            pending = checkpoint_tail_array(buf, b"pending")
+            failures = checkpoint_tail_array(buf, b"failures")
+            buf.close()
+        except (ValueError, json.JSONDecodeError) as error:
+            print(f"volume: chart {chart}: unreadable ({error})")
+            continue
+        cells = ([(s[2], s[5]) for s in pending] +
+                 [(f["widths"], f["view_depth"]) for f in failures])
+        if not cells:
+            print(f"volume: chart {chart}: 0 remaining (complete)")
+            continue
+        total = Q(0)
+        shallow = Q(0)
+        shallow_cells = 0
+        for widths, view_depth in cells:
+            frac = Q(1, 4) ** view_depth
+            for w, root_w in zip(map(Q, widths), ROOT_WIDTHS[chart]):
+                frac *= w / root_w
+            total += frac
+            if view_depth <= 3:
+                shallow += frac
+                shallow_cells += 1
+        age_min = (time.time() - path.stat().st_mtime) / 60
+        print(f"volume: chart {chart}: {float(100*total):.2f}% uncertified "
+              f"({float(100*shallow/total):.0f}% of that in {shallow_cells} "
+              f"easy cells at depth<=3; checkpoint {age_min:.0f}m old)")
 
 
 def local_verification_status():
@@ -160,6 +220,7 @@ def main():
         print(f"[rates vs snapshot {(now - prev['time']) / 3600:.1f}h ago]")
 
     chart_status(prev, now)
+    volume_status()
     local_verification_status()
     system_status()
     if args.deep:
