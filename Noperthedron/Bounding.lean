@@ -48,9 +48,9 @@ theorem norm_M_sub_lt {ε θ θ_ φ φ_ : ℝ} (hε : 0 < ε) (hθ : |θ - θ_| 
   rw [h₆]
   clear h₂ h₆
   simp only [←RyC_coe, ←RzC_coe]
-  rw [show (RzC (-θ_)).comp (RzC θ) = (RzC (-θ_)) * (RzC θ) from rfl]
-  rw [show (RyC (-φ)).comp (RyC φ_) = (RyC (-φ)) * (RyC φ_) from rfl]
-  simp only [←AddChar.map_add_eq_mul]
+  rw [← ContinuousLinearMap.mul_def (RzC (-θ_)) (RzC θ)]
+  rw [← ContinuousLinearMap.mul_def (RyC (-φ)) (RyC φ_)]
+  simp only [← AddChar.map_add_eq_mul]
   rw [norm_sub_rev]
   have h₇ := lemma12 (d := 1) (d' := 2) (α := -φ + φ_) (β := -θ_ + θ) (by decide)
   have h₇' := lemma12_equality_iff (d := 1) (d' := 2) (α := -φ + φ_) (β := -θ_ + θ) (by decide)
