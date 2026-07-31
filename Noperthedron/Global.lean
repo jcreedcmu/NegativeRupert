@@ -105,7 +105,7 @@ A compact way of saying "the pose satisfies the global theorem precondition at
 per-axis widths `εα εθ₁ εφ₁ εθ₂ εφ₂`". We require the index `Si` of some
 inner-shadow vertex of the polyhedron, and a covector w meant to express the
 direction we're projecting ℝ² → ℝ to find that the vertex "sticks out too far"
-compared to all the other outer-shadow vertices P (which the calculation of H
+compared to all the outer-shadow vertices P (which the calculation of H
 iterates over) in the polygon that lies in ℝ².
 -/
 structure GlobalTheoremPrecondition {ι : Type} [Fintype ι] [Nonempty ι]
