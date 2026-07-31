@@ -94,7 +94,8 @@ def checkpoint_tail_array(buf, key):
     return value
 
 
-def volume_status():
+def volume_status(prev, now):
+    dt_h = (now - prev.get("time", now)) / 3600
     for chart in CHARTS:
         path = ART / f"chart{chart}.json"
         if not path.exists():
@@ -114,20 +115,34 @@ def volume_status():
             print(f"volume: chart {chart}: 0 remaining (complete)")
             continue
         total = Q(0)
-        shallow = Q(0)
-        shallow_cells = 0
+        deep = Q(0)
+        deep_cells = 0
         for widths, view_depth in cells:
             frac = Q(1, 4) ** view_depth
             for w, root_w in zip(map(Q, widths), ROOT_WIDTHS[chart]):
                 frac *= w / root_w
             total += frac
-            if view_depth <= 3:
-                shallow += frac
-                shallow_cells += 1
+            if view_depth >= 4:
+                deep += frac
+                deep_cells += 1
         age_min = (time.time() - path.stat().st_mtime) / 60
-        print(f"volume: chart {chart}: {float(100*total):.2f}% uncertified "
-              f"({float(100*shallow/total):.0f}% of that in {shallow_cells} "
-              f"easy cells at depth<=3; checkpoint {age_min:.0f}m old)")
+
+        def delta(key, new):
+            old = prev.get(key)
+            prev[key] = new
+            if old is None or dt_h < 0.05 or new == old:
+                return ""
+            return f" [{new - old:+.3e}, {(new - old) / dt_h:+.2e}/h]"
+
+        # The percent is dominated by fat unstarted depth<=3 cells and sits
+        # still for days; the deep frontier is where the work happens and
+        # visibly shrinks as razor cells certify.
+        print(f"volume: chart {chart}: {float(100*total):.10f}% "
+              f"uncertified{delta(f'volume{chart}', float(total))}; "
+              f"deep frontier (depth>=4): {deep_cells} cells, "
+              f"{float(deep):.6e}"
+              f"{delta(f'deepvol{chart}', float(deep))} "
+              f"(checkpoint {age_min:.0f}m old)")
 
 
 def local_verification_status():
@@ -220,7 +235,7 @@ def main():
         print(f"[rates vs snapshot {(now - prev['time']) / 3600:.1f}h ago]")
 
     chart_status(prev, now)
-    volume_status()
+    volume_status(prev, now)
     local_verification_status()
     system_status()
     if args.deep:
