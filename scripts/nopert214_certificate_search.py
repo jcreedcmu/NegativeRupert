@@ -3998,29 +3998,62 @@ def generate_atlas_projective_table(
         rows.extend([None]*count)
         return children
 
-    def checkpoint(complete=False):
+    checkpoint_writer = {"pid": 0}
+
+    def checkpoint(complete=False, background=False):
+        """Write the checkpoint; with background=True, fork a writer child.
+
+        The fork gives the child a consistent copy-on-write snapshot of the
+        rows table and stack, so the parent (and its worker pool) keeps
+        searching during the multi-minute JSON dump.  Returns False when a
+        previous background writer is still running and this checkpoint was
+        skipped; the caller should leave its trigger counters alone so the
+        next batch retries.
+        """
         if checkpoint_path is None:
-            return
-        temporary_path = checkpoint_path + ".tmp"
-        with open(temporary_path, "w", encoding="utf-8") as output:
-            json.dump({"complete": complete, "chart": chart, "rows": rows,
-                       "restricted_fundamental_root":
-                           restricted_fundamental_root,
-                       "chart0_origin_tube_radii":
-                           chart0_origin_tube_radii,
-                       "pending": [state[:-1] for state in stack],
-                       "pending_candidates_omitted": True,
-                       "counts": counts,
-                       "failures": failures}, output, default=str)
-        os.replace(temporary_path, checkpoint_path)
-        print(json.dumps({
-            "output": checkpoint_path,
-            "complete": complete,
-            "rows": len(rows),
-            "pending": len(stack),
-            "failures": len(failures),
-            "counts": counts,
-        }), flush=True)
+            return True
+        if checkpoint_writer["pid"]:
+            flags = os.WNOHANG if background else 0
+            done_pid, _ = os.waitpid(checkpoint_writer["pid"], flags)
+            if done_pid == 0:
+                return False
+            checkpoint_writer["pid"] = 0
+        if background:
+            child = os.fork()
+            if child:
+                checkpoint_writer["pid"] = child
+                return True
+
+        def write():
+            temporary_path = checkpoint_path + ".tmp"
+            with open(temporary_path, "w", encoding="utf-8") as output:
+                json.dump({"complete": complete, "chart": chart,
+                           "rows": rows,
+                           "restricted_fundamental_root":
+                               restricted_fundamental_root,
+                           "chart0_origin_tube_radii":
+                               chart0_origin_tube_radii,
+                           "pending": [state[:-1] for state in stack],
+                           "pending_candidates_omitted": True,
+                           "counts": counts,
+                           "failures": failures}, output, default=str)
+            os.replace(temporary_path, checkpoint_path)
+            print(json.dumps({
+                "output": checkpoint_path,
+                "complete": complete,
+                "rows": len(rows),
+                "pending": len(stack),
+                "failures": len(failures),
+                "counts": counts,
+            }), flush=True)
+
+        if background:
+            try:
+                write()
+            finally:
+                os._exit(0)
+        write()
+        return True
 
     if workers < 0:
         raise ValueError("workers must be nonnegative")
@@ -4131,9 +4164,9 @@ def generate_atlas_projective_table(
                         checkpoint_every and
                         time.time()-last_checkpoint_time >=
                         checkpoint_min_seconds):
-                    checkpoint(False)
-                    processed_since_checkpoint = 0
-                    last_checkpoint_time = time.time()
+                    if checkpoint(False, background=True):
+                        processed_since_checkpoint = 0
+                        last_checkpoint_time = time.time()
         except BaseException:
             if pool is not None:
                 pool.terminate()
