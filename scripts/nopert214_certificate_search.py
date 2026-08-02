@@ -41,6 +41,8 @@ try:
     import numpy as np
 except ModuleNotFoundError:
     np = None
+if os.environ.get("NOPERT_NO_NUMPY"):
+    np = None
 
 sys.path.insert(0, __file__.rsplit("/", 1)[0])
 import snub_certificate_search as exact_certificate
@@ -2730,7 +2732,59 @@ def qpoly_bernstein_control_float(coefficients, centers, radii, i, j, k):
         (j*k/4)*ayz)
 
 
+@functools.lru_cache(maxsize=None)
+def _vertices_np():
+    return np.asarray(VERTICES, dtype=float)
+
+
+@functools.lru_cache(maxsize=None)
+def _mixed_qpolys_stack_np(chart, edge_q, vertex):
+    """float64 stack of atlas_mixed_contact_qpolys over every inner vertex."""
+    return np.asarray(
+        [[[float(q) for q in
+           atlas_mixed_contact_qpolys(chart, edge_q, inner, vertex)[c]]
+          for c in range(3)]
+         for inner in range(len(VERTICES_Q))], dtype=float)
+
+
 def atlas_projective_global_weighted_defect_upper_float(
+        triangle, candidate):
+    if np is None:
+        return atlas_projective_global_weighted_defect_upper_float_py(
+            triangle, candidate)
+    edges_q = [projective_mixed_edge_q(contact)
+               for contact in candidate["contacts"]]
+    edges = [tuple(map(float, edge)) for edge in edges_q]
+    weight_coefficients = [cross3(edges[1], edges[2]),
+                           cross3(edges[2], edges[0]),
+                           cross3(edges[0], edges[1])]
+    error = float(PROJECTIVE_SUPPORT_ERROR)
+    tri = np.asarray([[float(x) for x in corner] for corner in triangle])
+    vertices = _vertices_np()
+
+    total = 0.0
+    for i, contact in enumerate(candidate["contacts"]):
+        selected = contact["vertex"]
+        wc = weight_coefficients[i]
+        weight_values = (tri[:, 0]*wc[0] + tri[:, 1]*wc[1] +
+                         tri[:, 2]*wc[2] + error)
+        delta = vertices - vertices[selected]
+        e0, e1, e2 = edges[i]
+        sc0 = e1*delta[:, 2] - e2*delta[:, 1]
+        sc1 = e2*delta[:, 0] - e0*delta[:, 2]
+        sc2 = e0*delta[:, 1] - e1*delta[:, 0]
+        support_values = (tri[:, 0][:, None]*sc0[None, :] +
+                          tri[:, 1][:, None]*sc1[None, :] +
+                          tri[:, 2][:, None]*sc2[None, :] + error)
+        controls = (weight_values[:, None, None]*support_values[None, :, :] +
+                    weight_values[None, :, None]*support_values[:, None, :]
+                    ) / 2
+        controls[:, :, selected] = 0.0
+        total += max(0.0, float(controls.max()))
+    return total
+
+
+def atlas_projective_global_weighted_defect_upper_float_py(
         triangle, candidate):
     edges_q = [projective_mixed_edge_q(contact)
                for contact in candidate["contacts"]]
@@ -2770,7 +2824,89 @@ def qpoly_bernstein_lower_float(coefficients, centers, radii):
         for i in range(3) for j in range(3) for k in range(3))
 
 
+_BERNSTEIN_GRID = None
+
+
+def _bernstein_controls_27_np(polys, centers, radii):
+    """(P, 27) tensor-Bernstein controls, matching the scalar formula
+    term-for-term so float results agree with qpoly_bernstein_control_float
+    (up to signed zeros, which cannot change any comparison)."""
+    global _BERNSTEIN_GRID
+    if _BERNSTEIN_GRID is None:
+        grid = np.asarray(list(itertools.product(range(3), repeat=3)),
+                          dtype=float)
+        _BERNSTEIN_GRID = (grid[:, 0], grid[:, 1], grid[:, 2])
+    gi, gj, gk = _BERNSTEIN_GRID
+    lx, ly, lz = [c-r for c, r in zip(centers, radii)]
+    wx, wy, wz = [2*r for r in radii]
+    c = polys
+    a0 = (c[:, 0]+c[:, 1]*lx+c[:, 2]*ly+c[:, 3]*lz+c[:, 4]*lx*lx +
+          c[:, 5]*lx*ly+c[:, 6]*lx*lz+c[:, 7]*ly*ly+c[:, 8]*ly*lz +
+          c[:, 9]*lz*lz)
+    ax = wx*(c[:, 1]+2*c[:, 4]*lx+c[:, 5]*ly+c[:, 6]*lz)
+    ay = wy*(c[:, 2]+c[:, 5]*lx+2*c[:, 7]*ly+c[:, 8]*lz)
+    az = wz*(c[:, 3]+c[:, 6]*lx+c[:, 8]*ly+2*c[:, 9]*lz)
+    axx, ayy, azz = c[:, 4]*wx*wx, c[:, 7]*wy*wy, c[:, 9]*wz*wz
+    axy, axz, ayz = c[:, 5]*wx*wy, c[:, 6]*wx*wz, c[:, 8]*wy*wz
+    col = lambda v: v[:, None]
+    return (col(a0)+(gi/2)*col(ax)+(gj/2)*col(ay)+(gk/2)*col(az) +
+            np.where(gi == 2, col(axx), 0.0) +
+            np.where(gj == 2, col(ayy), 0.0) +
+            np.where(gk == 2, col(azz), 0.0) +
+            (gi*gj/4)*col(axy)+(gi*gk/4)*col(axz)+(gj*gk/4)*col(ayz))
+
+
 def atlas_projective_global_simplex_bernstein_controls_float(
+        chart, centers, radii, triangle, candidate, inner_indices,
+        multiplier):
+    if np is None:
+        return atlas_projective_global_simplex_bernstein_controls_float_py(
+            chart, centers, radii, triangle, candidate, inner_indices,
+            multiplier)
+    edges_q = [projective_mixed_edge_q(contact)
+               for contact in candidate["contacts"]]
+    edges = [tuple(map(float, edge)) for edge in edges_q]
+    weight_coefficients = [cross3(edges[1], edges[2]),
+                           cross3(edges[2], edges[0]),
+                           cross3(edges[0], edges[1])]
+    stacks = [_mixed_qpolys_stack_np(chart, tuple(edge_q), vertex_contact)
+              for edge_q, vertex_contact in
+              zip(edges_q, (contact["vertex"]
+                            for contact in candidate["contacts"]))]
+
+    def polynomial_at_view(view):
+        v0, v1, v2 = (float(view[0]), float(view[1]), float(view[2]))
+        total = np.zeros(10)
+        for i, inner in enumerate(inner_indices):
+            comp = stacks[i][inner]
+            scalar = v0*comp[0] + v1*comp[1] + v2*comp[2]
+            wc = weight_coefficients[i]
+            weight = v0*wc[0] + v1*wc[1] + v2*wc[2]
+            total = total + weight*scalar
+        total[0] -= 3*multiplier
+        for index in (4, 7, 9):
+            total[index] += multiplier
+        return total
+
+    views = list(triangle)
+    for i in range(3):
+        for j in range(i+1, 3):
+            views.append(tuple((a+b)/2 for a, b in
+                               zip(triangle[i], triangle[j])))
+    polys = np.stack([polynomial_at_view(view) for view in views])
+    ctrl = _bernstein_controls_27_np(polys, tuple(map(float, centers)),
+                                     tuple(map(float, radii)))
+    out = np.empty((27, 6))
+    out[:, 0] = ctrl[0]
+    out[:, 1] = ctrl[1]
+    out[:, 2] = ctrl[2]
+    out[:, 3] = 2*ctrl[3]-(ctrl[0]+ctrl[1])/2
+    out[:, 4] = 2*ctrl[4]-(ctrl[0]+ctrl[2])/2
+    out[:, 5] = 2*ctrl[5]-(ctrl[1]+ctrl[2])/2
+    return out.reshape(-1).tolist()
+
+
+def atlas_projective_global_simplex_bernstein_controls_float_py(
         chart, centers, radii, triangle, candidate, inner_indices,
         multiplier):
     edges_q = [projective_mixed_edge_q(contact)
@@ -2848,19 +2984,31 @@ def atlas_projective_global_mixed_candidate_column(
         return None
 
     inner_indices = []
-    for contact, edge_q in zip(candidate["contacts"], edges_q):
-        best = None
-        for inner in range(len(VERTICES_Q)):
-            components = atlas_mixed_contact_qpolys(
-                chart, tuple(edge_q), inner, contact["vertex"])
-            value = sum(view_center[c] *
-                        qpoly_eval_centered_float_py(
-                            tuple(map(float, components[c])),
-                            centers_f, (0.0, 0.0, 0.0))[0]
-                        for c in range(3))
-            if best is None or value > best[0]:
-                best = value, inner
-        inner_indices.append(best[1])
+    if np is not None:
+        x, y, z = centers_f
+        vc0, vc1, vc2 = view_center
+        for contact, edge_q in zip(candidate["contacts"], edges_q):
+            a = _mixed_qpolys_stack_np(chart, tuple(edge_q),
+                                       contact["vertex"])
+            val = (a[:, :, 0]+a[:, :, 1]*x+a[:, :, 2]*y+a[:, :, 3]*z +
+                   a[:, :, 4]*x*x+a[:, :, 5]*x*y+a[:, :, 6]*x*z +
+                   a[:, :, 7]*y*y+a[:, :, 8]*y*z+a[:, :, 9]*z*z)
+            values = vc0*val[:, 0] + vc1*val[:, 1] + vc2*val[:, 2]
+            inner_indices.append(int(np.argmax(values)))
+    else:
+        for contact, edge_q in zip(candidate["contacts"], edges_q):
+            best = None
+            for inner in range(len(VERTICES_Q)):
+                components = atlas_mixed_contact_qpolys(
+                    chart, tuple(edge_q), inner, contact["vertex"])
+                value = sum(view_center[c] *
+                            qpoly_eval_centered_float_py(
+                                tuple(map(float, components[c])),
+                                centers_f, (0.0, 0.0, 0.0))[0]
+                            for c in range(3))
+                if best is None or value > best[0]:
+                    best = value, inner
+            inner_indices.append(best[1])
 
     controls = atlas_projective_global_simplex_bernstein_controls_float(
         chart, centers_f, radii_f, triangle_f, candidate,
@@ -2900,18 +3048,29 @@ def atlas_projective_global_mixed_screen(
         return None
 
     row_count = len(columns[0])
-    column_scores = [sum(column) for column in columns]
-    accumulated = [0.0] * row_count
     counts = {}
-    for _ in range(iterations):
-        chosen = max(range(len(columns)), key=column_scores.__getitem__)
-        column = columns[chosen]
-        counts[chosen] = counts.get(chosen, 0) + 1
-        accumulated = [value+sample
-                       for value, sample in zip(accumulated, column)]
-        worst = min(range(row_count), key=accumulated.__getitem__)
-        column_scores = [score+candidate[worst]
-                         for score, candidate in zip(column_scores, columns)]
+    if np is not None:
+        matrix = np.asarray(columns)
+        column_scores = np.asarray([sum(column) for column in columns])
+        accumulated = np.zeros(row_count)
+        for _ in range(iterations):
+            chosen = int(np.argmax(column_scores))
+            counts[chosen] = counts.get(chosen, 0) + 1
+            accumulated += matrix[chosen]
+            worst = int(np.argmin(accumulated))
+            column_scores += matrix[:, worst]
+    else:
+        column_scores = [sum(column) for column in columns]
+        accumulated = [0.0] * row_count
+        for _ in range(iterations):
+            chosen = max(range(len(columns)), key=column_scores.__getitem__)
+            column = columns[chosen]
+            counts[chosen] = counts.get(chosen, 0) + 1
+            accumulated = [value+sample
+                           for value, sample in zip(accumulated, column)]
+            worst = min(range(row_count), key=accumulated.__getitem__)
+            column_scores = [score+candidate[worst]
+                             for score, candidate in zip(column_scores, columns)]
 
     selected = sorted(counts.items(), key=lambda item: item[1], reverse=True)[
         :component_limit]
