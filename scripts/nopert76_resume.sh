@@ -12,7 +12,8 @@ prlimit --as=17179869184 nice -n 10 \
 python3 scripts/nopert76_certificate_search.py generate-atlas-projective-table 0 \
   .artifacts/nopert76/chart0.json \
   --max-nodes 2000000 --max-view-depth 22 --min-relative-half-width 1/32768 \
-  --checkpoint-every 1000 --restricted-fundamental-root \
+  --checkpoint-every 1000 --checkpoint-min-seconds 900 \
+  --restricted-fundamental-root \
   --chart0-origin-tube-radii 1/10000000,1/10000000,1/10000000,1/10000000 \
   --resume --workers 9 >> .artifacts/nopert76/chart0-run10.log 2>&1 &
 echo "chart0 resumed (pid $!, log chart0-run10.log)"
@@ -21,7 +22,8 @@ prlimit --as=34359738368 nice -n 10 \
 python3 scripts/nopert76_certificate_search.py generate-atlas-projective-table 1 \
   .artifacts/nopert76/chart1.json \
   --max-nodes 8000000 --max-view-depth 18 --min-relative-half-width 1/32768 \
-  --checkpoint-every 4000 --restricted-fundamental-root \
+  --checkpoint-every 4000 --checkpoint-min-seconds 900 \
+  --restricted-fundamental-root \
   --resume --workers 5 >> .artifacts/nopert76/chart1-run6.log 2>&1 &
 echo "chart1 resumed (pid $!, log chart1-run6.log)"
 

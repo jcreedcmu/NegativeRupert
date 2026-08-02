@@ -28,6 +28,7 @@ import multiprocessing
 import os
 import random
 import sys
+import time
 from fractions import Fraction as Q
 
 if os.environ.get("NOPERT_GMPY2"):
@@ -3881,7 +3882,8 @@ def generate_atlas_projective_table(
         min_relative_half_width=Q(1, 1024), checkpoint_path=None,
         checkpoint_every=1000, resume=False,
         restricted_fundamental_root=False,
-        chart0_origin_tube_radii=None, workers=0):
+        chart0_origin_tube_radii=None, workers=0,
+        checkpoint_min_seconds=0):
     """Generate one exact chart table for the formal projective checker."""
     lock = None
     if checkpoint_path is not None:
@@ -4090,6 +4092,7 @@ def generate_atlas_projective_table(
             stack.extend(child_states)
 
         processed_since_checkpoint = 0
+        last_checkpoint_time = time.time()
         try:
             # Keep draining the independent frontier after recording a hard
             # cell.  A later resume automatically requeues every failure
@@ -4125,9 +4128,12 @@ def generate_atlas_projective_table(
                     apply_action(state, action)
                     processed_since_checkpoint += 1
                 if (checkpoint_every and processed_since_checkpoint >=
-                        checkpoint_every):
+                        checkpoint_every and
+                        time.time()-last_checkpoint_time >=
+                        checkpoint_min_seconds):
                     checkpoint(False)
                     processed_since_checkpoint = 0
+                    last_checkpoint_time = time.time()
         except BaseException:
             if pool is not None:
                 pool.terminate()
@@ -5669,6 +5675,9 @@ def main():
         "--min-relative-half-width", default="1/1024")
     generate_atlas_table.add_argument("--checkpoint-every", type=int,
                                       default=1000)
+    generate_atlas_table.add_argument(
+        "--checkpoint-min-seconds", type=int, default=0,
+        help="minimum seconds between checkpoints (0 = row count only)")
     generate_atlas_table.add_argument("--resume", action="store_true")
     generate_atlas_table.add_argument(
         "--workers", type=int, default=0,
@@ -5838,7 +5847,8 @@ def main():
             Q(args.min_relative_half_width), args.output,
             args.checkpoint_every, args.resume,
             args.restricted_fundamental_root,
-            chart0_origin_tube_radii, args.workers)
+            chart0_origin_tube_radii, args.workers,
+            args.checkpoint_min_seconds)
         print(json.dumps({"complete": result["complete"],
                           "chart": result["chart"],
                           "row_count": len(result["rows"]),
