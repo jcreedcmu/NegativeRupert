@@ -30,6 +30,13 @@ import random
 import sys
 from fractions import Fraction as Q
 
+if os.environ.get("NOPERT_GMPY2"):
+    # gmpy2.mpq is API- and format-compatible with Fraction everywhere this
+    # script touches it (str/parse/hash/pickle/round), and measured 1.2-1.3x
+    # end-to-end on the atlas searches.  Soundness is unaffected either way:
+    # the Lean checker re-verifies every emitted row.
+    from gmpy2 import mpq as Q  # noqa: F811
+
 try:
     import numpy as np
 except ModuleNotFoundError:

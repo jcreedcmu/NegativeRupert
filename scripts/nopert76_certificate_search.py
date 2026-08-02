@@ -11,9 +11,13 @@ Vertices are the twenty published decimals of nopert76.stl, read as exact
 rationals, exactly as for #214.
 """
 import math
+import os
 import sys
 from fractions import Fraction as Q
 from pathlib import Path
+
+if os.environ.get("NOPERT_GMPY2"):
+    from gmpy2 import mpq as Q  # noqa: F811 (see nopert214_certificate_search)
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import nopert214_certificate_search as base
