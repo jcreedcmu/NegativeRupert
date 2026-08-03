@@ -3964,7 +3964,31 @@ def generate_atlas_projective_table(
                               tuple(map(Q, saved_tube_radii)))
         if parsed_saved_radii != chart0_origin_tube_radii:
             raise ValueError("checkpoint symmetry-tube radii do not match")
-        rows = saved["rows"]
+        if "rows" in saved:
+            # Legacy monolithic checkpoint; the row log is rebuilt below.
+            rows = saved["rows"]
+            needs_row_log_migration = True
+        else:
+            # Row-log checkpoint: the state file records how many bytes of
+            # the append-only log were durable at snapshot time.  Anything
+            # past that offset is a torn later append and is dropped.
+            rows = [None] * saved["rows_len"]
+            log_offset = saved["rows_log_offset"]
+            consumed = 0
+            with open(checkpoint_path + ".rows.log", "rb") as log_file:
+                while consumed < log_offset:
+                    line = log_file.readline()
+                    if not line:
+                        raise ValueError(
+                            "rows log shorter than recorded offset")
+                    consumed += len(line)
+                    row = json.loads(line)
+                    rows[row["id"]] = row
+            if consumed != log_offset:
+                raise ValueError("rows log misaligned with recorded offset")
+            with open(checkpoint_path + ".rows.log", "r+b") as log_file:
+                log_file.truncate(log_offset)
+            needs_row_log_migration = False
         stack = []
         for state in saved["pending"]:
             if len(state) == 6:
@@ -4002,6 +4026,7 @@ def generate_atlas_projective_table(
         counts.setdefault("mixed_global", 0)
         failures = []
     else:
+        needs_row_log_migration = False
         rows = [None]
         stack = []
         # Reversing the oriented viewing normal reflects both shadows and
@@ -4033,40 +4058,76 @@ def generate_atlas_projective_table(
         rows.extend([None]*count)
         return children
 
-    checkpoint_writer = {"pid": 0}
+    rows_log_path = (None if checkpoint_path is None
+                     else checkpoint_path + ".rows.log")
+    logged = bytearray(len(rows))
+    if checkpoint_path is not None:
+        if needs_row_log_migration:
+            # One-time upgrade from the monolithic format: stream every
+            # finalized row into a fresh log, syncing and dropping the page
+            # cache every 256 MB.  After this, periodic checkpoints only
+            # append the few MB of new rows instead of re-serializing the
+            # multi-GB table (whose fork-twin writers, dumping for minutes
+            # at a time, drove the 2026-08-03 OOM).
+            temporary_path = rows_log_path + ".tmp"
+            with open(temporary_path, "wb") as log_file:
+                pending_bytes = 0
+                for row_id, row in enumerate(rows):
+                    if row is None:
+                        continue
+                    data = (json.dumps(row, default=str) + "\n").encode()
+                    log_file.write(data)
+                    logged[row_id] = 1
+                    pending_bytes += len(data)
+                    if pending_bytes >= (1 << 28):
+                        pending_bytes = 0
+                        log_file.flush()
+                        os.fsync(log_file.fileno())
+                        os.posix_fadvise(log_file.fileno(), 0, 0,
+                                         os.POSIX_FADV_DONTNEED)
+                log_file.flush()
+                os.fsync(log_file.fileno())
+            os.replace(temporary_path, rows_log_path)
+        elif resume and os.path.exists(checkpoint_path):
+            for row_id, row in enumerate(rows):
+                if row is not None:
+                    logged[row_id] = 1
+        else:
+            open(rows_log_path, "wb").close()
 
     def checkpoint(complete=False, background=False):
-        """Write the checkpoint; with background=True, fork a writer child.
+        """Append newly finalized rows to the log; replace the state file.
 
-        The fork gives the child a consistent copy-on-write snapshot of the
-        rows table and stack, so the parent (and its worker pool) keeps
-        searching during the multi-minute JSON dump.  Returns False when a
-        previous background writer is still running and this checkpoint was
-        skipped; the caller should leave its trigger counters alone so the
-        next batch retries.
+        Rows are write-once, so a periodic checkpoint appends only the new
+        rows (a few MB) and atomically rewrites a small state file holding
+        the pending stack, counts, and the durable log offset — no fork
+        twin, no multi-GB dump.  ``background`` is accepted for call-site
+        compatibility and ignored.  On completion the classic monolithic
+        checkpoint is written once and the log removed, so downstream
+        tooling is unchanged.
         """
         if checkpoint_path is None:
             return True
-        if checkpoint_writer["pid"]:
-            flags = os.WNOHANG if background else 0
-            done_pid, _ = os.waitpid(checkpoint_writer["pid"], flags)
-            if done_pid == 0:
-                return False
-            checkpoint_writer["pid"] = 0
-        if background:
-            child = os.fork()
-            if child:
-                checkpoint_writer["pid"] = child
-                return True
-
-        def write():
-            temporary_path = checkpoint_path + ".tmp"
+        if len(logged) < len(rows):
+            logged.extend(bytearray(len(rows) - len(logged)))
+        with open(rows_log_path, "ab") as log_file:
+            for row_id in range(len(rows)):
+                if logged[row_id] or rows[row_id] is None:
+                    continue
+                log_file.write(
+                    (json.dumps(rows[row_id], default=str) + "\n").encode())
+                logged[row_id] = 1
+            log_file.flush()
+            os.fsync(log_file.fileno())
+            os.posix_fadvise(log_file.fileno(), 0, 0,
+                             os.POSIX_FADV_DONTNEED)
+            log_offset = log_file.tell()
+        temporary_path = checkpoint_path + ".tmp"
+        if complete:
             with open(temporary_path, "w", encoding="utf-8") as output:
-                # Sync and drop the freshly written range every 256 MB.
-                # A multi-GB dump otherwise accumulates that much DIRTY
-                # (unreclaimable) page cache; with both charts' fork-twin
-                # writers dumping at once that squeezed the box to 0 GB
-                # available on 2026-08-03.
+                # Sync and drop the freshly written range every 256 MB so
+                # even this one-time multi-GB dump never accumulates dirty
+                # page cache.
                 pending_bytes = [0]
 
                 def drop_cache_write(text):
@@ -4094,22 +4155,32 @@ def generate_atlas_projective_table(
                            "failures": failures},
                           _cache_dropping_file, default=str)
             os.replace(temporary_path, checkpoint_path)
-            print(json.dumps({
-                "output": checkpoint_path,
-                "complete": complete,
-                "time": time.time(),
-                "rows": len(rows),
-                "pending": len(stack),
-                "failures": len(failures),
-                "counts": counts,
-            }), flush=True)
-
-        if background:
-            try:
-                write()
-            finally:
-                os._exit(0)
-        write()
+            os.remove(rows_log_path)
+        else:
+            with open(temporary_path, "w", encoding="utf-8") as output:
+                json.dump({"complete": False, "chart": chart,
+                           "rows_len": len(rows),
+                           "rows_log_offset": log_offset,
+                           "restricted_fundamental_root":
+                               restricted_fundamental_root,
+                           "chart0_origin_tube_radii":
+                               chart0_origin_tube_radii,
+                           "pending": [state[:-1] for state in stack],
+                           "pending_candidates_omitted": True,
+                           "counts": counts,
+                           "failures": failures}, output, default=str)
+                output.flush()
+                os.fsync(output.fileno())
+            os.replace(temporary_path, checkpoint_path)
+        print(json.dumps({
+            "output": checkpoint_path,
+            "complete": complete,
+            "time": time.time(),
+            "rows": len(rows),
+            "pending": len(stack),
+            "failures": len(failures),
+            "counts": counts,
+        }), flush=True)
         return True
 
     if workers < 0:
