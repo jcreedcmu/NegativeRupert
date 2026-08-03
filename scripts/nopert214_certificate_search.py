@@ -4062,6 +4062,26 @@ def generate_atlas_projective_table(
         def write():
             temporary_path = checkpoint_path + ".tmp"
             with open(temporary_path, "w", encoding="utf-8") as output:
+                # Sync and drop the freshly written range every 256 MB.
+                # A multi-GB dump otherwise accumulates that much DIRTY
+                # (unreclaimable) page cache; with both charts' fork-twin
+                # writers dumping at once that squeezed the box to 0 GB
+                # available on 2026-08-03.
+                pending_bytes = [0]
+
+                def drop_cache_write(text):
+                    output.write(text)
+                    pending_bytes[0] += len(text)
+                    if pending_bytes[0] >= (1 << 28):
+                        pending_bytes[0] = 0
+                        output.flush()
+                        os.fsync(output.fileno())
+                        os.posix_fadvise(output.fileno(), 0, 0,
+                                         os.POSIX_FADV_DONTNEED)
+
+                class _cache_dropping_file:
+                    write = staticmethod(drop_cache_write)
+
                 json.dump({"complete": complete, "chart": chart,
                            "rows": rows,
                            "restricted_fundamental_root":
@@ -4071,7 +4091,8 @@ def generate_atlas_projective_table(
                            "pending": [state[:-1] for state in stack],
                            "pending_candidates_omitted": True,
                            "counts": counts,
-                           "failures": failures}, output, default=str)
+                           "failures": failures},
+                          _cache_dropping_file, default=str)
             os.replace(temporary_path, checkpoint_path)
             print(json.dumps({
                 "output": checkpoint_path,
