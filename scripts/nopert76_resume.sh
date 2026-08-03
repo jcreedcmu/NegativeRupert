@@ -15,8 +15,8 @@ python3 scripts/nopert76_certificate_search.py generate-atlas-projective-table 0
   --checkpoint-every 1000 --checkpoint-min-seconds 900 \
   --restricted-fundamental-root \
   --chart0-origin-tube-radii 1/10000000,1/10000000,1/10000000,1/10000000 \
-  --resume --workers 9 >> .artifacts/nopert76/chart0-run10.log 2>&1 &
-echo "chart0 resumed (pid $!, log chart0-run10.log)"
+  --resume --workers 9 >> .artifacts/nopert76/chart0-run11.log 2>&1 &
+echo "chart0 resumed (pid $!, log chart0-run11.log)"
 
 prlimit --as=34359738368 nice -n 10 \
 python3 scripts/nopert76_certificate_search.py generate-atlas-projective-table 1 \
