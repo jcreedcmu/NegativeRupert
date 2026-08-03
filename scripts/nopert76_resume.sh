@@ -8,7 +8,7 @@ cd "$(dirname "$0")/.." || exit 1
 # (chart1) end-to-end, checkpoint-format identical, Lean re-verifies rows.
 export NOPERT_GMPY2=1
 
-prlimit --as=17179869184 nice -n 10 \
+prlimit --as=25769803776 nice -n 10 \
 python3 scripts/nopert76_certificate_search.py generate-atlas-projective-table 0 \
   .artifacts/nopert76/chart0.json \
   --max-nodes 2000000 --max-view-depth 22 --min-relative-half-width 1/32768 \
