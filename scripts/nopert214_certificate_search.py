@@ -3824,6 +3824,25 @@ def atlas_projective_state_action(task):
         (widths[widest] > max(min_relative_half_width, Q(1, 256)) or
          (widths[widest] > min_relative_half_width and
           use_fine_relative_split))))
+    if (relative_split and chart == 1 and
+            widths[widest] <= Q(1, 2048) and
+            view_depth < max_view_depth):
+        # A deep chart-1 box under a still-wide view triangle can grind
+        # through eight more relative halvings even though a single view
+        # split certifies all four children immediately: the certified
+        # bound is limited by the triangle, not the box, while the
+        # center-point screen keeps `center_requires_view` false.  On the
+        # 2026-08-03 monster frontier every one of the 14 deep pending
+        # clusters closed this way (fit margin there is +5e-2, so the
+        # depth was pure certificate-form cost).  The lookahead costs one
+        # edge screen per child; a miss falls through to the ordinary
+        # cascade unchanged.
+        if all(child_edge["minimum_strict_support_lower"] > 1e-8 and
+               child_edge["lower_bound"] > 1e-8
+               for child_edge in (
+                   atlas_simplex_float_screen(chart, center, widths, sub)
+                   for sub in split_projective_triangle(triangle))):
+            relative_split = False
     inherited = None if global_float is None else global_float["candidates"]
     if relative_split:
         return answer("relative_split", coordinate=widest,
