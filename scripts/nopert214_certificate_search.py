@@ -4041,6 +4041,7 @@ def generate_atlas_projective_table(
             print(json.dumps({
                 "output": checkpoint_path,
                 "complete": complete,
+                "time": time.time(),
                 "rows": len(rows),
                 "pending": len(stack),
                 "failures": len(failures),
