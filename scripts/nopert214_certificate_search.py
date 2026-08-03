@@ -3824,24 +3824,40 @@ def atlas_projective_state_action(task):
         (widths[widest] > max(min_relative_half_width, Q(1, 256)) or
          (widths[widest] > min_relative_half_width and
           use_fine_relative_split))))
-    if (relative_split and chart == 1 and
-            widths[widest] <= Q(1, 2048) and
-            view_depth < max_view_depth):
-        # A deep chart-1 box under a still-wide view triangle can grind
-        # through eight more relative halvings even though a single view
-        # split certifies all four children immediately: the certified
-        # bound is limited by the triangle, not the box, while the
-        # center-point screen keeps `center_requires_view` false.  On the
-        # 2026-08-03 monster frontier every one of the 14 deep pending
+    lookahead = (relative_split and view_depth < max_view_depth and
+        ((chart == 1 and widths[widest] <= Q(1, 2048)) or
+         (chart == 0 and not near_chart0_local_tube and
+          1 <= view_depth <= 3)))
+    if lookahead:
+        # A deep box under a still-wide view triangle can grind through
+        # many more relative halvings even though a single view split
+        # certifies all four children immediately: the certified bound is
+        # limited by the triangle, not the box, while the center-point
+        # screen keeps `center_requires_view` false.  On the 2026-08-03
+        # chart-1 monster frontier every one of the 14 deep pending
         # clusters closed this way (fit margin there is +5e-2, so the
-        # depth was pure certificate-form cost).  The lookahead costs one
-        # edge screen per child; a miss falls through to the ordinary
-        # cascade unchanged.
-        if all(child_edge["minimum_strict_support_lower"] > 1e-8 and
-               child_edge["lower_bound"] > 1e-8
-               for child_edge in (
-                   atlas_simplex_float_screen(chart, center, widths, sub)
-                   for sub in split_projective_triangle(triangle))):
+        # depth was pure certificate-form cost; live grinders replayed at
+        # 47 rows -> 5).  The same-day chart-0 shallow band closes via the
+        # global screen instead (an h3 grinder replayed at 907 rows -> 5),
+        # so children there get the eight-candidate global screen when the
+        # edge screen misses; the tube-adjacent razor wave is excluded
+        # because its view splits are genuine work.  A miss falls through
+        # to the ordinary cascade unchanged.
+        for sub in split_projective_triangle(triangle):
+            child_edge = atlas_simplex_float_screen(
+                chart, center, widths, sub)
+            if (child_edge["minimum_strict_support_lower"] > 1e-8 and
+                    child_edge["lower_bound"] > 1e-8):
+                continue
+            if chart == 0:
+                child_global = atlas_projective_global_float_screen(
+                    chart, center, widths, sub, candidate_limit=8,
+                    candidates=None)
+                if (child_global is not None and
+                        child_global["lower_bound"] > 1e-8):
+                    continue
+            break
+        else:
             relative_split = False
     inherited = None if global_float is None else global_float["candidates"]
     if relative_split:
