@@ -3713,7 +3713,11 @@ def atlas_projective_state_action(task):
                     "weights": mixed["weights"],
                 }})
     use_cone10 = (
-        (chart == 1 and view_depth >= 4 and max(widths) <= Q(1, 16)) or
+        # view_depth >= 2 (was >= 4, 2026-08-03): the monster-region
+        # transition bands live at view depth 2-3, where the old gate kept
+        # this escalation from ever firing; a ten-sample cone certifies the
+        # live h14 grinders there outright (bound +3e-4).
+        (chart == 1 and view_depth >= 2 and max(widths) <= Q(1, 16)) or
         (chart == 2 and view_depth == 1 and max(widths) == Q(1, 16)))
     if (use_cone10 and
             (global_float is None or
@@ -3731,7 +3735,7 @@ def atlas_projective_state_action(task):
         global_float = atlas_projective_global_float_screen(
             chart, center, widths, triangle, cone_samples=10,
             candidate_limit=64, candidates=None)
-    if (chart == 1 and view_depth >= 4 and
+    if (chart == 1 and view_depth >= 2 and
             max(widths) <= Q(1, 96) and
             (global_float is None or
              global_float["lower_bound"] <= 1e-8)):
@@ -4530,7 +4534,7 @@ def generate_atlas_projective_table(
                 counts["mixed_global"] += 1
                 continue
         use_cone10 = (
-            (chart == 1 and view_depth >= 4 and
+            (chart == 1 and view_depth >= 2 and
              max(widths) <= Q(1, 16)) or
             (chart == 2 and view_depth == 1 and
              max(widths) == Q(1, 16)))
@@ -4541,7 +4545,7 @@ def generate_atlas_projective_table(
             global_float = atlas_projective_global_float_screen(
                 chart, center, widths, triangle, cone_samples=10,
                 candidate_limit=64, candidates=None)
-        if (chart == 1 and view_depth >= 4 and
+        if (chart == 1 and view_depth >= 2 and
                 max(widths) <= Q(1, 96) and
                 (global_float is None or
                  global_float["lower_bound"] <= 1e-8)):
