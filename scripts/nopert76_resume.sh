@@ -18,7 +18,7 @@ python3 scripts/nopert76_certificate_search.py generate-atlas-projective-table 0
   --resume --workers 9 >> .artifacts/nopert76/chart0-run12.log 2>&1 &
 echo "chart0 resumed (pid $!, log chart0-run12.log)"
 
-prlimit --as=34359738368 nice -n 10 \
+MALLOC_ARENA_MAX=2 prlimit --as=38654705664 nice -n 10 \
 python3 scripts/nopert76_certificate_search.py generate-atlas-projective-table 1 \
   .artifacts/nopert76/chart1.json \
   --max-nodes 8000000 --max-view-depth 18 --min-relative-half-width 1/32768 \
