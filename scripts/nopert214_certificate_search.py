@@ -3979,6 +3979,26 @@ def generate_atlas_projective_table(
             rows = [None] * saved["rows_len"]
             log_offset = saved["rows_log_offset"]
             consumed = 0
+
+            # Per-line json.loads creates fresh string objects for every
+            # row, unlike a monolithic parse which shares key strings via
+            # its memo; without dedup the resumed chart-1 parent bloated
+            # from ~20 GB to ~31 GB and a worker hit the address-space cap
+            # (2026-08-03 ~22:00).  One shared cache dedups keys AND the
+            # heavily repeated value strings (triangle corners, widths).
+            string_cache = {}
+
+            def dedup(value):
+                kind = type(value)
+                if kind is str:
+                    return string_cache.setdefault(value, value)
+                if kind is list:
+                    return [dedup(item) for item in value]
+                if kind is dict:
+                    return {string_cache.setdefault(key, key): dedup(item)
+                            for key, item in value.items()}
+                return value
+
             with open(checkpoint_path + ".rows.log", "rb") as log_file:
                 while consumed < log_offset:
                     line = log_file.readline()
@@ -3986,8 +4006,9 @@ def generate_atlas_projective_table(
                         raise ValueError(
                             "rows log shorter than recorded offset")
                     consumed += len(line)
-                    row = json.loads(line)
+                    row = dedup(json.loads(line))
                     rows[row["id"]] = row
+            del string_cache
             if consumed != log_offset:
                 raise ValueError("rows log misaligned with recorded offset")
             with open(checkpoint_path + ".rows.log", "r+b") as log_file:
