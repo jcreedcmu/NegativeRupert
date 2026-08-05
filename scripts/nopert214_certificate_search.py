@@ -3916,6 +3916,42 @@ def atlas_projective_state_action(task):
         "mismatch_radius": mismatch_radius})
 
 
+class RowTable:
+    """List-shaped facade over the append-only row log.
+
+    Rows are write-once and durable in the log, so the generator never
+    needs historical rows on the heap: holding all ~6M of them was the
+    resume-load cost, the workers' COW baseline, and the fuel for the
+    chart-1 parent's memory ratchet.  Only rows finalized since the last
+    checkpoint append live here, in ``fresh``; ``length`` counts every
+    allocated slot (filled or pending) and ``filled`` every finalized row.
+    """
+
+    __slots__ = ("length", "filled", "fresh")
+
+    def __init__(self, length=0, filled=0):
+        self.length = length
+        self.filled = filled
+        self.fresh = {}
+
+    def __len__(self):
+        return self.length
+
+    def __setitem__(self, row_id, row):
+        if row_id not in self.fresh:
+            self.filled += 1
+        self.fresh[row_id] = row
+
+    def append(self, row):
+        assert row is None, "placeholders only"
+        self.length += 1
+
+    def extend(self, rows):
+        placeholders = list(rows)
+        assert all(row is None for row in placeholders), "placeholders only"
+        self.length += len(placeholders)
+
+
 def generate_atlas_projective_table(
         chart, max_nodes=200_000, max_view_depth=12,
         min_relative_half_width=Q(1, 1024), checkpoint_path=None,
@@ -3969,50 +4005,27 @@ def generate_atlas_projective_table(
         if parsed_saved_radii != chart0_origin_tube_radii:
             raise ValueError("checkpoint symmetry-tube radii do not match")
         if "rows" in saved:
-            # Legacy monolithic checkpoint; the row log is rebuilt below.
-            rows = saved["rows"]
+            # Legacy monolithic checkpoint; the row log is rebuilt below
+            # and the list is converted to the off-heap facade.  pop() so
+            # `saved` does not pin the multi-GB list after conversion.
+            rows = saved.pop("rows")
             needs_row_log_migration = True
         else:
-            # Row-log checkpoint: the state file records how many bytes of
-            # the append-only log were durable at snapshot time.  Anything
-            # past that offset is a torn later append and is dropped.
-            rows = [None] * saved["rows_len"]
-            log_offset = saved["rows_log_offset"]
-            consumed = 0
-
-            # Per-line json.loads creates fresh string objects for every
-            # row, unlike a monolithic parse which shares key strings via
-            # its memo; without dedup the resumed chart-1 parent bloated
-            # from ~20 GB to ~31 GB and a worker hit the address-space cap
-            # (2026-08-03 ~22:00).  One shared cache dedups keys AND the
-            # heavily repeated value strings (triangle corners, widths).
-            string_cache = {}
-
-            def dedup(value):
-                kind = type(value)
-                if kind is str:
-                    return string_cache.setdefault(value, value)
-                if kind is list:
-                    return [dedup(item) for item in value]
-                if kind is dict:
-                    return {string_cache.setdefault(key, key): dedup(item)
-                            for key, item in value.items()}
-                return value
-
-            with open(checkpoint_path + ".rows.log", "rb") as log_file:
-                while consumed < log_offset:
-                    line = log_file.readline()
-                    if not line:
-                        raise ValueError(
-                            "rows log shorter than recorded offset")
-                    consumed += len(line)
-                    row = dedup(json.loads(line))
-                    rows[row["id"]] = row
-            del string_cache
-            if consumed != log_offset:
-                raise ValueError("rows log misaligned with recorded offset")
+            # Row-log checkpoint: historical rows stay on disk (write-once,
+            # never read back by the generator), so resume is a truncation
+            # plus counters — no multi-GB replay onto the heap.  Every
+            # allocated slot is either finalized or sitting in the saved
+            # pending/failure states, which pins the filled count.  Bytes
+            # past the recorded offset are a torn later append; drop them.
             with open(checkpoint_path + ".rows.log", "r+b") as log_file:
-                log_file.truncate(log_offset)
+                log_file.seek(0, 2)
+                if log_file.tell() < saved["rows_log_offset"]:
+                    raise ValueError("rows log shorter than recorded offset")
+                log_file.truncate(saved["rows_log_offset"])
+            rows = RowTable(
+                length=saved["rows_len"],
+                filled=(saved["rows_len"] - len(saved["pending"]) -
+                        len(saved["failures"])))
             needs_row_log_migration = False
         stack = []
         for state in saved["pending"]:
@@ -4052,7 +4065,7 @@ def generate_atlas_projective_table(
         failures = []
     else:
         needs_row_log_migration = False
-        rows = [None]
+        rows = RowTable(length=1)
         stack = []
         # Reversing the oriented viewing normal reflects both shadows and
         # preserves containment.  Together with the fivefold wedge this
@@ -4085,24 +4098,22 @@ def generate_atlas_projective_table(
 
     rows_log_path = (None if checkpoint_path is None
                      else checkpoint_path + ".rows.log")
-    logged = bytearray(len(rows))
     if checkpoint_path is not None:
         if needs_row_log_migration:
             # One-time upgrade from the monolithic format: stream every
             # finalized row into a fresh log, syncing and dropping the page
-            # cache every 256 MB.  After this, periodic checkpoints only
-            # append the few MB of new rows instead of re-serializing the
-            # multi-GB table (whose fork-twin writers, dumping for minutes
-            # at a time, drove the 2026-08-03 OOM).
+            # cache every 256 MB, then drop the list — historical rows
+            # never live on the heap again.
             temporary_path = rows_log_path + ".tmp"
+            filled = 0
             with open(temporary_path, "wb") as log_file:
                 pending_bytes = 0
-                for row_id, row in enumerate(rows):
+                for row in rows:
                     if row is None:
                         continue
+                    filled += 1
                     data = (json.dumps(row, default=str) + "\n").encode()
                     log_file.write(data)
-                    logged[row_id] = 1
                     pending_bytes += len(data)
                     if pending_bytes >= (1 << 28):
                         pending_bytes = 0
@@ -4113,12 +4124,34 @@ def generate_atlas_projective_table(
                 log_file.flush()
                 os.fsync(log_file.fileno())
             os.replace(temporary_path, rows_log_path)
-        elif resume and os.path.exists(checkpoint_path):
-            for row_id, row in enumerate(rows):
-                if row is not None:
-                    logged[row_id] = 1
-        else:
+            rows = RowTable(length=len(rows), filled=filled)
+        elif not (resume and os.path.exists(checkpoint_path)):
             open(rows_log_path, "wb").close()
+
+    def load_all_rows():
+        """Materialize the full row array (log + fresh) for the one-time
+        monolithic write at completion; shares repeated strings."""
+        full = [None] * len(rows)
+        cache = {}
+
+        def dedup(value):
+            kind = type(value)
+            if kind is str:
+                return cache.setdefault(value, value)
+            if kind is list:
+                return [dedup(item) for item in value]
+            if kind is dict:
+                return {cache.setdefault(key, key): dedup(item)
+                        for key, item in value.items()}
+            return value
+
+        with open(rows_log_path, "rb") as log_file:
+            for line in log_file:
+                row = dedup(json.loads(line))
+                full[row["id"]] = row
+        for row_id, row in rows.fresh.items():
+            full[row_id] = row
+        return full
 
     def checkpoint(complete=False, background=False):
         """Append newly finalized rows to the log; replace the state file.
@@ -4126,27 +4159,27 @@ def generate_atlas_projective_table(
         Rows are write-once, so a periodic checkpoint appends only the new
         rows (a few MB) and atomically rewrites a small state file holding
         the pending stack, counts, and the durable log offset — no fork
-        twin, no multi-GB dump.  ``background`` is accepted for call-site
-        compatibility and ignored.  On completion the classic monolithic
-        checkpoint is written once and the log removed, so downstream
-        tooling is unchanged.
+        twin, no multi-GB dump, no historical rows on the heap.
+        ``background`` is accepted for call-site compatibility and
+        ignored.  On completion the classic monolithic checkpoint is
+        written once (replaying the log) and the log removed, so
+        downstream tooling is unchanged.
         """
         if checkpoint_path is None:
             return True
-        if len(logged) < len(rows):
-            logged.extend(bytearray(len(rows) - len(logged)))
         with open(rows_log_path, "ab") as log_file:
-            for row_id in range(len(rows)):
-                if logged[row_id] or rows[row_id] is None:
-                    continue
+            for row_id in sorted(rows.fresh):
                 log_file.write(
-                    (json.dumps(rows[row_id], default=str) + "\n").encode())
-                logged[row_id] = 1
+                    (json.dumps(rows.fresh[row_id], default=str) +
+                     "\n").encode())
             log_file.flush()
             os.fsync(log_file.fileno())
             os.posix_fadvise(log_file.fileno(), 0, 0,
                              os.POSIX_FADV_DONTNEED)
             log_offset = log_file.tell()
+        if complete:
+            all_rows = load_all_rows()
+        rows.fresh.clear()
         temporary_path = checkpoint_path + ".tmp"
         if complete:
             with open(temporary_path, "w", encoding="utf-8") as output:
@@ -4169,7 +4202,7 @@ def generate_atlas_projective_table(
                     write = staticmethod(drop_cache_write)
 
                 json.dump({"complete": complete, "chart": chart,
-                           "rows": rows,
+                           "rows": all_rows,
                            "restricted_fundamental_root":
                                restricted_fundamental_root,
                            "chart0_origin_tube_radii":
@@ -4331,7 +4364,7 @@ def generate_atlas_projective_table(
             if pool is not None:
                 pool.join()
         complete = (not stack and not failures and
-                    all(row is not None for row in rows))
+                    rows.filled == len(rows))
         checkpoint(complete)
         if lock is not None:
             lock.close()
@@ -4767,7 +4800,7 @@ def generate_atlas_projective_table(
             break
         if checkpoint_every and len(rows) % checkpoint_every < 4:
             checkpoint(False)
-    complete = not stack and not failures and all(row is not None for row in rows)
+    complete = not stack and not failures and rows.filled == len(rows)
     checkpoint(complete)
     if lock is not None:
         lock.close()
