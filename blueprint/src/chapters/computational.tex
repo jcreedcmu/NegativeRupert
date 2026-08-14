@@ -31,9 +31,10 @@ There exists a valid solution table whose zeroth row covers
 By exhibiting the table and running the validity checking algorithm.
 Formalized as \texttt{Noperthedron.NativeCaseAnalysis.solutionTable}
 in the build-on-demand \texttt{NativeCaseAnalysis} library (checked with
-\texttt{native\_decide}; a kernel-only \texttt{KernelCaseAnalysis} variant is in
-progress), which is kept out of the default build targets so that CI runs
-stay fast.
+\texttt{native\_decide}) and independently in the kernel-only
+\texttt{KernelCaseAnalysis} library (checked with \texttt{decide +kernel},
+using only the standard axioms); both are kept out of the default build
+targets so that CI runs stay fast.
 \end{proof}
 
 \begin{theorem}

@@ -51,14 +51,6 @@ abbrev Row.Pi (r : Row) : Fin 3 → VertexIndex :=
 abbrev Row.Qi (r : Row) : Fin 3 → VertexIndex :=
   ![r.Q1_index, r.Q2_index, r.Q3_index]
 
-noncomputable
-abbrev Row.P (r : Row) : Local.Triangle :=
-  ![exactVertex r.P1_index, exactVertex r.P2_index, exactVertex r.P3_index]
-
-noncomputable
-abbrev Row.Q (r : Row) : Local.Triangle :=
-  ![exactVertex r.Q1_index, exactVertex r.Q2_index, exactVertex r.Q3_index]
-
 abbrev Row.X₁ (r : Row) : Fin 3 → ℚ := RationalApprox.vecXℚ r.θ₁ r.φ₁
 
 abbrev Row.X₂ (r : Row) : Fin 3 → ℚ := RationalApprox.vecXℚ r.θ₂ r.φ₂

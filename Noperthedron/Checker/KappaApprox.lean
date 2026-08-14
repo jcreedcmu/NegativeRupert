@@ -13,10 +13,9 @@ public import Mathlib.Analysis.Real.Pi.Bounds
 /-!
 # κ-Approximation of Noperthedron Vertices
 
-Proves that the hard-coded rational vertices in `nopertListQ`
-are within distance κ = 10⁻¹⁰ of the real noperthedron vertices.
-
-See `plans/M2D_PLAN.md` for the overall strategy.
+Proves that the hard-coded rational vertices (`pythonVertex` in
+`Noperthedron/Vertices/Python.lean`) are within distance κ = 10⁻¹⁰ of the
+real noperthedron vertices (`exactVertex`).
 -/
 
 open RationalApprox Noperthedron.Solution Real
