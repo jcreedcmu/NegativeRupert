@@ -9,6 +9,7 @@ Phases (pass as argv[1]):
   dispatch  - KernelCaseAnalysis/Gen/Dispatch.lean
   validate  - KernelCaseAnalysis/Gen/ValidateNNNN.lean (~S_PER_FILE kernel-seconds each)
   combine   - KernelCaseAnalysis/Gen/CombineNN.lean + Final.lean
+  root      - KernelCaseAnalysis.lean (imports of the two capstone modules)
 """
 import sys, os
 
@@ -261,18 +262,13 @@ end
 """)
 
 def gen_root():
-    types = read_node_types()
-    nval = len(make_files(types, make_ranges(types)))
-    ncomb = (nval + 63) // 64
-    mods = (["KernelCaseAnalysis.ComputationalStep"]
-            + [f"KernelCaseAnalysis.Gen.Combine{m:02}" for m in range(ncomb)]
-            + ["KernelCaseAnalysis.Gen.Dispatch", "KernelCaseAnalysis.Gen.Final"]
-            + [f"KernelCaseAnalysis.Gen.Load{i:03}" for i in range(NLOAD)]
-            + [f"KernelCaseAnalysis.Gen.Validate{v:04}" for v in range(nval)]
-            + ["KernelCaseAnalysis.ProofOfMainTheorem", "KernelCaseAnalysis.Smoke"])
+    # Everything in Gen/ is transitively reachable from ProofOfMainTheorem
+    # (ProofOfMainTheorem -> ComputationalStep -> Gen.Final -> Combine* ->
+    # Validate* -> Dispatch -> Load*), so the root only needs the two capstones.
     with open('KernelCaseAnalysis.lean', 'w') as f:
         f.write("module\n\n")
-        f.write("\n".join(f"public import {m}" for m in mods) + "\n")
+        f.write("public import KernelCaseAnalysis.ProofOfMainTheorem\n")
+        f.write("public import KernelCaseAnalysis.Smoke\n")
 
 phase = sys.argv[1] if len(sys.argv) > 1 else 'all'
 only = int(sys.argv[2]) if len(sys.argv) > 2 else None
