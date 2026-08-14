@@ -1,5 +1,5 @@
 /.lake
-/.artifacts/
+/.artifacts
 /Noperthedron/Nopert214/GeneratedLocalView.lean
 /Noperthedron/Nopert214/GeneratedLocalView0.lean
 /Noperthedron/Nopert214/GeneratedLocalView1.lean
@@ -68,3 +68,4 @@ home_page/.bundle
 home_page/.ruby-version
 home_page/_site
 home_page/vendor
+/scripts/nopert_kernel.so

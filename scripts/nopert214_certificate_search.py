@@ -45,6 +45,14 @@ except ModuleNotFoundError:
 if os.environ.get("NOPERT_NO_NUMPY"):
     np = None
 
+# NOPERT_CONE10_CHART0=1 opens the cone10/cone16 escalations to chart 0's
+# shallow band (view depth >= 2, same scales as chart 1).  Chart 0's only
+# strong-certificate route is otherwise the width<=1/256 mixed screen, so
+# its far-field transition bands grind through relative splits that a
+# ten-sample cone certifies at 1/16 scale.  The cone screens only select
+# candidates; every accepted certificate still passes the exact checker.
+CONE10_CHART0 = bool(os.environ.get("NOPERT_CONE10_CHART0"))
+
 sys.path.insert(0, __file__.rsplit("/", 1)[0])
 import snub_certificate_search as exact_certificate
 
@@ -988,6 +996,56 @@ def projective_local_float_candidates(triangle, cone_samples=4,
     return feasible
 
 
+# NOPERT_RUST_KERNEL=1 swaps the float-candidate screen above for the Rust
+# port in rust/nopert-kernel (bit-identical: same evaluation order, CPython
+# Neumaier sum(), gmpy2 truncating float(mpq)).  The screen only selects
+# candidates; exact audits and the Lean checker validate every row either
+# way.  Differential-tested on live grinder cells before rollout.
+if os.environ.get("NOPERT_RUST_KERNEL"):
+    import nopert_kernel as _nopert_kernel
+
+    _python_projective_local_float_candidates = \
+        projective_local_float_candidates
+    _nopert_kernel_ready = False
+
+    def _nopert_kernel_install():
+        import math as _math
+        common_den = 1
+        entries = []
+        for vertex in VERTICES_Q:
+            row = []
+            for value in vertex:
+                num, den = int(value.numerator), int(value.denominator)
+                row.append((num, den))
+                common_den = common_den * den // _math.gcd(common_den, den)
+            entries.append(row)
+        nums = [[num * (common_den // den) for num, den in row]
+                for row in entries]
+        _nopert_kernel.install(
+            [[float(c) for c in vertex] for vertex in VERTICES],
+            nums, common_den, bool(os.environ.get("NOPERT_GMPY2")))
+
+    def projective_local_float_candidates(triangle, cone_samples=4,
+                                          include_boundaries=False,
+                                          include_corner_cycles=False,
+                                          screen_support_error=None):
+        global _nopert_kernel_ready
+        if screen_support_error is None:
+            screen_support_error = PROJECTIVE_SUPPORT_ERROR
+        if not _nopert_kernel_ready:
+            _nopert_kernel_install()
+            _nopert_kernel_ready = True
+        triangle_f = [[float(x) for x in corner] for corner in triangle]
+        return _nopert_kernel.projective_local_float_candidates(
+            triangle_f, cone_samples, include_boundaries,
+            include_corner_cycles, float(screen_support_error))
+
+    def _nopert_kernel_keys(contacts):
+        return [(c["edge_start"], c["edge_finish"], c["edge_start2"],
+                 c["edge_finish2"], c["mix"], c["vertex"])
+                for c in contacts]
+
+
 # A depth-first local search only revisits the handful of parameter variants
 # for its current triangle.  Retaining hundreds of completed triangles keeps
 # their very large candidate lists alive in every worker without buying cache
@@ -1541,6 +1599,186 @@ def atlas_projective_global_float_screen(
             "ball_multiplier": best[2],
             "feasible_candidates": len(candidates),
             "candidates": candidates}
+
+
+# Rust-kernel cluster 3: candidate ranking (center_data reward search over
+# every candidate) moves to the kernel; the short audit of the top-ranked
+# candidates stays in Python.  Bit-identical: compensated sums and stable
+# descending sort mirrored in Rust, ranked indices come back in audit order.
+if os.environ.get("NOPERT_RUST_KERNEL"):
+    _python_global_float_screen = atlas_projective_global_float_screen
+    _nopert_kernel_candidate_keys_memo = {}
+
+    # Candidate pools are deterministic lru-cached functions of
+    # (triangle, cone_samples, allow_support_defect).  Shipping the pools
+    # between the generator parent and its workers costs tens of MB per
+    # split in the cone10/16 band and saturates the parent's core; a
+    # compact reference regenerates the identical pool worker-side.
+    _CAND_REF_TAG = "__nopert_candidate_ref__"
+
+    def _nopert_candidate_ref(value):
+        return (isinstance(value, tuple) and len(value) == 4 and
+                value[0] == _CAND_REF_TAG)
+
+    def _nopert_resolve_candidates(value):
+        if _nopert_candidate_ref(value):
+            return projective_global_float_candidates(
+                value[1], value[2], value[3])
+        return value
+
+    def atlas_projective_global_float_screen(
+            chart, relative_center, relative_radii, triangle,
+            cone_samples=4, candidate_limit=1, candidates=None,
+            allow_support_defect=True, retry_inherited=True):
+        global _nopert_kernel_ready
+        if not _nopert_kernel_ready:
+            _nopert_kernel_install()
+            _nopert_kernel_ready = True
+        inherited = candidates is not None
+        if candidates is None:
+            candidates_ref = (_CAND_REF_TAG, triangle, cone_samples,
+                              allow_support_defect)
+            candidates = projective_global_float_candidates(
+                triangle, cone_samples, allow_support_defect)
+        elif _nopert_candidate_ref(candidates):
+            candidates_ref = candidates
+            candidates = _nopert_resolve_candidates(candidates_ref)
+        else:
+            # raw list from a legacy caller: pass through by value
+            candidates_ref = None
+        if not candidates:
+            return None
+        view_lo = [min(float(corner[c]) for corner in triangle)
+                   for c in range(3)]
+        view_hi = [max(float(corner[c]) for corner in triangle)
+                   for c in range(3)]
+        triangle_f = [[float(x) for x in corner] for corner in triangle]
+        view_centers = [(lo+hi)/2 for lo, hi in zip(view_lo, view_hi)]
+        view_radii = [(hi-lo)/2 for lo, hi in zip(view_lo, view_hi)]
+        relative_center_f = tuple(map(float, relative_center))
+        relative_radii_f = tuple(map(float, relative_radii))
+        endpoint_abs = [max(abs(c-r), abs(c+r)) for c, r in
+                        zip(relative_center_f, relative_radii_f)]
+        d_bound = 1+sum(value*value for value in endpoint_abs)
+
+        memo_id = id(candidates)
+        memo = _nopert_kernel_candidate_keys_memo
+        if (memo.get("id") == memo_id and
+                memo.get("first") is candidates[0] and
+                memo.get("count") == len(candidates)):
+            candidate_keys = memo["keys"]
+        else:
+            candidate_keys = [
+                [((contact["edge_start"], contact["edge_finish"],
+                   contact["edge_start2"], contact["edge_finish2"],
+                   contact["mix"], contact["vertex"]),
+                  float(contact.get("support_defect", 0.0)))
+                 for contact in candidate["contacts"]]
+                for candidate in candidates]
+            memo["id"] = memo_id
+            memo["first"] = candidates[0]
+            memo["count"] = len(candidates)
+            memo["keys"] = candidate_keys
+        indices, ranked_inners = _nopert_kernel.float_screen_rank(
+            chart, triangle_f, candidate_keys, relative_center_f,
+            d_bound, candidate_limit, allow_support_defect)
+
+        def fadd(a, b):
+            return a[0]+b[0], a[1]+b[1]
+
+        def fmul(a, b):
+            return (a[0]*b[0],
+                    abs(a[0])*b[1] + abs(b[0])*a[1] + a[1]*b[1])
+
+        best = None
+        for selected, contact_inners in zip(indices, ranked_inners):
+            candidate = candidates[selected]
+            contacts = candidate["contacts"]
+            edges_q = [projective_mixed_edge_q(contact)
+                       for contact in contacts]
+            edges = [list(map(float, edge_q)) for edge_q in edges_q]
+            weight_coefficients = [cross3(edges[1], edges[2]),
+                                   cross3(edges[2], edges[0]),
+                                   cross3(edges[0], edges[1])]
+            weight_lower = [min(dot3(corner, coefficient)
+                                for corner in triangle_f) -
+                            float(PROJECTIVE_SUPPORT_ERROR)
+                            for coefficient in weight_coefficients]
+            weight_upper = [max(dot3(corner, coefficient)
+                                for corner in triangle_f) +
+                            float(PROJECTIVE_SUPPORT_ERROR)
+                            for coefficient in weight_coefficients]
+            if min(weight_lower) < 0 or max(weight_lower) <= 0:
+                continue
+            contact_polynomials = [atlas_mixed_contact_qpolys(
+                chart, tuple(edges_q[i]), contact_inners[i],
+                contacts[i]["vertex"]) for i in range(3)]
+            coefficient_balls = []
+            for coefficient_index in range(10):
+                view_polynomial = [0.0]*10
+                for i in range(3):
+                    a = weight_coefficients[i]
+                    b = [float(contact_polynomials[i][c][coefficient_index])
+                         for c in range(3)]
+                    product = [0.0, 0.0, 0.0, 0.0,
+                               a[0]*b[0], a[0]*b[1]+a[1]*b[0],
+                               a[0]*b[2]+a[2]*b[0], a[1]*b[1],
+                               a[1]*b[2]+a[2]*b[1], a[2]*b[2]]
+                    view_polynomial = [x+y for x, y in
+                                       zip(view_polynomial, product)]
+                coefficient_balls.append(qpoly_eval_centered_float_py(
+                    view_polynomial, view_centers, view_radii))
+            variables = list(zip(relative_center_f, relative_radii_f))
+            x, y, z = variables
+            monomials = [(1.0, 0.0), x, y, z, fmul(x, x), fmul(x, y),
+                         fmul(x, z), fmul(y, y), fmul(y, z), fmul(z, z)]
+            multiplier_candidates = [0.0]
+            if coefficient_balls[0][0] > 0:
+                multiplier_candidates.append(coefficient_balls[0][0]/3)
+            for index in (4, 7, 9):
+                if coefficient_balls[index][0] < 0:
+                    multiplier_candidates.append(
+                        -coefficient_balls[index][0])
+
+            def adjusted_total(multiplier):
+                adjusted = list(coefficient_balls)
+                adjusted[0] = fadd(adjusted[0], (-3*multiplier, 0.0))
+                for index in (4, 7, 9):
+                    adjusted[index] = fadd(adjusted[index],
+                                           (multiplier, 0.0))
+                total = (0.0, 0.0)
+                for coefficient, monomial in zip(adjusted, monomials):
+                    total = fadd(total, fmul(coefficient, monomial))
+                return total
+
+            ball_multiplier, total = max(
+                ((multiplier, adjusted_total(multiplier))
+                 for multiplier in multiplier_candidates),
+                key=lambda item: item[1][0]-item[1][1])
+            weighted_support_defect = \
+                atlas_projective_global_weighted_defect_upper_float(
+                    triangle_f, candidate)
+            bernstein_lower = \
+                atlas_projective_global_simplex_bernstein_lower_float(
+                    chart, relative_center_f, relative_radii_f, triangle_f,
+                    candidate, list(contact_inners), ball_multiplier)
+            certified_lower = max(total[0]-total[1], bernstein_lower)
+            lower = (certified_lower - d_bound*weighted_support_defect -
+                     300*d_bound*float(exact_certificate.KAPPA))
+            if best is None or lower > best[0]:
+                best = (lower, candidate, ball_multiplier)
+        if best is None:
+            return None
+        if inherited and retry_inherited and best[0] <= 1e-8:
+            return atlas_projective_global_float_screen(
+                chart, relative_center, relative_radii, triangle,
+                cone_samples, candidate_limit, None, allow_support_defect,
+                retry_inherited)
+        return {"lower_bound": best[0], "candidate": best[1],
+                "ball_multiplier": best[2],
+                "feasible_candidates": len(candidates),
+                "candidates": (candidates_ref if candidates_ref is not None
+                               else candidates)}
 
 
 # Relative-box descendants reuse the current view triangle heavily, but the
@@ -3027,6 +3265,75 @@ def atlas_projective_global_mixed_candidate_column(
     }
 
 
+# Rust-kernel cluster 2: wrap the mixed-candidate column and the weighted
+# defect upper bound (numpy-path semantics, bit-identical).  Placed after
+# the Python definitions so the wrappers capture and replace them.
+if os.environ.get("NOPERT_RUST_KERNEL"):
+    _python_weighted_defect_upper_float = \
+        atlas_projective_global_weighted_defect_upper_float
+
+    def atlas_projective_global_weighted_defect_upper_float(
+            triangle, candidate):
+        global _nopert_kernel_ready
+        if not _nopert_kernel_ready:
+            _nopert_kernel_install()
+            _nopert_kernel_ready = True
+        triangle_f = [[float(x) for x in corner] for corner in triangle]
+        return _nopert_kernel.weighted_defect_upper_float(
+            triangle_f, _nopert_kernel_keys(candidate["contacts"]),
+            float(PROJECTIVE_SUPPORT_ERROR))
+
+    _python_mixed_candidate_column = \
+        atlas_projective_global_mixed_candidate_column
+
+    def atlas_projective_global_mixed_candidate_column(
+            chart, centers, radii, triangle, candidate):
+        global _nopert_kernel_ready
+        if not _nopert_kernel_ready:
+            _nopert_kernel_install()
+            _nopert_kernel_ready = True
+        contacts = candidate["contacts"]
+        edges_q = [projective_mixed_edge_q(contact) for contact in contacts]
+        stacks = [_mixed_qpolys_stack_np(chart, tuple(edge_q),
+                                         contact["vertex"])
+                  for edge_q, contact in zip(edges_q, contacts)]
+        triangle_f = [[float(x) for x in corner] for corner in triangle]
+        result = _nopert_kernel.mixed_candidate_column(
+            stacks[0], stacks[1], stacks[2],
+            _nopert_kernel_keys(contacts), triangle_f,
+            tuple(map(float, centers)), tuple(map(float, radii)),
+            float(PROJECTIVE_SUPPORT_ERROR),
+            float(exact_certificate.KAPPA))
+        if result is None:
+            return None
+        inner_indices, controls = result
+        return {"candidate": candidate,
+                "inner_indices": list(inner_indices),
+                "controls": list(controls)}
+
+    _python_simplex_bernstein_controls_float = \
+        atlas_projective_global_simplex_bernstein_controls_float
+
+    def atlas_projective_global_simplex_bernstein_controls_float(
+            chart, centers, radii, triangle, candidate, inner_indices,
+            multiplier):
+        global _nopert_kernel_ready
+        if not _nopert_kernel_ready:
+            _nopert_kernel_install()
+            _nopert_kernel_ready = True
+        contacts = candidate["contacts"]
+        edges_q = [projective_mixed_edge_q(contact) for contact in contacts]
+        stacks = [_mixed_qpolys_stack_np(chart, tuple(edge_q),
+                                         contact["vertex"])
+                  for edge_q, contact in zip(edges_q, contacts)]
+        triangle_f = [[float(x) for x in corner] for corner in triangle]
+        return _nopert_kernel.simplex_bernstein_controls(
+            stacks[0], stacks[1], stacks[2],
+            _nopert_kernel_keys(contacts), triangle_f,
+            tuple(map(float, centers)), tuple(map(float, radii)),
+            tuple(inner_indices), float(multiplier))
+
+
 def atlas_projective_global_mixed_screen(
         chart, centers, radii, root, triangle, candidates,
         iterations=20_000, component_limit=4):
@@ -3135,6 +3442,20 @@ def atlas_projective_global_mixed_screen(
             "exact_lower_bound": exact_lower,
         },
     }
+
+
+# Rust-kernel candidate refs: the mixed screen iterates its pool, so a
+# by-reference pool must be materialized at entry.
+if os.environ.get("NOPERT_RUST_KERNEL"):
+    _python_global_mixed_screen = atlas_projective_global_mixed_screen
+
+    def atlas_projective_global_mixed_screen(
+            chart, centers, radii, root, triangle, candidates,
+            iterations=20_000, component_limit=4):
+        return _python_global_mixed_screen(
+            chart, centers, radii, root, triangle,
+            _nopert_resolve_candidates(candidates),
+            iterations, component_limit)
 
 
 def qpoly_box_lower_float(coefficients, centers, radii):
@@ -3718,6 +4039,8 @@ def atlas_projective_state_action(task):
         # this escalation from ever firing; a ten-sample cone certifies the
         # live h14 grinders there outright (bound +3e-4).
         (chart == 1 and view_depth >= 2 and max(widths) <= Q(1, 16)) or
+        (CONE10_CHART0 and chart == 0 and view_depth >= 2 and
+         max(widths) <= Q(1, 16)) or
         (chart == 2 and view_depth == 1 and max(widths) == Q(1, 16)))
     if (use_cone10 and
             (global_float is None or
@@ -3735,7 +4058,8 @@ def atlas_projective_state_action(task):
         global_float = atlas_projective_global_float_screen(
             chart, center, widths, triangle, cone_samples=10,
             candidate_limit=64, candidates=None)
-    if (chart == 1 and view_depth >= 2 and
+    if ((chart == 1 or (CONE10_CHART0 and chart == 0)) and
+            view_depth >= 2 and
             max(widths) <= Q(1, 96) and
             (global_float is None or
              global_float["lower_bound"] <= 1e-8)):
@@ -4590,6 +4914,8 @@ def generate_atlas_projective_table(
         use_cone10 = (
             (chart == 1 and view_depth >= 2 and
              max(widths) <= Q(1, 16)) or
+            (CONE10_CHART0 and chart == 0 and view_depth >= 2 and
+             max(widths) <= Q(1, 16)) or
             (chart == 2 and view_depth == 1 and
              max(widths) == Q(1, 16)))
         if (use_cone10 and
@@ -4599,7 +4925,8 @@ def generate_atlas_projective_table(
             global_float = atlas_projective_global_float_screen(
                 chart, center, widths, triangle, cone_samples=10,
                 candidate_limit=64, candidates=None)
-        if (chart == 1 and view_depth >= 2 and
+        if ((chart == 1 or (CONE10_CHART0 and chart == 0)) and
+                view_depth >= 2 and
                 max(widths) <= Q(1, 96) and
                 (global_float is None or
                  global_float["lower_bound"] <= 1e-8)):
