@@ -162,7 +162,8 @@ private lemma round_dot_error {u₁ u₂ : Fin 2 → ℚ}
     _ = 2 / 10 ^ 12 := by norm_num
 
 /-- The inner product bound for `rotM`/`rotMℚ` when the second vector has norm ≤ 2.
-This generalises `bounds_kappa3_M` (which requires ‖Q‖ ≤ 1) to handle `P − Q`.
+This generalises the `|⟪MP, MQ⟫ − ⟪M_ℚP̃, M_ℚQ̃⟫| ≤ 5κ` bound of [SY25]
+Lemma 49 (which requires ‖Q‖ ≤ 1) to handle `P − Q`.
 The constant is kept at `9κ` (not the `10κ` used downstream) to leave room for
 the `round13v` rounding perturbation. -/
 lemma inner_product_bound_9kappa

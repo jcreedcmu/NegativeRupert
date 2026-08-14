@@ -240,17 +240,12 @@ See \cite{polyhedron.without.rupert}, Lemma 46.
 
 \begin{lemma} \label{lem:boundskappa3}
 \leanok
-\lean{
-RationalApprox.bounds_kappa3_X,
-RationalApprox.bounds_kappa3_M,
-RationalApprox.bounds_kappa3_MQ
-}
-    Let $P,Q \in \R^3$ with $\|P\|,\|Q\|\leq 1$ and $\widetilde{P},\widetilde{Q}$ some respective $\kappa$-rational approximations. Moreover, let $\alpha, \theta, \phi \in \R \in [-4,4]$ and set $X = X(\theta, \phi)$, $X_{\Q} = X_{\Q}(\theta, \phi)$ as well as $M = M(\theta, \phi)$, $M_{\Q} = M_{\Q}(\theta, \phi)$. Then
+\lean{RationalApprox.bounds_kappa3_X}
+    Let $P \in \R^3$ with $\|P\|\leq 1$ and $\widetilde{P}$ a $\kappa$-rational approximation of $P$. Moreover, let $\theta, \phi \in [-4,4]$ and set $X = X(\theta, \phi)$, $X_{\Q} = X_{\Q}(\theta, \phi)$. Then
     \begin{align}
-        |\langle X, P \rangle - \langle X_{\Q}, \widetilde{P} \rangle| & \leq 3 \kappa, \label{eq:boundskappa3.1}\\
-        |\langle MP, MQ \rangle - \langle M_{\Q} \widetilde{P}, M_{\Q}\widetilde{Q} \rangle| & \leq 5 \kappa, \label{eq:boundskappa3.3}\\
-        |\| M Q \| - \| M_{\Q}\widetilde{Q} \| | & \leq 3 \kappa.\label{eq:boundskappa3.2}
+        |\langle X, P \rangle - \langle X_{\Q}, \widetilde{P} \rangle| & \leq 3 \kappa. \label{eq:boundskappa3.1}
     \end{align}
+    (The inner-product and norm bounds for $M$, $M_\Q$ from Lemma~49 of \cite{polyhedron.without.rupert} are formalized only in the generalized forms used by \cref{lem:boundskappa4}.)
 \end{lemma}
 \begin{proof}
 \leanok
