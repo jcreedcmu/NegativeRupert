@@ -243,7 +243,7 @@ theorem local_theorem {ι : Type} [Fintype ι] [Nonempty ι]
       have h₆ : vecX p.θ₂ p.φ₂ ∈ Spanp Q_ := by
         refine vecX_spanning Q_ hθ₂ hφ₂ ?_ hQ_ h₅
         exact spanning_neg σQ span₂
-      simp only [Spanp, Set.mem_setOf_eq, Z] at h₆ ⊢
+      simp only [Spanp, Set.mem_ofPred_eq, Z] at h₆ ⊢
       obtain ⟨c, hc₁, hc₂⟩ := h₆
       use c, hc₁
       simp [hc₂, map_sum, map_smul, ←hPQ_]
@@ -284,7 +284,7 @@ theorem local_theorem {ι : Type} [Fintype ι] [Nonempty ι]
       (by simpa [P_, Pose.vecX₁, ← real_inner_smul_right] using hσP₂ i)
   -- ⟪Z, P_ i⟫ = (-1)^σQ * ⟪vecX p.θ₂ p.φ₂, Q i⟫ and ⟪Y, P_ i⟫ = (-1)^σP * ⟪Y, P i⟫
   have h_ZP : ⟪Z, P_ i⟫ = (-1 : ℝ)^σQ * ⟪vecX p.θ₂ p.φ₂, Q i⟫ := by
-    simp only [Z, K, P_, FunLike.coe_smul', _root_.Pi.smul_apply,
+    simp only [Z, K, P_, FunLike.coe_smul, _root_.Pi.smul_apply,
       LinearIsometry.coe_toContinuousLinearMap, inner_smul_left, real_inner_smul_right, RCLike.conj_to_real]
     rw [hL i, L.inner_map_map]
     have h_exp : (-1 : ℝ)^(σP + σQ) * (-1 : ℝ)^σP = (-1 : ℝ)^σQ := by

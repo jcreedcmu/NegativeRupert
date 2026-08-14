@@ -17,7 +17,7 @@ open RationalApprox (κ κℚ UpperSqrt)
 
 namespace Local
 
-def TriangleQ : Type := Fin 3 → Fin 3 → ℚ
+abbrev TriangleQ : Type := Fin 3 → Fin 3 → ℚ
 
 def TriangleQ.toReal (t : TriangleQ) : Triangle :=
   fun i => toR3 (t i)

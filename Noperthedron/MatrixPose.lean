@@ -86,7 +86,7 @@ lemma Rz_mul_toEuclideanLin (δ : ℝ) (M : Matrix (Fin 3) (Fin 3) ℝ) (v : ℝ
 theorem outerShadow_rotateBy (p : MatrixPose) (δ : ℝ) (S : Set ℝ³) :
     outerShadow (p.rotateBy δ) S = rotR δ '' outerShadow p S := by
   ext w
-  simp only [outerShadow, Set.mem_setOf_eq, Set.mem_image]
+  simp only [outerShadow, Set.mem_ofPred_eq, Set.mem_image]
   constructor
   · rintro ⟨v, hv, rfl⟩
     refine ⟨proj_xyL (p.outerRot.val.toEuclideanLin v), ⟨v, hv, rfl⟩, ?_⟩
@@ -125,7 +125,7 @@ lemma rotateBy_inner_apply (p : MatrixPose) (δ : ℝ) (v : ℝ³) :
 theorem innerShadow_rotateBy (p : MatrixPose) (δ : ℝ) (S : Set ℝ³) :
     innerShadow (p.rotateBy δ) S = rotR δ '' innerShadow p S := by
   ext w
-  simp only [innerShadow, Set.mem_setOf_eq, Set.mem_image]
+  simp only [innerShadow, Set.mem_ofPred_eq, Set.mem_image]
   constructor
   · rintro ⟨v, hv, rfl⟩
     use proj_xyL (PoseLike.inner p v)

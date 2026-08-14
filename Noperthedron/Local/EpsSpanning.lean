@@ -134,7 +134,7 @@ theorem vecX_spanning {ε θ θ_ φ φ_ : ℝ} (P : Triangle)
   have h₅ : vecX θ φ = lam⁻¹ • S := by
     rw [hlam, smul_smul, inv_eq_one_div, one_div_mul_cancel h₄.ne.symm]
     simp
-  simp only [Spanp, Set.mem_setOf_eq]
+  simp only [Spanp, Set.mem_ofPred_eq]
   use ![lam⁻¹ * a, lam⁻¹ * b, lam⁻¹ * c]
   constructor
   · intro i

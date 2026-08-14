@@ -44,7 +44,7 @@ def main (args : List String) : IO Unit := do
       r.interval.centerPose r.epsilon r.δ r.r RationalApprox.sqrtApprox)
   bench "local:  B-eps checkPy" ltable (fun r =>
     BεℚPy.check r.Qi r.interval.centerPose r.epsilon r.δ r.r)
-  bench "local:  vertex walk " ltable (fun r =>
+  bench "local:  vertex walk " ltable (fun _r =>
     -- cost of just enumerating VertexIndex and reading pythonVertex coords
     decide (∀ k : VertexIndex, pythonVertex k 0 + pythonVertex k 1 + pythonVertex k 2 < 4))
   bench "local:  270 sqrt(dv)" ltable (fun r =>

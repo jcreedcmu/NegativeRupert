@@ -148,7 +148,7 @@ theorem is_rupert_imp_inner_in_outer (p : Pose ℝ)
   have : v ∈ convexHull ℝ poly := by rw [mem_convexHull_iff]; intro _ a _; exact a hv
   rw [← AffineMap.image_convexHull p.outer poly, p_outer_eq_outer_shadow]
   refine h_rupert ?_
-  simp only [innerShadow, Set.mem_setOf_eq, innerProj]
+  simp only [innerShadow, Set.mem_ofPred_eq, innerProj]
   use v
   simpa
 

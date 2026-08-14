@@ -17,6 +17,9 @@ accessed, without dependency cycles.
 
 namespace Noperthedron.Solution
 
+-- The `Fintype` derive handler needs old-style defeq (same workaround as
+-- `SignType` in Mathlib.Data.Sign.Defs).
+set_option backward.isDefEq.respectTransparency false in
 inductive Param where | θ₁ | φ₁ | θ₂ | φ₂ | α
 deriving BEq, ReflBEq, LawfulBEq, Repr, Fintype, DecidableEq, Nonempty
 
