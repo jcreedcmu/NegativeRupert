@@ -47,3 +47,9 @@ weakLinkArgs = ["-lLake"]
 name = "constructValidTable"
 root = "constructValidTable"
 buildType = "release"
+
+# Per-row timing of the live checkers; see the docstring in benchRows.lean.
+[[lean_exe]]
+name = "benchRows"
+root = "benchRows"
+buildType = "release"
