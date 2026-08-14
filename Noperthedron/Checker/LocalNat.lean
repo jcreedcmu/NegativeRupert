@@ -228,13 +228,9 @@ private lemma intCast_div_nonneg_iff {n D : ℤ} (hD : (0:ℤ) < D) :
 `10²⁹` (at scale `10¹³`). -/
 private lemma round13_intCast_div42 (m : ℤ) :
     RationalApprox.round13 ((m : ℚ) / 10 ^ 42) = ((m / 10 ^ 29 : ℤ) : ℚ) / 10 ^ 13 := by
-  have h : ⌊(m : ℚ) / 10 ^ 42 * 10 ^ 13⌋ = m / 10 ^ 29 := by
-    rw [show (m : ℚ) / 10 ^ 42 * 10 ^ 13 = (m : ℚ) / ((10 ^ 29 : ℕ) : ℚ) from by
-      push_cast; ring]
-    rw [Rat.floor_intCast_div_natCast]
-    norm_num
-  unfold RationalApprox.round13
-  rw [h]
+  rw [show ((10:ℚ) ^ 42) = 10 ^ 13 * ((10 ^ 29 : ℕ) : ℚ) from by norm_num,
+    RationalApprox.round13_intCast_div,
+    show ((10 ^ 29 : ℕ) : ℤ) = 10 ^ 29 from by norm_num]
 
 /-- `sqrtℚUp16` on a scale-`10²⁶` integer fraction is `sqrtNum26` (at scale
 `10¹⁶`). -/

@@ -763,17 +763,5 @@ theorem rational_global {ι : Type} [Fintype ι] [Nonempty ι]
   } ⟨q, hq_near, hq_rupert⟩
 
 
-/-! ## Scale-`10¹⁶` cast helper (used by the `Nat` fast path in `GlobalNat`) -/
-
-namespace Gℚ_gt_maxHℚ
-
-lemma abs_intCast_div16 (n : ℤ) :
-    |(n : ℚ) / 10 ^ 16| = ((|n| : ℤ) : ℚ) / 10 ^ 16 := by
-  rw [abs_div, abs_of_pos (by positivity : (0:ℚ) < (10:ℚ) ^ 16)]
-  push_cast
-  ring_nf
-
-end Gℚ_gt_maxHℚ
-
 end RationalApprox.GlobalTheorem
 end

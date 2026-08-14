@@ -398,15 +398,10 @@ the branch computes `|z|`. -/
 private lemma cond_pad_abs {X : ℕ} {z : ℤ} (hX : (X : ℤ) = z + 2 ^ 47) :
     ((cond (Nat.ble X (2 ^ 47)) (2 ^ 47 - X) (X - 2 ^ 47) : ℕ) : ℤ)
       = |z| := by
-  rcases hb : Nat.ble X (2 ^ 47) with _ | _
-  · have h : ¬ X ≤ 2 ^ 47 := fun hle => by
-      rw [Nat.ble_eq_true_of_le hle] at hb
-      exact Bool.noConfusion hb
-    rw [cond_false, abs_of_nonneg (by omega : (0:ℤ) ≤ z)]
-    omega
-  · have h : X ≤ 2 ^ 47 := Nat.ble_eq ▸ hb
-    rw [cond_true, abs_of_nonpos (by omega : z ≤ 0)]
-    omega
+  rw [RationalApprox.cond_ble_sub_cast]
+  congr 1
+  push_cast
+  omega
 
 set_option maxHeartbeats 3200000 in
 /-- The crux: a true `pairBody` at flat index `J ≠ qskip` implies `checkN`'s
@@ -640,22 +635,6 @@ private lemma pairBody_sound
     rw [hR2] at hlt
     linarith
 
-/-- Every vertex index is `ofFin90` of its flat index. -/
-private lemma ofFin90_flat' : ∀ k : VertexIndex,
-    VertexIndex.ofFin90 ⟨(45 * k.ℓ.val + 15 * k.i.val + k.k.val) % 90,
-      Nat.mod_lt _ (by norm_num)⟩ = k := by
-  decide
-
-/-- Flat indices are injective. -/
-private lemma flat_inj : ∀ k q : VertexIndex,
-    45 * k.ℓ.val + 15 * k.i.val + k.k.val = 45 * q.ℓ.val + 15 * q.i.val + q.k.val
-    → k = q := by
-  rintro ⟨⟨a, ha⟩, ⟨b, hb⟩, ⟨c, hc⟩⟩ ⟨⟨a', ha'⟩, ⟨b', hb'⟩, ⟨c', hc'⟩⟩ hf
-  simp only at hf
-  have : a = a' ∧ b = b' ∧ c = c' := by omega
-  obtain ⟨rfl, rfl, rfl⟩ := this
-  rfl
-
 /-- `sqrtNum52` is nonnegative. -/
 private lemma sqrtNum52_nonneg' (S : ℤ) : 0 ≤ sqrtNum52 S := by
   unfold sqrtNum52
@@ -738,7 +717,7 @@ private lemma perIFast_sound
     omega
   have hqix : VertexIndex.ofFin90
       ⟨45 * qi.ℓ.val + 15 * qi.i.val + qi.k.val, h90⟩ = qi := by
-    have := ofFin90_flat' qi
+    have := VertexIndex.ofFin90_flat qi
     simpa only [Nat.mod_eq_of_lt h90] using this
   have hqspec := pythonVertexBig_spec ⟨45 * qi.ℓ.val + 15 * qi.i.val + qi.k.val, h90⟩
   rw [hqix] at hqspec
@@ -762,7 +741,7 @@ private lemma perIFast_sound
     omega
   have hkix : VertexIndex.ofFin90
       ⟨45 * k.ℓ.val + 15 * k.i.val + k.k.val, hj90⟩ = k := by
-    have := ofFin90_flat' k
+    have := VertexIndex.ofFin90_flat k
     simpa only [Nat.mod_eq_of_lt hj90] using this
   have hkspec := pythonVertexBig_spec ⟨45 * k.ℓ.val + 15 * k.i.val + k.k.val, hj90⟩
   rw [hkix] at hkspec
@@ -778,7 +757,7 @@ private lemma perIFast_sound
     rcases hbeq : Nat.beq (45 * k.ℓ.val + 15 * k.i.val + k.k.val)
         (45 * qi.ℓ.val + 15 * qi.i.val + qi.k.val) with _ | _
     · rfl
-    · exact absurd (flat_inj k qi (Nat.eq_of_beq_eq_true hbeq)) hk
+    · exact absurd (VertexIndex.flat_inj k qi (Nat.eq_of_beq_eq_true hbeq)) hk
   -- numerators are nonnegative where needed
   have hboundnn : (0:ℤ) ≤ (100 * δn * εd + 224 * εn * δd) * rd := by positivity
   have hndvnn : (0:ℤ) ≤ sqrtDvCurriedN qi.ℓ qi.i qi.k k.ℓ k.i k.k := by

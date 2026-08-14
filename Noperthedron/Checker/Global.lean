@@ -46,12 +46,6 @@ def Row.fastNatGlobal (r : Row) : Bool :=
     r.interval.centerPose r.εα r.εθ₁ r.εφ₁ r.εθ₂ r.εφ₂
     r.wx_numerator r.wy_numerator r.w_denominator
 
-/-- Every vertex index is `ofFin90` of its flat index (below 90). -/
-private lemma ofFin90_flat : ∀ k : VertexIndex,
-    VertexIndex.ofFin90 ⟨(45 * k.ℓ.val + 15 * k.i.val + k.k.val) % 90,
-      Nat.mod_lt _ (by norm_num)⟩ = k := by
-  decide
-
 theorem Row.fastNatGlobal_sound {r : Row} (h : r.fastNatGlobal = true) :
     r.G_gt_maxH := by
   have hsflat : 45 * r.S_index.ℓ.val + 15 * r.S_index.i.val + r.S_index.k.val < 90 := by
@@ -65,7 +59,7 @@ theorem Row.fastNatGlobal_sound {r : Row} (h : r.fastNatGlobal = true) :
   have hSix : VertexIndex.ofFin90
       ⟨45 * r.S_index.ℓ.val + 15 * r.S_index.i.val + r.S_index.k.val, hsflat⟩
       = r.S_index := by
-    have h90 := ofFin90_flat r.S_index
+    have h90 := VertexIndex.ofFin90_flat r.S_index
     simpa only [Nat.mod_eq_of_lt hsflat] using h90
   have hSspec := pythonVertexBig_spec
     ⟨45 * r.S_index.ℓ.val + 15 * r.S_index.i.val + r.S_index.k.val, hsflat⟩
@@ -85,7 +79,7 @@ theorem Row.fastNatGlobal_sound {r : Row} (h : r.fastNatGlobal = true) :
     have h1 := k.ℓ.isLt
     have h2 := k.i.isLt
     have h3 := k.k.isLt
-    exact ⟨45 * k.ℓ.val + 15 * k.i.val + k.k.val, by omega, ofFin90_flat k⟩
+    exact ⟨45 * k.ℓ.val + 15 * k.i.val + k.k.val, by omega, VertexIndex.ofFin90_flat k⟩
   · -- packed-table field equations
     intro j hj
     have hspec := pythonVertexBig_spec ⟨j, hj⟩

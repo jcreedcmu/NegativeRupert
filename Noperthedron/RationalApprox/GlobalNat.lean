@@ -120,18 +120,10 @@ private lemma natAbsDiff_cast (x y : ℕ) : ((natAbsDiff x y : ℕ) : ℤ) = |(x
     rw [abs_of_nonneg (by omega : (0:ℤ) ≤ (x:ℤ) - y)]
     omega
 
-/-- The raw `cond`/`ble`/`sub` form of `natAbsDiff` used on the tier-1 path. -/
-private lemma cond_ble_sub_cast (x c : ℕ) :
-    ((cond (Nat.ble x c) (c - x) (x - c) : ℕ) : ℤ) = |(x : ℤ) - c| := by
-  rcases hb : Nat.ble x c with _ | _
-  · have h : ¬ x ≤ c := fun hle => by
-      rw [Nat.ble_eq_true_of_le hle] at hb
-      exact Bool.noConfusion hb
-    rw [cond_false, abs_of_nonneg (by omega : (0:ℤ) ≤ (x:ℤ) - c)]
-    omega
-  · have h : x ≤ c := Nat.ble_eq ▸ hb
-    rw [cond_true, abs_sub_comm, abs_of_nonneg (by omega : (0:ℤ) ≤ (c:ℤ) - x)]
-    omega
+/-- Scale-`10¹⁶` instance of `RationalApprox.abs_intCast_div_pow`. -/
+private lemma abs_intCast_div16 (n : ℤ) :
+    |(n : ℚ) / 10 ^ 16| = ((|n| : ℤ) : ℚ) / 10 ^ 16 :=
+  RationalApprox.abs_intCast_div_pow 16 n
 
 /-- `cdiv` bounds the exact quotient from above. -/
 private lemma le_cdiv {n d : ℤ} (hd : (0:ℤ) < d) : (n : ℚ) / (d : ℚ) ≤ ((cdiv n d : ℤ) : ℚ) := by
@@ -172,10 +164,8 @@ private lemma natAbsDiff_offset_cast (x0 x1 x2 y0 y1 y2 : ℤ) (X0 X1 X2 Y0 Y1 Y
 
 /-- Sibling of `abs_intCast_div16` at the dot-product scale. -/
 private lemma abs_intCast_div29 (n : ℤ) :
-    |(n : ℚ) / 10 ^ 29| = ((|n| : ℤ) : ℚ) / 10 ^ 29 := by
-  rw [abs_div, abs_of_pos (by positivity : (0:ℚ) < (10:ℚ) ^ 29)]
-  push_cast
-  ring_nf
+    |(n : ℚ) / 10 ^ 29| = ((|n| : ℤ) : ℚ) / 10 ^ 29 :=
+  RationalApprox.abs_intCast_div_pow 29 n
 
 set_option maxHeartbeats 1600000 in
 /-- The crux of the fast path: a true `natTierBody` at one vertex implies the
@@ -446,35 +436,19 @@ private lemma natTierBody_sound
 private lemma round13_intCast_div26 (A : ℤ) (wd : ℕ) :
     RationalApprox.round13 ((A : ℚ) / (10 ^ 26 * (wd : ℚ)))
       = ((A / (10 ^ 13 * (wd : ℤ)) : ℤ) : ℚ) / 10 ^ 13 := by
-  have harg : (A : ℚ) / (10 ^ 26 * (wd : ℚ)) * 10 ^ 13
-      = (A : ℚ) / ((10 ^ 13 * wd : ℕ) : ℚ) := by
-    push_cast
-    rw [show (10:ℚ) ^ 26 * (wd : ℚ) = 10 ^ 13 * (10 ^ 13 * (wd : ℚ)) from by ring,
-      div_mul_eq_mul_div, mul_comm (A : ℚ) ((10:ℚ) ^ 13),
-      mul_div_mul_left _ _ (by norm_num : ((10:ℚ) ^ 13) ≠ 0)]
-    norm_num
-  have hfl : ⌊(A : ℚ) / (10 ^ 26 * (wd : ℚ)) * 10 ^ 13⌋ = A / (10 ^ 13 * (wd : ℤ)) := by
-    rw [harg, Rat.floor_intCast_div_natCast]
-    congr 1
-  unfold RationalApprox.round13
-  rw [hfl]
+  rw [show (10:ℚ) ^ 26 * (wd : ℚ) = 10 ^ 13 * ((10 ^ 13 * wd : ℕ) : ℚ) from by
+        push_cast; ring,
+    RationalApprox.round13_intCast_div,
+    show ((10 ^ 13 * wd : ℕ) : ℤ) = 10 ^ 13 * (wd : ℤ) from by push_cast; ring]
 
 /-- `round13` of an integer fraction over `10³⁹·wd` (G-entry scale). -/
 private lemma round13_intCast_div39 (A : ℤ) (wd : ℕ) :
     RationalApprox.round13 ((A : ℚ) / (10 ^ 39 * (wd : ℚ)))
       = ((A / (10 ^ 26 * (wd : ℤ)) : ℤ) : ℚ) / 10 ^ 13 := by
-  have harg : (A : ℚ) / (10 ^ 39 * (wd : ℚ)) * 10 ^ 13
-      = (A : ℚ) / ((10 ^ 26 * wd : ℕ) : ℚ) := by
-    push_cast
-    rw [show (10:ℚ) ^ 39 * (wd : ℚ) = 10 ^ 13 * (10 ^ 26 * (wd : ℚ)) from by ring,
-      div_mul_eq_mul_div, mul_comm (A : ℚ) ((10:ℚ) ^ 13),
-      mul_div_mul_left _ _ (by norm_num : ((10:ℚ) ^ 13) ≠ 0)]
-    norm_num
-  have hfl : ⌊(A : ℚ) / (10 ^ 39 * (wd : ℚ)) * 10 ^ 13⌋ = A / (10 ^ 26 * (wd : ℤ)) := by
-    rw [harg, Rat.floor_intCast_div_natCast]
-    congr 1
-  unfold RationalApprox.round13
-  rw [hfl]
+  rw [show (10:ℚ) ^ 39 * (wd : ℚ) = 10 ^ 13 * ((10 ^ 26 * wd : ℕ) : ℚ) from by
+        push_cast; ring,
+    RationalApprox.round13_intCast_div,
+    show ((10 ^ 26 * wd : ℕ) : ℤ) = 10 ^ 26 * (wd : ℤ) from by push_cast; ring]
 
 /-- `cdiv` of a nonnegative numerator is nonnegative. -/
 private lemma cdiv_nonneg {n d : ℤ} (hn : 0 ≤ n) (hd : (0:ℤ) < d) : 0 ≤ cdiv n d := by
@@ -1310,10 +1284,8 @@ variable {εθ₂ εφ₂ : ℚ}
 
 /-- `|·|` through a scale-`10¹³` integer fraction. -/
 private lemma abs_intCast_div13 (n : ℤ) :
-    |(n : ℚ) / 10 ^ 13| = ((|n| : ℤ) : ℚ) / 10 ^ 13 := by
-  rw [abs_div, abs_of_pos (by positivity : (0:ℚ) < (10:ℚ) ^ 13)]
-  push_cast
-  ring_nf
+    |(n : ℚ) / 10 ^ 13| = ((|n| : ℤ) : ℚ) / 10 ^ 13 :=
+  RationalApprox.abs_intCast_div_pow 13 n
 
 /-- The pipeline `kRhi` bounds `(εθ₂+εφ₂)³/6 + kappaTerm` from above. -/
 private lemma kR_bound :

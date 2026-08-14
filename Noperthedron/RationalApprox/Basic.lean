@@ -297,6 +297,45 @@ def _root_.Pose.rotM₁ℚℝ (p : Pose ℝ) : ℝ³ →L[ℝ] ℝ² := _root_.R
 def _root_.Pose.rotM₂ℚℝ (p : Pose ℝ) : ℝ³ →L[ℝ] ℝ² := _root_.RationalApprox.rotMℚℝ p.θ₂ p.φ₂
 end
 
+/-! ## Fixed-scale integer-cast helpers
+
+Shared by the `Nat` fast paths (`RationalApprox/GlobalNat.lean`,
+`Checker/LocalNat.lean`, `Checker/LocalFastNat.lean`): casts between the
+checkers' fixed-scale integer numerators and the ℚ reference values. -/
+
+/-- `|·|` through a scale-`10ᵏ` integer fraction. -/
+theorem abs_intCast_div_pow (k : ℕ) (n : ℤ) :
+    |(n : ℚ) / 10 ^ k| = ((|n| : ℤ) : ℚ) / 10 ^ k := by
+  rw [abs_div, abs_of_pos (by positivity : (0:ℚ) < (10:ℚ) ^ k)]
+  push_cast
+  ring_nf
+
+/-- `round13` of an integer fraction over `10¹³·D` is integer division by `D`
+(at scale `10¹³`). -/
+theorem round13_intCast_div (A : ℤ) (D : ℕ) :
+    round13 ((A : ℚ) / (10 ^ 13 * (D : ℚ))) = ((A / (D : ℤ) : ℤ) : ℚ) / 10 ^ 13 := by
+  have hfl : ⌊(A : ℚ) / (10 ^ 13 * (D : ℚ)) * 10 ^ 13⌋ = A / (D : ℤ) := by
+    rw [show (A : ℚ) / (10 ^ 13 * (D : ℚ)) * 10 ^ 13 = (A : ℚ) / ((D : ℕ) : ℚ) from by
+          rw [div_mul_eq_mul_div, mul_comm (A : ℚ) ((10:ℚ) ^ 13),
+            mul_div_mul_left _ _ (by norm_num : ((10:ℚ) ^ 13) ≠ 0)],
+      Rat.floor_intCast_div_natCast]
+  unfold round13
+  rw [hfl]
+
+/-- The raw `cond`/`ble`/`sub` form of `Int.natAbs (x - c)` used by the
+`Nat` tier loops. -/
+theorem cond_ble_sub_cast (x c : ℕ) :
+    ((cond (Nat.ble x c) (c - x) (x - c) : ℕ) : ℤ) = |(x : ℤ) - c| := by
+  rcases hb : Nat.ble x c with _ | _
+  · have h : ¬ x ≤ c := fun hle => by
+      rw [Nat.ble_eq_true_of_le hle] at hb
+      exact Bool.noConfusion hb
+    rw [cond_false, abs_of_nonneg (by omega : (0:ℤ) ≤ (x:ℤ) - c)]
+    omega
+  · have h : x ≤ c := Nat.ble_eq ▸ hb
+    rw [cond_true, abs_sub_comm, abs_of_nonneg (by omega : (0:ℤ) ≤ (c:ℤ) - x)]
+    omega
+
 structure UpperSqrt where
   f : ℚ → ℚ
   bound : ∀ (x : ℚ), 0 ≤ x → √x ≤ f x
