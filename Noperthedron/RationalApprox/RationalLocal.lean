@@ -127,57 +127,6 @@ lemma rotM₂Rℚ_c1 (p : Pose ℚ) (u : Fin 3 → ℚ) :
       ((matEntries p).m₁₀ * u 0 + (matEntries p).m₁₁ * u 1 + (matEntries p).m₁₂ * u 2) :=
   congrArg RationalApprox.round13 (congrFun (MatEntries.applyVec_eq p u) 1).symm
 
-/-- Bool-valued `Bεℚ` check that hoists per-pose matrix entries and
-per-`i` `M₂·Q_i` / sqrtUp norms out of the inner-`k` `decide`. The
-outer `Fin 3` loop short-circuits via `List.all`. -/
-def check {ι : Type} [Fintype ι] [DecidableEq ι] (Qi : Fin 3 → ι)
-    (v_ : ι → Fin 3 → ℚ) (p : Pose ℚ) (ε δ r : ℚ)
-    (approx : RationalApprox.Approx) : Bool :=
-  let entries := matEntries p
-  let bound := (δ + approx.upper_sqrt_five * ε) / r
-  (List.finRange 3).all fun i =>
-    let Qi_val := v_ (Qi i)
-    -- All intermediate values are bound as scalars: `Fin n → ℚ` values are
-    -- closures that would re-evaluate their components (vertex-coordinate
-    -- divisions, matrix-vector products, `round13` calls) on every access
-    -- in the `k`-loop below.
-    let q0 := RationalApprox.round13
-      (entries.m₀₀ * Qi_val 0 + entries.m₀₁ * Qi_val 1 + entries.m₀₂ * Qi_val 2)
-    let q1 := RationalApprox.round13
-      (entries.m₁₀ * Qi_val 0 + entries.m₁₁ * Qi_val 1 + entries.m₁₂ * Qi_val 2)
-    let denom1 := approx.upper_sqrt.f (q0 * q0 + q1 * q1) + approx.upper_sqrt_two * ε + 3 * κℚ
-    decide <| ∀ k : ι, k ≠ Qi i →
-      let dv := Qi_val - v_ k
-      let dv0 := dv 0
-      let dv1 := dv 1
-      let dv2 := dv 2
-      let d0 := RationalApprox.round13 (entries.m₀₀ * dv0 + entries.m₀₁ * dv1 + entries.m₀₂ * dv2)
-      let d1 := RationalApprox.round13 (entries.m₁₀ * dv0 + entries.m₁₁ * dv1 + entries.m₁₂ * dv2)
-      let n_dv := approx.upper_sqrt.f (dv0 * dv0 + dv1 * dv1 + dv2 * dv2)
-      let numer := q0 * d0 + q1 * d1 - 10 * κℚ
-                   - 2 * ε * (n_dv + 2 * κℚ) * (approx.upper_sqrt_two + ε)
-      let denom2 := approx.upper_sqrt.f (d0 * d0 + d1 * d1)
-                    + 2 * approx.upper_sqrt_two * ε + 6 * κℚ
-      bound < numer / (denom1 * denom2)
-
-theorem check_iff {ι : Type} [Fintype ι] [DecidableEq ι] (Qi : Fin 3 → ι)
-    (v_ : ι → Fin 3 → ℚ) (p : Pose ℚ) (ε δ r : ℚ) (approx : RationalApprox.Approx) :
-    check Qi v_ p ε δ r approx = true ↔ Bεℚ Qi v_ p ε δ r approx := by
-  unfold check Bεℚ Bεℚ.lhs
-  simp only [List.all_eq_true, List.mem_finRange, forall_const, decide_eq_true_eq]
-  refine forall_congr' (fun i => ?_)
-  refine forall_congr' (fun k => ?_)
-  refine forall_congr' (fun _ => ?_)
-  rw [← rotM₂Rℚ_c0 p (v_ (Qi i)), ← rotM₂Rℚ_c1 p (v_ (Qi i)),
-      ← rotM₂Rℚ_c0 p (v_ (Qi i) - v_ k), ← rotM₂Rℚ_c1 p (v_ (Qi i) - v_ k)]
-  simp only [RationalApprox.UpperSqrt.norm, dotProduct, Fin.sum_univ_two, Fin.sum_univ_three]
-
-instance instDecidable {ι : Type} [Fintype ι] [DecidableEq ι]
-    (Qi : Fin 3 → ι) (v_ : ι → Fin 3 → ℚ)
-    (p : Pose ℚ) (ε δ r : ℚ) (approx : RationalApprox.Approx) :
-    Decidable (Bεℚ Qi v_ p ε δ r approx) :=
-  decidable_of_iff _ (check_iff Qi v_ p ε δ r approx)
-
 end TriangleQ.Bεℚ
 
 end Local

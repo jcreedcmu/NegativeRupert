@@ -12,27 +12,26 @@ public meta import Noperthedron.RationalApprox.Basic
 
 
 /-!
-# Rational square-root approximations (§7.2.2 of [SY25])
+# Lower rational square root (§7.2.2 of [SY25])
 
-We define computable upper and lower rational square-root functions,
-following Definition 47 and §7.2.2 of SY25.
+We define a computable lower rational square-root function, following
+Definition 47 and §7.2.2 of SY25:
 
-For all `x : ℚ` with `0 ≤ x`:
+  `sqrtℚLow x ≤ √(x : ℝ)` for `0 ≤ x`,
 
-  `sqrtℚLow x ≤ √(x : ℝ) ≤ sqrtℚUp x`,
-
-and both functions return `0` on negative input (matching the convention used
-by `Real.sqrt`).
+returning `0` on negative input (matching the convention used by
+`Real.sqrt`). The companion *upper* square root of the checkers is the
+fixed-point `sqrtℚUp16` in `Checker/SqrtFixed.lean` (which superseded the
+`1 / sqrtℚLow (1/x)` construction this file originally carried).
 
 ## Construction
 
-* `x = 0` ↦ both return `0`.
+* `x = 0` ↦ `0`.
 * `x > 0`: write `x = p/q` (in lowest terms, `p, q > 0`). We find the unique
   integer `a` such that `p · 100^a / q ∈ [10^20, 10^22)`, then compute
     `m := ⌊p · 100^a / q⌋`,
     `b := ⌊√m⌋`,
-    `sqrtℚLow x := b · 10^(-a)`,
-    `sqrtℚUp  x := 1 / sqrtℚLow (1/x)`.
+    `sqrtℚLow x := b · 10^(-a)`.
   This guarantees ten decimal digits of accuracy.
 
 The implementation works in pure ℕ-arithmetic for the scale search, avoiding
@@ -94,30 +93,6 @@ def sqrtℚLow (x : ℚ) : ℚ :=
     let fuel : ℕ := Nat.log 10 p + Nat.log 10 q + 100
     sqrtℚLowImpl p q fuel
 
-/-- **Upper rational square-root** (`√⁺`): returns `0` on `x ≤ 0`; otherwise
-returns a rational `r` with `√x ≤ r`, defined as `1 / √⁻ (1/x)`. -/
-def sqrtℚUp (x : ℚ) : ℚ :=
-  if x ≤ 0 then 0
-  else 1 / sqrtℚLow (1 / x)
-
-/-! ## Norms induced on rational vectors
-
-The paper uses, for `Z ∈ ℚⁿ`:
-  `‖Z‖₊ := √⁺ ‖Z‖²`,  `‖Z‖₋ := √⁻ ‖Z‖²`.
--/
-
-/-- Squared Euclidean norm of a rational vector, taking values in `ℚ`. -/
-def normSqℚ {n : ℕ} (v : Fin n → ℚ) : ℚ :=
-  ∑ i, v i * v i
-
-/-- Lower-rational Euclidean norm: `‖v‖₋ ≤ ‖v‖`. -/
-def normLowℚ {n : ℕ} (v : Fin n → ℚ) : ℚ :=
-  sqrtℚLow (normSqℚ v)
-
-/-- Upper-rational Euclidean norm: `‖v‖ ≤ ‖v‖₊`. -/
-def normUpℚ {n : ℕ} (v : Fin n → ℚ) : ℚ :=
-  sqrtℚUp (normSqℚ v)
-
 /-! ## Search-loop invariants -/
 
 /-- Each step of `shiftUpAux` multiplies `num` by 100 and increments `k` by 1.
@@ -162,94 +137,7 @@ private lemma shiftDownAux_invariant (numDivHi : ℕ) :
       · simp only [shiftDownAux, if_neg h]
         rw [hs_den, pow_succ]; ring
 
-/-- Up-search termination: if the available fuel is enough to amplify `num` past
-`threshold`, then the result satisfies `num' ≥ threshold`. -/
-private lemma shiftUpAux_terminates (threshold : ℕ) :
-    ∀ (num k fuel : ℕ), threshold ≤ num * 100 ^ fuel →
-      threshold ≤ (shiftUpAux threshold num k fuel).2 := by
-  intro num k fuel
-  induction fuel generalizing num k with
-  | zero =>
-    intro h
-    simp only [shiftUpAux]
-    simpa using h
-  | succ f ih =>
-    intro h
-    by_cases hnum : num ≥ threshold
-    · simp [shiftUpAux, hnum]
-    · simp only [shiftUpAux, if_neg hnum]
-      apply ih
-      have hrw : num * 100 ^ (f + 1) = num * 100 * 100 ^ f := by
-        rw [pow_succ]; ring
-      rw [hrw] at h; exact h
-
-/-- Down-search termination: if the available fuel is enough to amplify `den` past
-`numDivHi`, then the result satisfies `numDivHi < den'`. -/
-private lemma shiftDownAux_terminates (numDivHi : ℕ) :
-    ∀ (den k fuel : ℕ), numDivHi < den * 100 ^ fuel →
-      numDivHi < (shiftDownAux numDivHi den k fuel).2 := by
-  intro den k fuel
-  induction fuel generalizing den k with
-  | zero =>
-    intro h
-    simp only [shiftDownAux]
-    simpa using h
-  | succ f ih =>
-    intro h
-    by_cases hd : numDivHi < den
-    · simp [shiftDownAux, hd]
-    · simp only [shiftDownAux, if_neg hd]
-      apply ih
-      have hrw : den * 100 ^ (f + 1) = den * 100 * 100 ^ f := by
-        rw [pow_succ]; ring
-      rw [hrw] at h; exact h
-
-/-- Bound on the down-search result: `den_final ≤ max den₀ (100 · numDivHi)`.
-This holds unconditionally — if we never step the result is `den₀`; if we step
-the previous value `den_prev` satisfied `den_prev ≤ numDivHi`, so the new
-value is `100 · den_prev ≤ 100 · numDivHi`. -/
-private lemma shiftDownAux_le_max (numDivHi : ℕ) :
-    ∀ (den k fuel : ℕ),
-      (shiftDownAux numDivHi den k fuel).2 ≤ max den (100 * numDivHi) := by
-  intro den k fuel
-  induction fuel generalizing den k with
-  | zero =>
-    simp only [shiftDownAux]
-    exact le_max_left _ _
-  | succ f ih =>
-    by_cases h : numDivHi < den
-    · simp only [shiftDownAux, if_pos h]; exact le_max_left _ _
-    · simp only [shiftDownAux, if_neg h]
-      push Not at h
-      -- h : den ≤ numDivHi
-      have hih := ih (den := den * 100) (k := k + 1)
-      -- den * 100 ≤ 100 * numDivHi (commute & multiply)
-      have h_step : den * 100 ≤ 100 * numDivHi := by
-        rw [mul_comm den 100]; exact Nat.mul_le_mul_left _ h
-      calc (shiftDownAux numDivHi (den * 100) (k + 1) f).2
-          ≤ max (den * 100) (100 * numDivHi) := hih
-        _ ≤ 100 * numDivHi := max_le h_step (le_refl _)
-        _ ≤ max den (100 * numDivHi) := le_max_right _ _
-
-/-! ## Basic non-negativity -/
-
-private lemma sqrtℚLowImpl_nonneg (p q fuel : ℕ) : 0 ≤ sqrtℚLowImpl p q fuel := by
-  unfold sqrtℚLowImpl
-  positivity
-
-theorem sqrtℚLow_nonneg (x : ℚ) : 0 ≤ sqrtℚLow x := by
-  unfold sqrtℚLow
-  split_ifs with h
-  · exact le_refl 0
-  · exact sqrtℚLowImpl_nonneg _ _ _
-
-theorem sqrtℚUp_nonneg (x : ℚ) : 0 ≤ sqrtℚUp x := by
-  unfold sqrtℚUp
-  split_ifs with h
-  · exact le_refl 0
-  · exact div_nonneg zero_le_one (sqrtℚLow_nonneg _)
-
-/-! ## Squared lower bound and positivity
+/-! ## Squared lower bound
 
 The bound `(sqrtℚLow x)^2 ≤ x` follows uniformly from a single algebraic fact:
 in each branch we maintain a positive `(num, den) : ℕ × ℕ` with
@@ -382,370 +270,9 @@ theorem sqrtℚLow_le_sqrt {x : ℚ} (hx : 0 ≤ x) :
   apply Real.le_sqrt_of_sq_le
   exact sqrtℚLow_sq_le x hx
 
-/-! ### Positivity of `sqrtℚLow` for positive input
-
-The proof uses the fuel-sufficient termination of the search to ensure the
-integer floor `m` of `x · 100^a` is at least `lo = 10^20 ≥ 1`. -/
-
-private lemma lo_pos : 1 ≤ lo := by unfold lo; norm_num
-
-private lemma hi_pos : 1 ≤ hi := by unfold hi; norm_num
-
-private lemma hundred_pow_eq (n : ℕ) : (100 : ℕ) ^ n = 10 ^ (2 * n) := by
-  rw [show (100 : ℕ) = 10 ^ 2 from rfl, ← pow_mul]
-
-/-- For `p, q > 0`, the implementation is positive provided the fuel exceeds
-`Nat.log 10 p + Nat.log 10 q + 100`. -/
-private lemma sqrtℚLowImpl_pos (p q fuel : ℕ) (hp : 0 < p) (hq : 0 < q)
-    (hfuel : Nat.log 10 p + Nat.log 10 q + 100 ≤ fuel) :
-    0 < sqrtℚLowImpl p q fuel := by
-  have hp_lt : p < 10 ^ (Nat.log 10 p + 1) := Nat.lt_pow_succ_log_self (by norm_num) p
-  have hq_lt : q < 10 ^ (Nat.log 10 q + 1) := Nat.lt_pow_succ_log_self (by norm_num) q
-  -- 100^fuel ≥ 10^(N + 1) and 10^(D + 21)
-  have h100_ge_p : (10 : ℕ) ^ (Nat.log 10 p + 1) ≤ 100 ^ fuel := by
-    rw [hundred_pow_eq]
-    apply Nat.pow_le_pow_right (by norm_num : 1 ≤ 10); omega
-  have h100_ge_loq : (10 : ℕ) ^ (Nat.log 10 q + 21) ≤ 100 ^ fuel := by
-    rw [hundred_pow_eq]
-    apply Nat.pow_le_pow_right (by norm_num : 1 ≤ 10); omega
-  unfold sqrtℚLowImpl
-  split_ifs with hbr1 hbr2
-  · -- Up-search branch
-    set res := shiftUpAux (lo * q) p 0 fuel
-    -- num ≥ lo * q
-    have hterm : lo * q ≤ res.2 := by
-      apply shiftUpAux_terminates
-      have h1 : lo * q ≤ 10 ^ 20 * 10 ^ (Nat.log 10 q + 1) :=
-        Nat.mul_le_mul_left _ (Nat.le_of_lt hq_lt)
-      have h2 : (10 : ℕ) ^ 20 * 10 ^ (Nat.log 10 q + 1) = 10 ^ (Nat.log 10 q + 21) := by
-        rw [← pow_add]; congr 1; omega
-      calc lo * q
-          ≤ 10 ^ 20 * 10 ^ (Nat.log 10 q + 1) := h1
-        _ = 10 ^ (Nat.log 10 q + 21) := h2
-        _ ≤ 100 ^ fuel := h100_ge_loq
-        _ ≤ p * 100 ^ fuel := Nat.le_mul_of_pos_left _ hp
-    have hnum_ge : lo ≤ res.2 / q := by
-      rwa [← Nat.le_div_iff_mul_le hq] at hterm
-    have hb_pos : 1 ≤ Nat.sqrt (res.2 / q) :=
-      Nat.le_sqrt'.mpr (le_trans lo_pos hnum_ge)
-    positivity
-  · -- Branch 2: a = 0
-    push Not at hbr1
-    have hpq_ge : lo ≤ p / q := (Nat.le_div_iff_mul_le hq).mpr hbr1
-    have hb_pos : 1 ≤ Nat.sqrt (p / q) := Nat.le_sqrt'.mpr (le_trans lo_pos hpq_ge)
-    exact_mod_cast hb_pos
-  · -- Branch 3: down-search
-    push Not at hbr1 hbr2
-    -- hbr1 : lo * q ≤ p,  hbr2 : hi * q ≤ p
-    set res := shiftDownAux (p / hi) q 0 fuel
-    -- Bound res.2: by the unconditional max bound, res.2 ≤ max q (100 * (p/hi)) ≤ p.
-    have hres2_le_p : res.2 ≤ p := by
-      have hbound : res.2 ≤ max q (100 * (p / hi)) := shiftDownAux_le_max _ _ _ _
-      have hq_le_p : q ≤ p := le_of_mul_le_of_one_le_right hbr2 hi_pos
-      have h100_le_p : 100 * (p / hi) ≤ p := by
-        have hhi_ge_100 : 100 ≤ hi := by unfold hi; norm_num
-        have : p / hi ≤ p / 100 := Nat.div_le_div_left hhi_ge_100 (by norm_num)
-        calc 100 * (p / hi) ≤ 100 * (p / 100) := Nat.mul_le_mul_left _ this
-          _ ≤ p := Nat.mul_div_le _ _
-      calc res.2 ≤ max q (100 * (p / hi)) := hbound
-        _ ≤ p := max_le hq_le_p h100_le_p
-    -- res.2 must be positive (it equals q * 100^s for some s)
-    obtain ⟨s, _, _, hden_eq⟩ := shiftDownAux_invariant (p / hi) q 0 fuel
-    have hres2_pos : 0 < res.2 := by
-      have h : res.2 = q * 100 ^ s := hden_eq
-      rw [h]; positivity
-    -- p / res.2 ≥ 1
-    have hpd : 1 ≤ p / res.2 := (Nat.one_le_div_iff hres2_pos).mpr hres2_le_p
-    positivity
-
-/-- For `x > 0`, `sqrtℚLow x > 0`. -/
-private lemma sqrtℚLow_pos_of_pos {y : ℚ} (hy : 0 < y) : 0 < sqrtℚLow y := by
-  rw [sqrtℚLow]
-  rw [if_neg (not_le.mpr hy)]
-  apply sqrtℚLowImpl_pos
-  · -- 0 < y.num.toNat
-    exact Int.pos_iff_toNat_pos.mp (Rat.num_pos.mpr hy)
-  · exact y.pos
-  · exact le_refl _
-
-/-- `√x ≤ √⁺ x` for `x ≥ 0` (Definition 47). -/
-theorem sqrt_le_sqrtℚUp {x : ℚ} (hx : 0 ≤ x) :
-    Real.sqrt ((x : ℚ) : ℝ) ≤ ((sqrtℚUp x : ℚ) : ℝ) := by
-  unfold sqrtℚUp
-  split_ifs with hx0
-  · -- x ≤ 0 and 0 ≤ x → x = 0; sqrt 0 = 0.
-    have : x = 0 := le_antisymm hx0 hx
-    simp [this]
-  · -- 0 < x
-    have hx0' : 0 < x := lt_of_le_of_ne hx (fun heq => hx0 (by simp [← heq]))
-    set y : ℚ := 1 / x with hy_def
-    have hy_pos : 0 < y := by rw [hy_def]; exact one_div_pos.mpr hx0'
-    have hy_nonneg : 0 ≤ y := le_of_lt hy_pos
-    have hLow_pos_Q : 0 < sqrtℚLow y := sqrtℚLow_pos_of_pos hy_pos
-    have hLow_pos_R : (0 : ℝ) < ((sqrtℚLow y : ℚ) : ℝ) := mod_cast hLow_pos_Q
-    have hsq : ((sqrtℚLow y : ℚ) : ℝ) ^ 2 ≤ ((y : ℚ) : ℝ) := sqrtℚLow_sq_le y hy_nonneg
-    have hx_R_pos : (0 : ℝ) < ((x : ℚ) : ℝ) := mod_cast hx0'
-    have hy_R : ((y : ℚ) : ℝ) = 1 / ((x : ℚ) : ℝ) := by
-      rw [hy_def]; push_cast; ring
-    have hcast : (((1 / sqrtℚLow y : ℚ) : ℝ)) = 1 / ((sqrtℚLow y : ℚ) : ℝ) := by
-      push_cast; ring
-    rw [hcast]
-    rw [le_div_iff₀ hLow_pos_R]
-    have hsq' : ((sqrtℚLow y : ℚ) : ℝ) ^ 2 ≤ 1 / ((x : ℚ) : ℝ) := by rw [← hy_R]; exact hsq
-    rw [le_div_iff₀ hx_R_pos] at hsq'
-    have hprod_nn : 0 ≤ Real.sqrt ((x : ℚ) : ℝ) * ((sqrtℚLow y : ℚ) : ℝ) :=
-      mul_nonneg (Real.sqrt_nonneg _) (le_of_lt hLow_pos_R)
-    have h_sq_eq : (Real.sqrt ((x : ℚ) : ℝ) * ((sqrtℚLow y : ℚ) : ℝ)) ^ 2 =
-        ((sqrtℚLow y : ℚ) : ℝ) ^ 2 * ((x : ℚ) : ℝ) := by
-      rw [mul_pow, Real.sq_sqrt (le_of_lt hx_R_pos)]; ring
-    rw [← sq_le_one_iff₀ hprod_nn, h_sq_eq]
-    exact hsq'
-
-/-! ### Crude upper accuracy: `√⁺ x ≤ 2·√x`
-
-Each branch of the implementation returns `b · 10^E` with `b = ⌊√m⌋` and
-`m = ⌊x' ⌋ ≥ 1` for the rescaled input `x' = x · 100^a`, so it loses less
-than a factor of two: `√x' < √(m+1) ≤ b + 1 ≤ 2b`. Hence `√x ≤ 2·√⁻ x`,
-and applying this to `√⁻ (1/x)` gives the certified *upper* bound
-`√⁺ x = 1/√⁻(1/x) ≤ 2·√x`. The rational corollaries
-`le_mul_self_sqrtℚUp` and `sqrtℚUp_le_two_mul_of_le_mul_self` let a checker
-bound a `sqrtℚUp` value from above without evaluating it (see the cheap
-`Bεℚ` denominator test in `Checker/Local.lean`). -/
-
-/-- Core step: if `m = ⌊numN/denN⌋ ≥ 1` and `(numN : ℝ) = xR · 100^a · denN`,
-then `√xR ≤ 2 · √m · 10^(-a)`. -/
-private lemma sqrt_le_two_aux (xR : ℝ) (a : ℤ) (numN denN m : ℕ)
-    (hxR : 0 ≤ xR) (hden : 0 < denN)
-    (hscaled : (numN : ℝ) = xR * (100 : ℝ) ^ a * (denN : ℝ))
-    (hm_eq : m = numN / denN) (hm1 : 1 ≤ m) :
-    Real.sqrt xR ≤ 2 * (Nat.sqrt m : ℝ) * (10 : ℝ) ^ (-a) := by
-  set b := Nat.sqrt m with hb_def
-  have hb1 : 1 ≤ b := Nat.le_sqrt'.mpr (by simpa using hm1)
-  -- Floor overshoot: numN < (m+1) · denN.
-  have hlt : numN < (m + 1) * denN := by
-    rw [hm_eq]
-    calc numN = denN * (numN / denN) + numN % denN := (Nat.div_add_mod _ _).symm
-      _ < denN * (numN / denN) + denN := Nat.add_lt_add_left (Nat.mod_lt _ hden) _
-      _ = (numN / denN + 1) * denN := by ring
-  have hdenR : (0 : ℝ) < (denN : ℝ) := mod_cast hden
-  have hYlt : xR * (100 : ℝ) ^ a < (m : ℝ) + 1 := by
-    have h : (numN : ℝ) < ((m : ℝ) + 1) * (denN : ℝ) := by exact_mod_cast hlt
-    rw [hscaled] at h
-    exact lt_of_mul_lt_mul_right h (le_of_lt hdenR)
-  -- √(xR · 100^a) < b + 1 ≤ 2b.
-  have hm_succ : (m : ℝ) + 1 ≤ ((b : ℝ) + 1) ^ 2 := by
-    have h : m + 1 ≤ (b + 1) * (b + 1) := Nat.lt_succ_sqrt m
-    calc (m : ℝ) + 1 ≤ ((b : ℝ) + 1) * ((b : ℝ) + 1) := by exact_mod_cast h
-      _ = ((b : ℝ) + 1) ^ 2 := (sq ((b : ℝ) + 1)).symm
-  have hsqY : Real.sqrt (xR * (100 : ℝ) ^ a) ≤ 2 * (b : ℝ) := by
-    have h1 : xR * (100 : ℝ) ^ a < ((b : ℝ) + 1) ^ 2 := lt_of_lt_of_le hYlt hm_succ
-    have h2 : Real.sqrt (xR * (100 : ℝ) ^ a) < (b : ℝ) + 1 :=
-      (Real.sqrt_lt' (by positivity)).mpr h1
-    have h3 : (1 : ℝ) ≤ (b : ℝ) := mod_cast hb1
-    linarith
-  -- Unscale: √xR = √(xR · 100^a) · 10^(-a).
-  have h100a_nn : (0 : ℝ) ≤ (100 : ℝ) ^ a := le_of_lt (zpow_pos (by norm_num) _)
-  have hsqrt100 : Real.sqrt ((100 : ℝ) ^ (-a)) = (10 : ℝ) ^ (-a) := by
-    rw [show (100 : ℝ) ^ (-a) = ((10 : ℝ) ^ (-a)) ^ 2 from by
-      rw [show ((10 : ℝ) ^ (-a)) ^ 2 = (10 : ℝ) ^ (-a + -a) from by
-        rw [zpow_add₀ (by norm_num : (10 : ℝ) ≠ 0), pow_two],
-        show (100 : ℝ) = 10 ^ 2 from by norm_num,
-        ← zpow_natCast (10 : ℝ) 2, ← zpow_mul]
-      ring_nf]
-    exact Real.sqrt_sq (le_of_lt (zpow_pos (by norm_num) _))
-  have hsplit : Real.sqrt xR = Real.sqrt (xR * (100 : ℝ) ^ a) * (10 : ℝ) ^ (-a) := by
-    rw [← hsqrt100, ← Real.sqrt_mul (by positivity)]
-    congr 1
-    rw [mul_assoc, ← zpow_add₀ (by norm_num : (100 : ℝ) ≠ 0)]
-    simp
-  rw [hsplit]
-  have h10a_pos : (0 : ℝ) < (10 : ℝ) ^ (-a) := zpow_pos (by norm_num) _
-  exact (mul_le_mul_iff_of_pos_right h10a_pos).mpr hsqY
-
-/-- Crude lower accuracy of the implementation: `√(p/q) ≤ 2 · sqrtℚLowImpl`,
-provided the fuel suffices (as in `sqrtℚLowImpl_pos`). -/
-private lemma sqrt_le_two_mul_sqrtℚLowImpl (p q fuel : ℕ) (hp : 0 < p) (hq : 0 < q)
-    (hfuel : Nat.log 10 p + Nat.log 10 q + 100 ≤ fuel) :
-    Real.sqrt ((p : ℝ) / (q : ℝ)) ≤ 2 * ((sqrtℚLowImpl p q fuel : ℚ) : ℝ) := by
-  have hq_ne : (q : ℝ) ≠ 0 := ne_of_gt (mod_cast hq)
-  have hpq_nn : (0 : ℝ) ≤ (p : ℝ) / (q : ℝ) := by positivity
-  have hq_lt : q < 10 ^ (Nat.log 10 q + 1) := Nat.lt_pow_succ_log_self (by norm_num) q
-  have h100_ge_loq : (10 : ℕ) ^ (Nat.log 10 q + 21) ≤ 100 ^ fuel := by
-    rw [hundred_pow_eq]
-    apply Nat.pow_le_pow_right (by norm_num : 1 ≤ 10); omega
-  unfold sqrtℚLowImpl
-  split_ifs with hbr1 hbr2
-  · -- Branch 1: up-search.
-    obtain ⟨s, _, hk_eq, hnum_eq⟩ := shiftUpAux_invariant (lo * q) p 0 fuel
-    set res := shiftUpAux (lo * q) p 0 fuel
-    have hnum : res.2 = p * 100 ^ s := by simp [hnum_eq]
-    -- Termination: lo · q ≤ res.2, so m = res.2/q ≥ lo ≥ 1.
-    have hterm : lo * q ≤ res.2 := by
-      apply shiftUpAux_terminates
-      have h1 : lo * q ≤ 10 ^ 20 * 10 ^ (Nat.log 10 q + 1) :=
-        Nat.mul_le_mul_left _ (Nat.le_of_lt hq_lt)
-      have h2 : (10 : ℕ) ^ 20 * 10 ^ (Nat.log 10 q + 1) = 10 ^ (Nat.log 10 q + 21) := by
-        rw [← pow_add]; congr 1; omega
-      calc lo * q ≤ 10 ^ (Nat.log 10 q + 21) := h2 ▸ h1
-        _ ≤ 100 ^ fuel := h100_ge_loq
-        _ ≤ p * 100 ^ fuel := Nat.le_mul_of_pos_left _ hp
-    have hm1 : 1 ≤ res.2 / q :=
-      le_trans lo_pos ((Nat.le_div_iff_mul_le hq).mpr hterm)
-    have hcast :
-        (((Nat.sqrt (res.2 / q) : ℚ) * (10 : ℚ) ^ (-(res.1 : ℤ)) : ℚ) : ℝ)
-        = ((Nat.sqrt (res.2 / q) : ℝ)) * (10 : ℝ) ^ (-(res.1 : ℤ)) := by
-      push_cast; rfl
-    rw [hcast, show (2 : ℝ) * ((Nat.sqrt (res.2 / q) : ℝ) * (10 : ℝ) ^ (-(res.1 : ℤ)))
-        = 2 * (Nat.sqrt (res.2 / q) : ℝ) * (10 : ℝ) ^ (-(res.1 : ℤ)) from by ring]
-    apply sqrt_le_two_aux ((p : ℝ) / q) (res.1 : ℤ) res.2 q (res.2 / q) hpq_nn hq _ rfl hm1
-    rw [hnum, show res.1 = s from by simp [hk_eq]]
-    push_cast
-    rw [zpow_natCast]
-    field_simp
-  · -- Branch 2: in-window, a = 0.
-    have hm1 : 1 ≤ p / q := by
-      push Not at hbr1
-      exact le_trans lo_pos ((Nat.le_div_iff_mul_le hq).mpr hbr1)
-    have hcast : ((Nat.sqrt (p / q) : ℚ) : ℝ) = (Nat.sqrt (p / q) : ℝ) := by push_cast; rfl
-    rw [hcast, show (2 : ℝ) * (Nat.sqrt (p / q) : ℝ)
-        = 2 * (Nat.sqrt (p / q) : ℝ) * (10 : ℝ) ^ (-(0 : ℤ)) from by simp]
-    apply sqrt_le_two_aux ((p : ℝ) / q) (0 : ℤ) p q (p / q) hpq_nn hq _ rfl hm1
-    field_simp
-  · -- Branch 3: down-search, a = res.1.
-    push Not at hbr1 hbr2
-    obtain ⟨s, _, hk_eq, hden_eq⟩ := shiftDownAux_invariant (p / hi) q 0 fuel
-    set res := shiftDownAux (p / hi) q 0 fuel
-    have hden : res.2 = q * 100 ^ s := by simp [hden_eq]
-    have hden_pos : 0 < res.2 := by rw [hden]; positivity
-    -- res.2 ≤ p, so m = p/res.2 ≥ 1 (as in `sqrtℚLowImpl_pos`).
-    have hres2_le_p : res.2 ≤ p := by
-      have hbound : res.2 ≤ max q (100 * (p / hi)) := shiftDownAux_le_max _ _ _ _
-      have hq_le_p : q ≤ p := le_of_mul_le_of_one_le_right hbr2 hi_pos
-      have h100_le_p : 100 * (p / hi) ≤ p := by
-        have hhi_ge_100 : 100 ≤ hi := by unfold hi; norm_num
-        have h : p / hi ≤ p / 100 := Nat.div_le_div_left hhi_ge_100 (by norm_num)
-        calc 100 * (p / hi) ≤ 100 * (p / 100) := Nat.mul_le_mul_left _ h
-          _ ≤ p := Nat.mul_div_le _ _
-      calc res.2 ≤ max q (100 * (p / hi)) := hbound
-        _ ≤ p := max_le hq_le_p h100_le_p
-    have hm1 : 1 ≤ p / res.2 := (Nat.one_le_div_iff hden_pos).mpr hres2_le_p
-    have hcast :
-        (((Nat.sqrt (p / res.2) : ℚ) * (10 : ℚ) ^ (res.1 : ℤ) : ℚ) : ℝ)
-        = ((Nat.sqrt (p / res.2) : ℝ)) * (10 : ℝ) ^ (-(-(res.1 : ℤ))) := by
-      push_cast; rw [neg_neg]
-    rw [hcast, show (2 : ℝ) * ((Nat.sqrt (p / res.2) : ℝ) * (10 : ℝ) ^ (-(-(res.1 : ℤ))))
-        = 2 * (Nat.sqrt (p / res.2) : ℝ) * (10 : ℝ) ^ (-(-(res.1 : ℤ))) from by ring]
-    apply sqrt_le_two_aux ((p : ℝ) / q) (-(res.1 : ℤ)) p res.2 (p / res.2)
-      hpq_nn hden_pos _ rfl hm1
-    rw [hden, show res.1 = s from by simp [hk_eq]]
-    push_cast
-    rw [zpow_neg, zpow_natCast]
-    have h100ne' : ((100 : ℝ)) ^ s ≠ 0 := pow_ne_zero _ (by norm_num)
-    field_simp
-
-/-- Crude lower accuracy: `√y ≤ 2·√⁻ y` for `y > 0`. -/
-theorem sqrt_le_two_mul_sqrtℚLow {y : ℚ} (hy : 0 < y) :
-    Real.sqrt ((y : ℚ) : ℝ) ≤ 2 * ((sqrtℚLow y : ℚ) : ℝ) := by
-  rw [sqrtℚLow, if_neg (not_le.mpr hy)]
-  have hp : 0 < y.num.toNat := Int.pos_iff_toNat_pos.mp (Rat.num_pos.mpr hy)
-  have h := sqrt_le_two_mul_sqrtℚLowImpl y.num.toNat y.den
-    (Nat.log 10 y.num.toNat + Nat.log 10 y.den + 100) hp y.pos (le_refl _)
-  rwa [rat_pos_eq y hy] at h
-
-/-- Crude upper accuracy: `√⁺ x ≤ 2·√x`. -/
-theorem sqrtℚUp_le_two_mul_sqrt (x : ℚ) :
-    ((sqrtℚUp x : ℚ) : ℝ) ≤ 2 * Real.sqrt ((x : ℚ) : ℝ) := by
-  rw [sqrtℚUp]
-  split_ifs with hx0
-  · push_cast
-    positivity
-  · push Not at hx0
-    set y : ℚ := 1 / x with hy_def
-    have hy_pos : 0 < y := one_div_pos.mpr hx0
-    have hL_pos : 0 < sqrtℚLow y := sqrtℚLow_pos_of_pos hy_pos
-    have hL_posR : (0 : ℝ) < ((sqrtℚLow y : ℚ) : ℝ) := mod_cast hL_pos
-    have h2L : Real.sqrt ((y : ℚ) : ℝ) ≤ 2 * ((sqrtℚLow y : ℚ) : ℝ) :=
-      sqrt_le_two_mul_sqrtℚLow hy_pos
-    have hx_posR : (0 : ℝ) < ((x : ℚ) : ℝ) := mod_cast hx0
-    have hsx_pos : (0 : ℝ) < Real.sqrt ((x : ℚ) : ℝ) := Real.sqrt_pos.mpr hx_posR
-    -- √x · √y = 1
-    have hxy : Real.sqrt ((x : ℚ) : ℝ) * Real.sqrt ((y : ℚ) : ℝ) = 1 := by
-      rw [← Real.sqrt_mul (le_of_lt hx_posR)]
-      rw [show ((x : ℚ) : ℝ) * ((y : ℚ) : ℝ) = 1 from by
-        rw [hy_def]; push_cast; field_simp]
-      exact Real.sqrt_one
-    have hcast : (((1 / sqrtℚLow y : ℚ) : ℝ)) = 1 / ((sqrtℚLow y : ℚ) : ℝ) := by
-      push_cast; ring
-    rw [hcast, div_le_iff₀ hL_posR]
-    -- 1 = √x·√y ≤ √x·(2L) = (2√x)·L
-    calc (1 : ℝ) = Real.sqrt ((x : ℚ) : ℝ) * Real.sqrt ((y : ℚ) : ℝ) := hxy.symm
-      _ ≤ Real.sqrt ((x : ℚ) : ℝ) * (2 * ((sqrtℚLow y : ℚ) : ℝ)) :=
-        mul_le_mul_of_nonneg_left h2L (Real.sqrt_nonneg _)
-      _ = 2 * Real.sqrt ((x : ℚ) : ℝ) * ((sqrtℚLow y : ℚ) : ℝ) := by ring
-
-/-- Rational lower bound on the square of `√⁺`: `x ≤ √⁺x · √⁺x` for `0 ≤ x`. -/
-theorem le_mul_self_sqrtℚUp {x : ℚ} (hx : 0 ≤ x) : x ≤ sqrtℚUp x * sqrtℚUp x := by
-  have h : Real.sqrt ((x : ℚ) : ℝ) ≤ ((sqrtℚUp x : ℚ) : ℝ) := sqrt_le_sqrtℚUp hx
-  have hxR : (0 : ℝ) ≤ ((x : ℚ) : ℝ) := mod_cast hx
-  have hR : ((x : ℚ) : ℝ) ≤ ((sqrtℚUp x : ℚ) : ℝ) * ((sqrtℚUp x : ℚ) : ℝ) := by
-    calc ((x : ℚ) : ℝ) = Real.sqrt ((x : ℚ) : ℝ) * Real.sqrt ((x : ℚ) : ℝ) :=
-          (Real.mul_self_sqrt hxR).symm
-      _ ≤ ((sqrtℚUp x : ℚ) : ℝ) * ((sqrtℚUp x : ℚ) : ℝ) :=
-          mul_le_mul h h (Real.sqrt_nonneg _) (le_trans (Real.sqrt_nonneg _) h)
-  exact_mod_cast hR
-
-/-- Crude computable upper bound on `√⁺`: if `x ≤ Y·Y` with `0 ≤ Y`, then
-`√⁺x ≤ 2·Y`. Lets a checker bound `sqrtℚUp x` without evaluating it. -/
-theorem sqrtℚUp_le_two_mul_of_le_mul_self {x Y : ℚ} (hY : 0 ≤ Y) (h : x ≤ Y * Y) :
-    sqrtℚUp x ≤ 2 * Y := by
-  have h1 : ((sqrtℚUp x : ℚ) : ℝ) ≤ 2 * Real.sqrt ((x : ℚ) : ℝ) := sqrtℚUp_le_two_mul_sqrt x
-  have h2 : Real.sqrt ((x : ℚ) : ℝ) ≤ ((Y : ℚ) : ℝ) := by
-    rw [show ((Y : ℚ) : ℝ) = Real.sqrt (((Y : ℚ) : ℝ) * ((Y : ℚ) : ℝ)) from
-      (Real.sqrt_mul_self (mod_cast hY)).symm]
-    exact Real.sqrt_le_sqrt (mod_cast h)
-  have hR : ((sqrtℚUp x : ℚ) : ℝ) ≤ 2 * ((Y : ℚ) : ℝ) := by linarith
-  exact_mod_cast hR
-
-/-- The squared norm is non-negative. -/
-private lemma normSqℚ_nonneg {n : ℕ} (v : Fin n → ℚ) : 0 ≤ normSqℚ v := by
-  unfold normSqℚ
-  exact Finset.sum_nonneg (fun i _ => mul_self_nonneg (v i))
-
-/-- For a rational vector, the lower-norm bounds the true Euclidean norm. -/
-theorem normLowℚ_le_norm {n : ℕ} (v : Fin n → ℚ) :
-    ((normLowℚ v : ℚ) : ℝ) ≤ Real.sqrt ((normSqℚ v : ℚ) : ℝ) :=
-  sqrtℚLow_le_sqrt (normSqℚ_nonneg v)
-
-/-- For a rational vector, the true Euclidean norm bounds the upper-norm. -/
-theorem norm_le_normUpℚ {n : ℕ} (v : Fin n → ℚ) :
-    Real.sqrt ((normSqℚ v : ℚ) : ℝ) ≤ ((normUpℚ v : ℚ) : ℝ) :=
-  sqrt_le_sqrtℚUp (normSqℚ_nonneg v)
-
-def upperSqrt : UpperSqrt where
-  f := sqrtℚUp
-  bound _ := sqrt_le_sqrtℚUp
-
 def lowerSqrt : LowerSqrt where
   f := sqrtℚLow
   bound _ := sqrtℚLow_le_sqrt
-
-def sqrtApprox : Approx where
-  upper_sqrt_two := 1.42
-  upper_sqrt_two_gt_sqrt_two := by
-    show ((1.42 : ℚ) : ℝ) > Real.sqrt 2
-    have h : Real.sqrt 2 < (1.42 : ℝ) :=
-      (Real.sqrt_lt' (by norm_num)).mpr (by norm_num)
-    push_cast
-    linarith
-  upper_sqrt_five := 2.24
-  upper_sqrt_five_gt_sqrt_five := by
-    show ((2.24 : ℚ) : ℝ) > Real.sqrt 5
-    have h : Real.sqrt 5 < (2.24 : ℝ) :=
-      (Real.sqrt_lt' (by norm_num)).mpr (by norm_num)
-    push_cast
-    linarith
-  lower_sqrt := lowerSqrt
-  upper_sqrt := upperSqrt
 
 end RationalApprox
 
@@ -757,25 +284,13 @@ open RationalApprox
 #guard_msgs in
 #eval sqrtℚLow 2
 
-/-- info: 50000000000 / 35355339059 -/
-#guard_msgs in
-#eval sqrtℚUp 2
-
 /-- info: 35355339059 / 50000000000 -/
 #guard_msgs in
 #eval sqrtℚLow (1/2)
 
-/-- info: 10000000000 / 14142135623 -/
-#guard_msgs in
-#eval sqrtℚUp  (1/2)
-
 /-- info: 10 -/
 #guard_msgs in
 #eval sqrtℚLow 100
-
-/-- info: 10 -/
-#guard_msgs in
-#eval sqrtℚUp  100
 
 end Examples
 

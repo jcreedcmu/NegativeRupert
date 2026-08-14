@@ -62,7 +62,7 @@ abbrev Row.r (row : Row) : ℚ :=
   row.r' / 1000
 
 open scoped Matrix
-open RationalApprox (sqrtApprox sqrtApprox16 κℚ)
+open RationalApprox (sqrtApprox16 κℚ)
 
 /-! ### Spanning condition: hoisted trig, scalarized applied vectors -/
 
@@ -217,13 +217,13 @@ theorem Row.δ_eq_max'_BoundDeltaℚi (row : Row) :
 
 /-! ### Precomputed pairwise vertex-difference norms for `Bεℚ`
 
-The `n_dv` term of `Bεℚ.check` — `sqrtApprox16.upper_sqrt.norm (Q_i − v_k)` —
-is pose-independent, but costs a `sqrtℚUp16` call on a denominator-`10³²`
-input for each of the 270 `(i, k)` pairs of every local row. `sqrtDv` reads
-all 90 × 90 pairs from the source-literal table `sqrtDvCurried` (generated,
-see `Checker/SqrtDvLiterals.lean`), and `BεℚPy.check` is the
-`pythonVertexA`/`sqrtApprox16` specialization of `Bεℚ.check` that reads it
-(the `Bεℚ` predicate itself is unchanged). The curried-literal form keeps
+The `n_dv` term of the `Bεℚ` predicate — `sqrtApprox16.upper_sqrt.norm
+(Q_i − v_k)` — is pose-independent, but costs a `sqrtℚUp16` call on a
+denominator-`10³²` input for each of the 270 `(i, k)` pairs of every local
+row. `sqrtDv` reads all 90 × 90 pairs from the source-literal table
+`sqrtDvCurried` (generated, see `Checker/SqrtDvLiterals.lean`), and
+`BεℚPy.check` is the `pythonVertexA`/`sqrtApprox16` checker of `Bεℚ` that
+reads it (the `Bεℚ` predicate itself is unchanged). The curried-literal form keeps
 the table cheap for the kernel too: an access walks a few dozen `Fin.cons`
 cells, where reducing an equivalent 8100-entry `Array.ofFn` push chain made
 a single high-index access cost tens of gigabytes under `decide +kernel`. -/
@@ -337,8 +337,8 @@ lemma rowDots_snd (e : MatEntries) (a : VertexIndex) :
       = e.m₁₀ * pythonVertexA a 0 + e.m₁₁ * pythonVertexA a 1 + e.m₁₂ * pythonVertexA a 2 := by
   rw [rowDotsGet_rowDots]
 
-/-- `Bεℚ.check` specialized to `pythonVertexA` and `sqrtApprox16`, with the
-per-pose work hoisted out of the `k`-loop:
+/-- Bool-valued checker for `Bεℚ` at `pythonVertexA` and `sqrtApprox16`,
+with the per-pose work hoisted out of the `k`-loop:
 
 * the pose-independent `n_dv` norms come from the `sqrtDvCurried` literals;
 * the unrounded row dots `M₂vⱼ` come from the per-pose `rowDots` table, so a
@@ -483,7 +483,7 @@ private lemma cheap_sufficient {bound denom1 F n_dv d0 d1 u0 u1 ε numer : ℚ}
           + 2 * sqrtApprox16.upper_sqrt_two * ε + 6 * κℚ)) := by ring
       _ < numer := hcheap
   have hst : (0:ℚ) ≤ sqrtApprox16.upper_sqrt_two := by
-    norm_num [RationalApprox.sqrtApprox16, sqrtApprox]
+    norm_num [RationalApprox.sqrtApprox16]
   have hκ : (0:ℚ) < κℚ := by norm_num [κℚ]
   -- |u0| ≤ F·n_dv and |u1| ≤ F·n_dv.
   have habs0 : |u0| ≤ F * n_dv := by
@@ -605,7 +605,7 @@ theorem check_iff (Qi : Fin 3 → VertexIndex) (p : Pose ℚ) (ε δ r : ℚ) :
           + p.rotM₂Rℚ (pythonVertexA (Qi i)) 1 * p.rotM₂Rℚ (pythonVertexA (Qi i)) 1) :=
       RationalApprox.sqrtℚUp16_nonneg _
     have hst : (0:ℚ) ≤ sqrtApprox16.upper_sqrt_two := by
-      norm_num [RationalApprox.sqrtApprox16, sqrtApprox]
+      norm_num [RationalApprox.sqrtApprox16]
     have hκ : (0:ℚ) < κℚ := by norm_num [κℚ]
     positivity
   · -- |d0 - u0| ≤ 10⁻¹³
@@ -619,9 +619,9 @@ theorem check_iff (Qi : Fin 3 → VertexIndex) (p : Pose ℚ) (ε δ r : ℚ) :
   · -- 0 ≤ F·n_dv
     exact mul_nonneg (RationalApprox.sqrtℚUp16_nonneg _) (RationalApprox.sqrtℚUp16_nonneg _)
 
-/-- Specialized decision procedure for the `Bεℚ` conjunct of `Row.ValidLocal`;
-the priority bump makes `Row.ValidLocal`'s `Decidable` instance pick it over
-the generic `Bεℚ.instDecidable`. -/
+/-- Decision procedure for the `Bεℚ` conjunct of `Row.ValidLocal` (the only
+one — the generic-`ι` checker layer was retired in favor of this
+specialization). -/
 instance (priority := high) instDecidablePy (Qi : Fin 3 → VertexIndex)
     (p : Pose ℚ) (ε δ r : ℚ) :
     Decidable (Local.TriangleQ.Bεℚ Qi pythonVertexA p ε δ r sqrtApprox16) :=

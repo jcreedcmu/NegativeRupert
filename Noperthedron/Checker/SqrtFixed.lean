@@ -13,18 +13,17 @@ denominator dividing `10¹⁶`: for `x > 0`,
 
     sqrtℚUp16 x = (Nat.sqrt ⌈x · 10³²⌉ + 1) / 10¹⁶ ≥ √x.
 
-Compared to `sqrtℚUp` (accuracy ~10⁻¹⁰, output denominators arbitrary —
-e.g. `sqrtℚUp 2 = 50000000000/35355339059`), this is both *more accurate*
-(error < 2·10⁻¹⁶ relative to the input scale) and *fixed-point*, which is
-what lets the checkers' hot loops run on integer numerators with statically
-known scales: every upper-sqrt output is an integer multiple of `10⁻¹⁶`, and
-for inputs that are themselves multiples of `10⁻³²` the ceiling is exact.
+Compared to the retired ℚ-Newton upper sqrt (accuracy ~10⁻¹⁰, output
+denominators arbitrary), this is both *more accurate* (error < 2·10⁻¹⁶
+relative to the input scale) and *fixed-point*, which is what lets the
+checkers' hot loops run on integer numerators with statically known scales:
+every upper-sqrt output is an integer multiple of `10⁻¹⁶`, and for inputs
+that are themselves multiples of `10⁻³²` the ceiling is exact.
 
-`sqrtApprox16` packages it as an `Approx` (same `lower_sqrt` and √2/√5
-constants as `sqrtApprox`). Since upper square roots only ever appear in
-check-hardening positions, swapping `sqrtApprox → sqrtApprox16` in a checker
-keeps it sound (any upper bound works) and — being tighter — only makes it
-easier for certificate rows to pass.
+`sqrtApprox16` packages it as an `Approx` together with the lower square
+root `sqrtℚLow` from `Checker/ApproxSqrt.lean`. Since upper square roots
+only ever appear in check-hardening positions, any upper bound is sound
+here, and a tighter one only makes it easier for certificate rows to pass.
 -/
 
 namespace RationalApprox
@@ -137,13 +136,24 @@ def upperSqrt16 : UpperSqrt where
   f := sqrtℚUp16
   bound _ := sqrt_le_sqrtℚUp16 _
 
-/-- `sqrtApprox` with the fixed-point upper square root. -/
+/-- The `Approx` bundle used by all checkers: `sqrtℚLow` below, `sqrtℚUp16`
+above, and rational upper bounds for `√2` and `√5`. -/
 def sqrtApprox16 : Approx where
-  upper_sqrt_two := sqrtApprox.upper_sqrt_two
-  upper_sqrt_two_gt_sqrt_two := sqrtApprox.upper_sqrt_two_gt_sqrt_two
-  upper_sqrt_five := sqrtApprox.upper_sqrt_five
-  upper_sqrt_five_gt_sqrt_five := sqrtApprox.upper_sqrt_five_gt_sqrt_five
-  lower_sqrt := sqrtApprox.lower_sqrt
+  upper_sqrt_two := 1.42
+  upper_sqrt_two_gt_sqrt_two := by
+    show ((1.42 : ℚ) : ℝ) > Real.sqrt 2
+    have h : Real.sqrt 2 < (1.42 : ℝ) :=
+      (Real.sqrt_lt' (by norm_num)).mpr (by norm_num)
+    push_cast
+    linarith
+  upper_sqrt_five := 2.24
+  upper_sqrt_five_gt_sqrt_five := by
+    show ((2.24 : ℚ) : ℝ) > Real.sqrt 5
+    have h : Real.sqrt 5 < (2.24 : ℝ) :=
+      (Real.sqrt_lt' (by norm_num)).mpr (by norm_num)
+    push_cast
+    linarith
+  lower_sqrt := lowerSqrt
   upper_sqrt := upperSqrt16
 
 /-! ## Sanity checks -/

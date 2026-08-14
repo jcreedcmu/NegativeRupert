@@ -355,9 +355,9 @@ private lemma pair_test_iff
   -- constants and atoms
   have hf : sqrtApprox16.upper_sqrt.f = RationalApprox.sqrtℚUp16 := rfl
   have h2c : sqrtApprox16.upper_sqrt_two = 71 / 50 := by
-    norm_num [RationalApprox.sqrtApprox16, RationalApprox.sqrtApprox]
+    norm_num [RationalApprox.sqrtApprox16]
   have h5c : sqrtApprox16.upper_sqrt_five = 56 / 25 := by
-    norm_num [RationalApprox.sqrtApprox16, RationalApprox.sqrtApprox]
+    norm_num [RationalApprox.sqrtApprox16]
   have hκc : κℚ = 1 / 10 ^ 10 := rfl
   set en := ε.num with hen
   set ed : ℤ := (ε.den : ℤ) with hed
