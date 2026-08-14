@@ -161,9 +161,9 @@ def readRows (path : String) (lo hi : ℕ) : Command.CommandElabM (Array Row) :=
   return rows
 
 /-- Add `csvRows_<lo>_<hi> : List Row` for the given rows (literal `Expr`s,
-compiled or `noncomputable` per `comp`). -/
-def addChunk (ctx : Ctx) (ns : Name) (lo hi : ℕ) (rows : Array Row)
-    (comp : Bool) : TermElabM Unit := do
+`noncomputable`). -/
+def addChunk (ctx : Ctx) (ns : Name) (lo hi : ℕ) (rows : Array Row) :
+    TermElabM Unit := do
   let rowTy := mkConst ``Row
   let listE := rows.foldr
     (fun r acc => mkApp3 (mkConst ``List.cons [Level.zero]) rowTy (rowE ctx r) acc)
@@ -175,20 +175,17 @@ def addChunk (ctx : Ctx) (ns : Name) (lo hi : ℕ) (rows : Array Row)
     name := chunkNm, levelParams := [],
     type := mkApp (mkConst ``List [Level.zero]) rowTy, value := listE,
     hints := .abbrev, safety := .safe }
-  if comp then
-    compileDecls #[chunkNm]
-  else
-    -- No executable code (the kernel route never runs the chunk), so mark
-    -- it noncomputable for clean downstream errors.
-    modifyEnv (addNoncomputable · chunkNm)
+  -- No executable code (the kernel route never runs the chunk), so mark
+  -- it noncomputable for clean downstream errors.
+  modifyEnv (addNoncomputable · chunkNm)
 
 /-- Add `csvRowsC_<lo>_<hi> : Fin 8 → Fin 8 → Fin 8 → Row` for the given
 rows (`hi - lo ≤ 512 = 8³`; slots past the end repeat the last row — they
 are never evaluated, since every checked index is guarded by `< size`).
 Under the kernel an in-chunk access walks at most `3 × 7` `Fin.cons` cells
 instead of an `O(offset)` `List` walk. -/
-def addChunkCurried (ctx : Ctx) (ns : Name) (lo hi : ℕ) (rows : Array Row)
-    (comp : Bool) : TermElabM Unit := do
+def addChunkCurried (ctx : Ctx) (ns : Name) (lo hi : ℕ) (rows : Array Row) :
+    TermElabM Unit := do
   let rowTy := mkConst ``Row
   unless rows.size ≤ 512 ∧ 0 < rows.size do
     throwError "addChunkCurried: chunk size {rows.size} not in (0, 512]"
@@ -218,21 +215,20 @@ def addChunkCurried (ctx : Ctx) (ns : Name) (lo hi : ℕ) (rows : Array Row)
     name := chunkNm, levelParams := [],
     type := τ, value := level[0]!,
     hints := .abbrev, safety := .safe }
-  if comp then
-    compileDecls #[chunkNm]
-  else
-    modifyEnv (addNoncomputable · chunkNm)
+  modifyEnv (addNoncomputable · chunkNm)
 
 /-- `load_csv_rows "path.csv" from a to b` reads rows `[a, b)` of the
 solution-tree CSV and adds them to the environment as one literal definition
 `csvRows_<a>_<b> : List Row`. Loading only — validate the chunk with ordinary
 theorems (`by decide +kernel`) about it.
 
-By default the chunk gets no executable code and is marked `noncomputable`
-(the kernel route never runs it). With the trailing `compiled` flag the chunk
-is instead compiled, so validation theorems may also use `native_decide`. -/
-elab "load_csv_rows " path:str " from " a:num " to " b:num
-    c:(&"compiled")? : command => do
+The chunk gets no executable code and is marked `noncomputable`
+(the kernel route never runs it; the native route parses at runtime).
+
+Kept alongside `load_csv_chunks_curried` for small probes: the curried
+loader pads every chunk to 512 rows, so a 5-row kernel probe through it
+would pay ~100× the reduction cost of a 5-row `List` literal. -/
+elab "load_csv_rows " path:str " from " a:num " to " b:num : command => do
   let lo := a.getNat
   let hi := b.getNat
   let t0 ← IO.monoMsNow
@@ -241,7 +237,7 @@ elab "load_csv_rows " path:str " from " a:num " to " b:num
   let ns ← getCurrNamespace
   Command.liftTermElabM do
     let ctx ← mkCtx
-    addChunk ctx ns lo hi rows c.isSome
+    addChunk ctx ns lo hi rows
     let tDefs ← IO.monoMsNow
     logInfo m!"load_csv_rows [{lo}, {hi}): read+parse {tParse - t0} ms, \
       define+check {tDefs - tParse} ms"
@@ -253,7 +249,7 @@ be a multiple of 512 so the names line up with the global chunk grid of
 `assemble_row_dispatch_curried`), for the `O(log)` getter (`rowGetterC`).
 `chunkSize` must be 512. -/
 elab "load_csv_chunks_curried " path:str " from " a:num " to " b:num
-    " chunkSize " c:num comp:(&"compiled")? : command => do
+    " chunkSize " c:num : command => do
   let lo := a.getNat
   let hi := b.getNat
   let cs := c.getNat
@@ -267,7 +263,7 @@ elab "load_csv_chunks_curried " path:str " from " a:num " to " b:num
     let mut x := lo
     while x < hi do
       let y := min (x + cs) hi
-      addChunkCurried ctx ns x y (rows.extract (x - lo) (y - lo)) comp.isSome
+      addChunkCurried ctx ns x y (rows.extract (x - lo) (y - lo))
       x := y
     let tDefs ← IO.monoMsNow
     logInfo m!"load_csv_chunks_curried [{lo}, {hi}) by {cs}: read+parse \
@@ -284,9 +280,9 @@ environment. Feed it to `rowGetterC d` (see `SolutionTable/Assemble.lean`):
 a kernel access walks ≤ 7 `Fin`-digit levels — `O(log)`. Slots beyond
 `⌈N/512⌉` repeat the last chunk (never evaluated: every checked index is
 guarded by `< size`). Like `load_csv_rows`, the definition is
-`noncomputable` unless the trailing `compiled` flag is given. -/
+`noncomputable`. -/
 elab "assemble_row_dispatch_curried " name:ident " rows " n:num
-    " chunkSize " c:num comp:(&"compiled")? : command => do
+    " chunkSize " c:num : command => do
   let N := n.getNat
   let C := c.getNat
   unless C = 512 do throwError "chunkSize must be 512 (= 8³)"
@@ -330,10 +326,7 @@ elab "assemble_row_dispatch_curried " name:ident " rows " n:num
     withExporting <| addDecl <| .defnDecl {
       name := dName, levelParams := [], type := τ,
       value := level[0]!, hints := .abbrev, safety := .safe }
-    if comp.isSome then
-      compileDecls #[dName]
-    else
-      modifyEnv (addNoncomputable · dName)
+    modifyEnv (addNoncomputable · dName)
 
 end -- meta section
 end Load
