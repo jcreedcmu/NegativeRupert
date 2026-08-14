@@ -167,7 +167,6 @@ private lemma abs_intCast_div29 (n : ℤ) :
     |(n : ℚ) / 10 ^ 29| = ((|n| : ℤ) : ℚ) / 10 ^ 29 :=
   RationalApprox.abs_intCast_div_pow 29 n
 
-set_option maxHeartbeats 1600000 in
 /-- The crux of the fast path: a true `natTierBody` at one vertex implies the
 ℚ tiered test at that vertex. Every argument enters through an equation or a
 directional bound, so the caller controls the exact pipeline shapes. -/
@@ -1202,69 +1201,50 @@ private lemma kappa_term_le :
         gcongr
         exact le_cdiv hd
 
-set_option maxHeartbeats 6400000 in
 /-- The conservative integer `glo` of the fast path bounds `fastG` from
-below (scaled by `10¹³`). -/
-private lemma glo_bound (hwd : 0 < wd)
-    (hw0 : w 0 = (wxn : ℚ) / (wd : ℚ)) (hw1 : w 1 = (wyn : ℚ) / (wd : ℚ))
-    (hS0 : S 0 = (s0 : ℚ) / 10 ^ 16) (hS1 : S 1 = (s1 : ℚ) / 10 ^ 16)
-    (hS2 : S 2 = (s2 : ℚ) / 10 ^ 16) :
-    (((((-(sinNum13 p.θ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn)) * 10 ^ 13 - cosNum13 p.θ₁ * cosNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) / (10 ^ 26 * (wd : ℤ)) * s0 + (cosNum13 p.θ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn) * 10 ^ 13 - sinNum13 p.θ₁ * cosNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) / (10 ^ 26 * (wd : ℤ)) * s1 + (sinNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn) * 10 ^ 13) / (10 ^ 26 * (wd : ℤ)) * s2) / 10 ^ 16
-      - (cdiv (εα.num * (((-(sinNum13 p.θ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) * 10 ^ 13 + cosNum13 p.θ₁ * cosNum13 p.φ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn)) / (10 ^ 26 * (wd : ℤ)) * s0 + (cosNum13 p.θ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn) * 10 ^ 13 + sinNum13 p.θ₁ * cosNum13 p.φ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn)) / (10 ^ 26 * (wd : ℤ)) * s1 + (-(sinNum13 p.φ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn)) * 10 ^ 13) / (10 ^ 26 * (wd : ℤ)) * s2).natAbs : ℤ)) ((εα.den : ℤ) * 10 ^ 16)
-        + cdiv (εθ₁.num * (((-(cosNum13 p.θ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn)) * 10 ^ 13 + sinNum13 p.θ₁ * cosNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) / (10 ^ 26 * (wd : ℤ)) * s0 + (-(sinNum13 p.θ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn)) * 10 ^ 13 - cosNum13 p.θ₁ * cosNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) / (10 ^ 26 * (wd : ℤ)) * s1).natAbs : ℤ)) ((εθ₁.den : ℤ) * 10 ^ 16)
-        + cdiv (εφ₁.num * (((cosNum13 p.θ₁ * sinNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) / (10 ^ 26 * (wd : ℤ)) * s0 + (sinNum13 p.θ₁ * sinNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) / (10 ^ 26 * (wd : ℤ)) * s1 + (cosNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn) * 10 ^ 13) / (10 ^ 26 * (wd : ℤ)) * s2).natAbs : ℤ)) ((εφ₁.den : ℤ) * 10 ^ 16)
-        + cdiv (εα.num ^ 2 * (((-(sinNum13 p.θ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn)) * 10 ^ 13 - cosNum13 p.θ₁ * cosNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) / (10 ^ 26 * (wd : ℤ)) * s0 + (cosNum13 p.θ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn) * 10 ^ 13 - sinNum13 p.θ₁ * cosNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) / (10 ^ 26 * (wd : ℤ)) * s1 + (sinNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn) * 10 ^ 13) / (10 ^ 26 * (wd : ℤ)) * s2).natAbs : ℤ)) (2 * (εα.den : ℤ) ^ 2 * 10 ^ 16)
-        + cdiv (εα.num * εθ₁.num * (((-(cosNum13 p.θ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) * 10 ^ 13 - sinNum13 p.θ₁ * cosNum13 p.φ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn)) / (10 ^ 26 * (wd : ℤ)) * s0 + (-(sinNum13 p.θ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) * 10 ^ 13 + cosNum13 p.θ₁ * cosNum13 p.φ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn)) / (10 ^ 26 * (wd : ℤ)) * s1).natAbs : ℤ)) ((εα.den : ℤ) * (εθ₁.den : ℤ) * 10 ^ 16)
-        + cdiv (εα.num * εφ₁.num * (((-(cosNum13 p.θ₁ * sinNum13 p.φ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn))) / (10 ^ 26 * (wd : ℤ)) * s0 + (-(sinNum13 p.θ₁ * sinNum13 p.φ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn))) / (10 ^ 26 * (wd : ℤ)) * s1 + (-(cosNum13 p.φ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn)) * 10 ^ 13) / (10 ^ 26 * (wd : ℤ)) * s2).natAbs : ℤ)) ((εα.den : ℤ) * (εφ₁.den : ℤ) * 10 ^ 16)
-        + cdiv (εθ₁.num ^ 2 * (((sinNum13 p.θ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn) * 10 ^ 13 + cosNum13 p.θ₁ * cosNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) / (10 ^ 26 * (wd : ℤ)) * s0 + (-(cosNum13 p.θ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn)) * 10 ^ 13 + sinNum13 p.θ₁ * cosNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) / (10 ^ 26 * (wd : ℤ)) * s1).natAbs : ℤ)) (2 * (εθ₁.den : ℤ) ^ 2 * 10 ^ 16)
-        + cdiv (εθ₁.num * εφ₁.num * (((-(sinNum13 p.θ₁ * sinNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn))) / (10 ^ 26 * (wd : ℤ)) * s0 + (cosNum13 p.θ₁ * sinNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) / (10 ^ 26 * (wd : ℤ)) * s1).natAbs : ℤ)) ((εθ₁.den : ℤ) * (εφ₁.den : ℤ) * 10 ^ 16)
-        + cdiv (εφ₁.num ^ 2 * (((cosNum13 p.θ₁ * cosNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) / (10 ^ 26 * (wd : ℤ)) * s0 + (sinNum13 p.θ₁ * cosNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) / (10 ^ 26 * (wd : ℤ)) * s1 + (-(sinNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) * 10 ^ 13) / (10 ^ 26 * (wd : ℤ)) * s2).natAbs : ℤ)) (2 * (εφ₁.den : ℤ) ^ 2 * 10 ^ 16)
+below (scaled by `10¹³`). Stated over the nine dot numerators `dᵢN`; the
+call site instantiates them with the `gdot_*` bridge lemmas, so the giant
+numerator literals appear only once (inside those bridges). -/
+private lemma glo_bound {d1N d2N d3N d4N d5N d6N d7N d8N d9N : ℤ}
+    (hd1 : (gEntriesR p w).m1RTw ⬝ᵥ S = (d1N : ℚ) / 10 ^ 29)
+    (hd2 : (gEntriesR p w).m1R'Tw ⬝ᵥ S = (d2N : ℚ) / 10 ^ 29)
+    (hd3 : (gEntriesR p w).m1θRTw ⬝ᵥ S = (d3N : ℚ) / 10 ^ 29)
+    (hd4 : (gEntriesR p w).m1φRTw ⬝ᵥ S = (d4N : ℚ) / 10 ^ 29)
+    (hd5 : (gEntriesR p w).m1θR'Tw ⬝ᵥ S = (d5N : ℚ) / 10 ^ 29)
+    (hd6 : (gEntriesR p w).m1φR'Tw ⬝ᵥ S = (d6N : ℚ) / 10 ^ 29)
+    (hd7 : (gEntriesR p w).m1θθRTw ⬝ᵥ S = (d7N : ℚ) / 10 ^ 29)
+    (hd8 : (gEntriesR p w).m1θφRTw ⬝ᵥ S = (d8N : ℚ) / 10 ^ 29)
+    (hd9 : (gEntriesR p w).m1φφRTw ⬝ᵥ S = (d9N : ℚ) / 10 ^ 29) :
+    ((d1N / 10 ^ 16
+      - (cdiv (εα.num * (d2N.natAbs : ℤ)) ((εα.den : ℤ) * 10 ^ 16)
+        + cdiv (εθ₁.num * (d3N.natAbs : ℤ)) ((εθ₁.den : ℤ) * 10 ^ 16)
+        + cdiv (εφ₁.num * (d4N.natAbs : ℤ)) ((εφ₁.den : ℤ) * 10 ^ 16)
+        + cdiv (εα.num ^ 2 * (d1N.natAbs : ℤ)) (2 * (εα.den : ℤ) ^ 2 * 10 ^ 16)
+        + cdiv (εα.num * εθ₁.num * (d5N.natAbs : ℤ)) ((εα.den : ℤ) * (εθ₁.den : ℤ) * 10 ^ 16)
+        + cdiv (εα.num * εφ₁.num * (d6N.natAbs : ℤ)) ((εα.den : ℤ) * (εφ₁.den : ℤ) * 10 ^ 16)
+        + cdiv (εθ₁.num ^ 2 * (d7N.natAbs : ℤ)) (2 * (εθ₁.den : ℤ) ^ 2 * 10 ^ 16)
+        + cdiv (εθ₁.num * εφ₁.num * (d8N.natAbs : ℤ)) ((εθ₁.den : ℤ) * (εφ₁.den : ℤ) * 10 ^ 16)
+        + cdiv (εφ₁.num ^ 2 * (d9N.natAbs : ℤ)) (2 * (εφ₁.den : ℤ) ^ 2 * 10 ^ 16)
         + cdiv ((εα.num * ((εθ₁.den : ℤ) * (εφ₁.den : ℤ)) + εθ₁.num * ((εα.den : ℤ) * (εφ₁.den : ℤ)) + εφ₁.num * ((εα.den : ℤ) * (εθ₁.den : ℤ))) ^ 3 * 10 ^ 13) (6 * ((εα.den : ℤ) * ((εθ₁.den : ℤ) * (εφ₁.den : ℤ))) ^ 3)
-        + cdiv (4000 * (2 * ((εα.den : ℤ) * ((εθ₁.den : ℤ) * (εφ₁.den : ℤ))) ^ 2 + 2 * (εα.num * ((εθ₁.den : ℤ) * (εφ₁.den : ℤ)) + εθ₁.num * ((εα.den : ℤ) * (εφ₁.den : ℤ)) + εφ₁.num * ((εα.den : ℤ) * (εθ₁.den : ℤ))) * ((εα.den : ℤ) * ((εθ₁.den : ℤ) * (εφ₁.den : ℤ))) + (εα.num * ((εθ₁.den : ℤ) * (εφ₁.den : ℤ)) + εθ₁.num * ((εα.den : ℤ) * (εφ₁.den : ℤ)) + εφ₁.num * ((εα.den : ℤ) * (εθ₁.den : ℤ))) ^ 2)) (2 * ((εα.den : ℤ) * ((εθ₁.den : ℤ) * (εφ₁.den : ℤ))) ^ 2)) : ℤ) : ℚ) / 10 ^ 13)
+        + cdiv (4000 * (2 * ((εα.den : ℤ) * ((εθ₁.den : ℤ) * (εφ₁.den : ℤ))) ^ 2 + 2 * (εα.num * ((εθ₁.den : ℤ) * (εφ₁.den : ℤ)) + εθ₁.num * ((εα.den : ℤ) * (εφ₁.den : ℤ)) + εφ₁.num * ((εα.den : ℤ) * (εθ₁.den : ℤ))) * ((εα.den : ℤ) * ((εθ₁.den : ℤ) * (εφ₁.den : ℤ))) + (εα.num * ((εθ₁.den : ℤ) * (εφ₁.den : ℤ)) + εθ₁.num * ((εα.den : ℤ) * (εφ₁.den : ℤ)) + εφ₁.num * ((εα.den : ℤ) * (εθ₁.den : ℤ))) ^ 2)) (2 * ((εα.den : ℤ) * ((εθ₁.den : ℤ) * (εφ₁.den : ℤ))) ^ 2)) : ℤ) : ℚ) / 10 ^ 13
       ≤ fastG (gEntriesR p w) εα εθ₁ εφ₁ S := by
-  have hd1 := gdot_R (p := p) hwd hw0 hw1 hS0 hS1 hS2
-  have hd2 := gdot_R' (p := p) hwd hw0 hw1 hS0 hS1 hS2
-  have hd3 := gdot_θR (p := p) hwd hw0 hw1 hS0 hS1 hS2
-  have hd4 := gdot_φR (p := p) hwd hw0 hw1 hS0 hS1 hS2
-  have hd5 := gdot_θR' (p := p) hwd hw0 hw1 hS0 hS1 hS2
-  have hd6 := gdot_φR' (p := p) hwd hw0 hw1 hS0 hS1 hS2
-  have hd7 := gdot_θθR (p := p) hwd hw0 hw1 hS0 hS1 hS2
-  have hd8 := gdot_θφR (p := p) hwd hw0 hw1 hS0 hS1 hS2
-  have hd9 := gdot_φφR (p := p) hwd hw0 hw1 hS0 hS1 hS2
-  have hsplit : (((((-(sinNum13 p.θ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn)) * 10 ^ 13 - cosNum13 p.θ₁ * cosNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) / (10 ^ 26 * (wd : ℤ)) * s0 + (cosNum13 p.θ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn) * 10 ^ 13 - sinNum13 p.θ₁ * cosNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) / (10 ^ 26 * (wd : ℤ)) * s1 + (sinNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn) * 10 ^ 13) / (10 ^ 26 * (wd : ℤ)) * s2) / 10 ^ 16
-      - (cdiv (εα.num * (((-(sinNum13 p.θ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) * 10 ^ 13 + cosNum13 p.θ₁ * cosNum13 p.φ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn)) / (10 ^ 26 * (wd : ℤ)) * s0 + (cosNum13 p.θ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn) * 10 ^ 13 + sinNum13 p.θ₁ * cosNum13 p.φ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn)) / (10 ^ 26 * (wd : ℤ)) * s1 + (-(sinNum13 p.φ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn)) * 10 ^ 13) / (10 ^ 26 * (wd : ℤ)) * s2).natAbs : ℤ)) ((εα.den : ℤ) * 10 ^ 16)
-        + cdiv (εθ₁.num * (((-(cosNum13 p.θ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn)) * 10 ^ 13 + sinNum13 p.θ₁ * cosNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) / (10 ^ 26 * (wd : ℤ)) * s0 + (-(sinNum13 p.θ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn)) * 10 ^ 13 - cosNum13 p.θ₁ * cosNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) / (10 ^ 26 * (wd : ℤ)) * s1).natAbs : ℤ)) ((εθ₁.den : ℤ) * 10 ^ 16)
-        + cdiv (εφ₁.num * (((cosNum13 p.θ₁ * sinNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) / (10 ^ 26 * (wd : ℤ)) * s0 + (sinNum13 p.θ₁ * sinNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) / (10 ^ 26 * (wd : ℤ)) * s1 + (cosNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn) * 10 ^ 13) / (10 ^ 26 * (wd : ℤ)) * s2).natAbs : ℤ)) ((εφ₁.den : ℤ) * 10 ^ 16)
-        + cdiv (εα.num ^ 2 * (((-(sinNum13 p.θ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn)) * 10 ^ 13 - cosNum13 p.θ₁ * cosNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) / (10 ^ 26 * (wd : ℤ)) * s0 + (cosNum13 p.θ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn) * 10 ^ 13 - sinNum13 p.θ₁ * cosNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) / (10 ^ 26 * (wd : ℤ)) * s1 + (sinNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn) * 10 ^ 13) / (10 ^ 26 * (wd : ℤ)) * s2).natAbs : ℤ)) (2 * (εα.den : ℤ) ^ 2 * 10 ^ 16)
-        + cdiv (εα.num * εθ₁.num * (((-(cosNum13 p.θ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) * 10 ^ 13 - sinNum13 p.θ₁ * cosNum13 p.φ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn)) / (10 ^ 26 * (wd : ℤ)) * s0 + (-(sinNum13 p.θ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) * 10 ^ 13 + cosNum13 p.θ₁ * cosNum13 p.φ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn)) / (10 ^ 26 * (wd : ℤ)) * s1).natAbs : ℤ)) ((εα.den : ℤ) * (εθ₁.den : ℤ) * 10 ^ 16)
-        + cdiv (εα.num * εφ₁.num * (((-(cosNum13 p.θ₁ * sinNum13 p.φ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn))) / (10 ^ 26 * (wd : ℤ)) * s0 + (-(sinNum13 p.θ₁ * sinNum13 p.φ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn))) / (10 ^ 26 * (wd : ℤ)) * s1 + (-(cosNum13 p.φ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn)) * 10 ^ 13) / (10 ^ 26 * (wd : ℤ)) * s2).natAbs : ℤ)) ((εα.den : ℤ) * (εφ₁.den : ℤ) * 10 ^ 16)
-        + cdiv (εθ₁.num ^ 2 * (((sinNum13 p.θ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn) * 10 ^ 13 + cosNum13 p.θ₁ * cosNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) / (10 ^ 26 * (wd : ℤ)) * s0 + (-(cosNum13 p.θ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn)) * 10 ^ 13 + sinNum13 p.θ₁ * cosNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) / (10 ^ 26 * (wd : ℤ)) * s1).natAbs : ℤ)) (2 * (εθ₁.den : ℤ) ^ 2 * 10 ^ 16)
-        + cdiv (εθ₁.num * εφ₁.num * (((-(sinNum13 p.θ₁ * sinNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn))) / (10 ^ 26 * (wd : ℤ)) * s0 + (cosNum13 p.θ₁ * sinNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) / (10 ^ 26 * (wd : ℤ)) * s1).natAbs : ℤ)) ((εθ₁.den : ℤ) * (εφ₁.den : ℤ) * 10 ^ 16)
-        + cdiv (εφ₁.num ^ 2 * (((cosNum13 p.θ₁ * cosNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) / (10 ^ 26 * (wd : ℤ)) * s0 + (sinNum13 p.θ₁ * cosNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) / (10 ^ 26 * (wd : ℤ)) * s1 + (-(sinNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) * 10 ^ 13) / (10 ^ 26 * (wd : ℤ)) * s2).natAbs : ℤ)) (2 * (εφ₁.den : ℤ) ^ 2 * 10 ^ 16)
-        + cdiv ((εα.num * ((εθ₁.den : ℤ) * (εφ₁.den : ℤ)) + εθ₁.num * ((εα.den : ℤ) * (εφ₁.den : ℤ)) + εφ₁.num * ((εα.den : ℤ) * (εθ₁.den : ℤ))) ^ 3 * 10 ^ 13) (6 * ((εα.den : ℤ) * ((εθ₁.den : ℤ) * (εφ₁.den : ℤ))) ^ 3)
-        + cdiv (4000 * (2 * ((εα.den : ℤ) * ((εθ₁.den : ℤ) * (εφ₁.den : ℤ))) ^ 2 + 2 * (εα.num * ((εθ₁.den : ℤ) * (εφ₁.den : ℤ)) + εθ₁.num * ((εα.den : ℤ) * (εφ₁.den : ℤ)) + εφ₁.num * ((εα.den : ℤ) * (εθ₁.den : ℤ))) * ((εα.den : ℤ) * ((εθ₁.den : ℤ) * (εφ₁.den : ℤ))) + (εα.num * ((εθ₁.den : ℤ) * (εφ₁.den : ℤ)) + εθ₁.num * ((εα.den : ℤ) * (εφ₁.den : ℤ)) + εφ₁.num * ((εα.den : ℤ) * (εθ₁.den : ℤ))) ^ 2)) (2 * ((εα.den : ℤ) * ((εθ₁.den : ℤ) * (εφ₁.den : ℤ))) ^ 2)) : ℤ) : ℚ) / 10 ^ 13)
-      = (((((-(sinNum13 p.θ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn)) * 10 ^ 13 - cosNum13 p.θ₁ * cosNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) / (10 ^ 26 * (wd : ℤ)) * s0 + (cosNum13 p.θ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn) * 10 ^ 13 - sinNum13 p.θ₁ * cosNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) / (10 ^ 26 * (wd : ℤ)) * s1 + (sinNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn) * 10 ^ 13) / (10 ^ 26 * (wd : ℤ)) * s2) / 10 ^ 16 : ℤ) : ℚ)) / 10 ^ 13
-        - (((cdiv (εα.num * (((-(sinNum13 p.θ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) * 10 ^ 13 + cosNum13 p.θ₁ * cosNum13 p.φ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn)) / (10 ^ 26 * (wd : ℤ)) * s0 + (cosNum13 p.θ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn) * 10 ^ 13 + sinNum13 p.θ₁ * cosNum13 p.φ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn)) / (10 ^ 26 * (wd : ℤ)) * s1 + (-(sinNum13 p.φ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn)) * 10 ^ 13) / (10 ^ 26 * (wd : ℤ)) * s2).natAbs : ℤ)) ((εα.den : ℤ) * 10 ^ 16) : ℤ) : ℚ) / 10 ^ 13 + ((cdiv (εθ₁.num * (((-(cosNum13 p.θ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn)) * 10 ^ 13 + sinNum13 p.θ₁ * cosNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) / (10 ^ 26 * (wd : ℤ)) * s0 + (-(sinNum13 p.θ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn)) * 10 ^ 13 - cosNum13 p.θ₁ * cosNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) / (10 ^ 26 * (wd : ℤ)) * s1).natAbs : ℤ)) ((εθ₁.den : ℤ) * 10 ^ 16) : ℤ) : ℚ) / 10 ^ 13 + ((cdiv (εφ₁.num * (((cosNum13 p.θ₁ * sinNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) / (10 ^ 26 * (wd : ℤ)) * s0 + (sinNum13 p.θ₁ * sinNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) / (10 ^ 26 * (wd : ℤ)) * s1 + (cosNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn) * 10 ^ 13) / (10 ^ 26 * (wd : ℤ)) * s2).natAbs : ℤ)) ((εφ₁.den : ℤ) * 10 ^ 16) : ℤ) : ℚ) / 10 ^ 13 + ((cdiv (εα.num ^ 2 * (((-(sinNum13 p.θ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn)) * 10 ^ 13 - cosNum13 p.θ₁ * cosNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) / (10 ^ 26 * (wd : ℤ)) * s0 + (cosNum13 p.θ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn) * 10 ^ 13 - sinNum13 p.θ₁ * cosNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) / (10 ^ 26 * (wd : ℤ)) * s1 + (sinNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn) * 10 ^ 13) / (10 ^ 26 * (wd : ℤ)) * s2).natAbs : ℤ)) (2 * (εα.den : ℤ) ^ 2 * 10 ^ 16) : ℤ) : ℚ) / 10 ^ 13 + ((cdiv (εα.num * εθ₁.num * (((-(cosNum13 p.θ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) * 10 ^ 13 - sinNum13 p.θ₁ * cosNum13 p.φ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn)) / (10 ^ 26 * (wd : ℤ)) * s0 + (-(sinNum13 p.θ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) * 10 ^ 13 + cosNum13 p.θ₁ * cosNum13 p.φ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn)) / (10 ^ 26 * (wd : ℤ)) * s1).natAbs : ℤ)) ((εα.den : ℤ) * (εθ₁.den : ℤ) * 10 ^ 16) : ℤ) : ℚ) / 10 ^ 13 + ((cdiv (εα.num * εφ₁.num * (((-(cosNum13 p.θ₁ * sinNum13 p.φ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn))) / (10 ^ 26 * (wd : ℤ)) * s0 + (-(sinNum13 p.θ₁ * sinNum13 p.φ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn))) / (10 ^ 26 * (wd : ℤ)) * s1 + (-(cosNum13 p.φ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn)) * 10 ^ 13) / (10 ^ 26 * (wd : ℤ)) * s2).natAbs : ℤ)) ((εα.den : ℤ) * (εφ₁.den : ℤ) * 10 ^ 16) : ℤ) : ℚ) / 10 ^ 13 + ((cdiv (εθ₁.num ^ 2 * (((sinNum13 p.θ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn) * 10 ^ 13 + cosNum13 p.θ₁ * cosNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) / (10 ^ 26 * (wd : ℤ)) * s0 + (-(cosNum13 p.θ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn)) * 10 ^ 13 + sinNum13 p.θ₁ * cosNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) / (10 ^ 26 * (wd : ℤ)) * s1).natAbs : ℤ)) (2 * (εθ₁.den : ℤ) ^ 2 * 10 ^ 16) : ℤ) : ℚ) / 10 ^ 13 + ((cdiv (εθ₁.num * εφ₁.num * (((-(sinNum13 p.θ₁ * sinNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn))) / (10 ^ 26 * (wd : ℤ)) * s0 + (cosNum13 p.θ₁ * sinNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) / (10 ^ 26 * (wd : ℤ)) * s1).natAbs : ℤ)) ((εθ₁.den : ℤ) * (εφ₁.den : ℤ) * 10 ^ 16) : ℤ) : ℚ) / 10 ^ 13 + ((cdiv (εφ₁.num ^ 2 * (((cosNum13 p.θ₁ * cosNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) / (10 ^ 26 * (wd : ℤ)) * s0 + (sinNum13 p.θ₁ * cosNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) / (10 ^ 26 * (wd : ℤ)) * s1 + (-(sinNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) * 10 ^ 13) / (10 ^ 26 * (wd : ℤ)) * s2).natAbs : ℤ)) (2 * (εφ₁.den : ℤ) ^ 2 * 10 ^ 16) : ℤ) : ℚ) / 10 ^ 13 + ((cdiv ((εα.num * ((εθ₁.den : ℤ) * (εφ₁.den : ℤ)) + εθ₁.num * ((εα.den : ℤ) * (εφ₁.den : ℤ)) + εφ₁.num * ((εα.den : ℤ) * (εθ₁.den : ℤ))) ^ 3 * 10 ^ 13) (6 * ((εα.den : ℤ) * ((εθ₁.den : ℤ) * (εφ₁.den : ℤ))) ^ 3) : ℤ) : ℚ) / 10 ^ 13 + ((cdiv (4000 * (2 * ((εα.den : ℤ) * ((εθ₁.den : ℤ) * (εφ₁.den : ℤ))) ^ 2 + 2 * (εα.num * ((εθ₁.den : ℤ) * (εφ₁.den : ℤ)) + εθ₁.num * ((εα.den : ℤ) * (εφ₁.den : ℤ)) + εφ₁.num * ((εα.den : ℤ) * (εθ₁.den : ℤ))) * ((εα.den : ℤ) * ((εθ₁.den : ℤ) * (εφ₁.den : ℤ))) + (εα.num * ((εθ₁.den : ℤ) * (εφ₁.den : ℤ)) + εθ₁.num * ((εα.den : ℤ) * (εφ₁.den : ℤ)) + εφ₁.num * ((εα.den : ℤ) * (εθ₁.den : ℤ))) ^ 2)) (2 * ((εα.den : ℤ) * ((εθ₁.den : ℤ) * (εφ₁.den : ℤ))) ^ 2) : ℤ) : ℚ) / 10 ^ 13) := by
-    push_cast
-    ring
-  have hlead : (((((-(sinNum13 p.θ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn)) * 10 ^ 13 - cosNum13 p.θ₁ * cosNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) / (10 ^ 26 * (wd : ℤ)) * s0 + (cosNum13 p.θ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn) * 10 ^ 13 - sinNum13 p.θ₁ * cosNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) / (10 ^ 26 * (wd : ℤ)) * s1 + (sinNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn) * 10 ^ 13) / (10 ^ 26 * (wd : ℤ)) * s2) / 10 ^ 16 : ℤ) : ℚ)) / 10 ^ 13
-      ≤ ((((-(sinNum13 p.θ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn)) * 10 ^ 13 - cosNum13 p.θ₁ * cosNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) / (10 ^ 26 * (wd : ℤ)) * s0 + (cosNum13 p.θ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn) * 10 ^ 13 - sinNum13 p.θ₁ * cosNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) / (10 ^ 26 * (wd : ℤ)) * s1 + (sinNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn) * 10 ^ 13) / (10 ^ 26 * (wd : ℤ)) * s2) : ℤ) : ℚ) / 10 ^ 29 := by
-    calc (((((-(sinNum13 p.θ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn)) * 10 ^ 13 - cosNum13 p.θ₁ * cosNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) / (10 ^ 26 * (wd : ℤ)) * s0 + (cosNum13 p.θ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn) * 10 ^ 13 - sinNum13 p.θ₁ * cosNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) / (10 ^ 26 * (wd : ℤ)) * s1 + (sinNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn) * 10 ^ 13) / (10 ^ 26 * (wd : ℤ)) * s2) / 10 ^ 16 : ℤ) : ℚ)) / 10 ^ 13
-        ≤ (((((-(sinNum13 p.θ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn)) * 10 ^ 13 - cosNum13 p.θ₁ * cosNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) / (10 ^ 26 * (wd : ℤ)) * s0 + (cosNum13 p.θ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn) * 10 ^ 13 - sinNum13 p.θ₁ * cosNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) / (10 ^ 26 * (wd : ℤ)) * s1 + (sinNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn) * 10 ^ 13) / (10 ^ 26 * (wd : ℤ)) * s2) : ℤ) : ℚ) / ((10 ^ 16 : ℤ) : ℚ)) / 10 ^ 13 := by
+  have hlead : ((d1N / 10 ^ 16 : ℤ) : ℚ) / 10 ^ 13 ≤ (d1N : ℚ) / 10 ^ 29 := by
+    calc ((d1N / 10 ^ 16 : ℤ) : ℚ) / 10 ^ 13
+        ≤ ((d1N : ℚ) / ((10 ^ 16 : ℤ) : ℚ)) / 10 ^ 13 := by
           gcongr
           exact ediv_le (by norm_num)
-      _ = ((((-(sinNum13 p.θ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn)) * 10 ^ 13 - cosNum13 p.θ₁ * cosNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) / (10 ^ 26 * (wd : ℤ)) * s0 + (cosNum13 p.θ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn) * 10 ^ 13 - sinNum13 p.θ₁ * cosNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) / (10 ^ 26 * (wd : ℤ)) * s1 + (sinNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn) * 10 ^ 13) / (10 ^ 26 * (wd : ℤ)) * s2) : ℤ) : ℚ) / 10 ^ 29 := by
+      _ = (d1N : ℚ) / 10 ^ 29 := by
           rw [div_div]
           norm_num
-  have ht0 := eps_term_le εα (((-(sinNum13 p.θ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) * 10 ^ 13 + cosNum13 p.θ₁ * cosNum13 p.φ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn)) / (10 ^ 26 * (wd : ℤ)) * s0 + (cosNum13 p.θ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn) * 10 ^ 13 + sinNum13 p.θ₁ * cosNum13 p.φ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn)) / (10 ^ 26 * (wd : ℤ)) * s1 + (-(sinNum13 p.φ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn)) * 10 ^ 13) / (10 ^ 26 * (wd : ℤ)) * s2).natAbs)
-  have ht1 := eps_term_le εθ₁ (((-(cosNum13 p.θ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn)) * 10 ^ 13 + sinNum13 p.θ₁ * cosNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) / (10 ^ 26 * (wd : ℤ)) * s0 + (-(sinNum13 p.θ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn)) * 10 ^ 13 - cosNum13 p.θ₁ * cosNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) / (10 ^ 26 * (wd : ℤ)) * s1).natAbs)
-  have ht2 := eps_term_le εφ₁ (((cosNum13 p.θ₁ * sinNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) / (10 ^ 26 * (wd : ℤ)) * s0 + (sinNum13 p.θ₁ * sinNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) / (10 ^ 26 * (wd : ℤ)) * s1 + (cosNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn) * 10 ^ 13) / (10 ^ 26 * (wd : ℤ)) * s2).natAbs)
-  have ht3 := eps_sq_term_le εα (((-(sinNum13 p.θ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn)) * 10 ^ 13 - cosNum13 p.θ₁ * cosNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) / (10 ^ 26 * (wd : ℤ)) * s0 + (cosNum13 p.θ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn) * 10 ^ 13 - sinNum13 p.θ₁ * cosNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) / (10 ^ 26 * (wd : ℤ)) * s1 + (sinNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn) * 10 ^ 13) / (10 ^ 26 * (wd : ℤ)) * s2).natAbs)
-  have ht4 := eps_mul_term_le εα εθ₁ (((-(cosNum13 p.θ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) * 10 ^ 13 - sinNum13 p.θ₁ * cosNum13 p.φ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn)) / (10 ^ 26 * (wd : ℤ)) * s0 + (-(sinNum13 p.θ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) * 10 ^ 13 + cosNum13 p.θ₁ * cosNum13 p.φ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn)) / (10 ^ 26 * (wd : ℤ)) * s1).natAbs)
-  have ht5 := eps_mul_term_le εα εφ₁ (((-(cosNum13 p.θ₁ * sinNum13 p.φ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn))) / (10 ^ 26 * (wd : ℤ)) * s0 + (-(sinNum13 p.θ₁ * sinNum13 p.φ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn))) / (10 ^ 26 * (wd : ℤ)) * s1 + (-(cosNum13 p.φ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn)) * 10 ^ 13) / (10 ^ 26 * (wd : ℤ)) * s2).natAbs)
-  have ht6 := eps_sq_term_le εθ₁ (((sinNum13 p.θ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn) * 10 ^ 13 + cosNum13 p.θ₁ * cosNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) / (10 ^ 26 * (wd : ℤ)) * s0 + (-(cosNum13 p.θ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn)) * 10 ^ 13 + sinNum13 p.θ₁ * cosNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) / (10 ^ 26 * (wd : ℤ)) * s1).natAbs)
-  have ht7 := eps_mul_term_le εθ₁ εφ₁ (((-(sinNum13 p.θ₁ * sinNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn))) / (10 ^ 26 * (wd : ℤ)) * s0 + (cosNum13 p.θ₁ * sinNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) / (10 ^ 26 * (wd : ℤ)) * s1).natAbs)
-  have ht8 := eps_sq_term_le εφ₁ (((cosNum13 p.θ₁ * cosNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) / (10 ^ 26 * (wd : ℤ)) * s0 + (sinNum13 p.θ₁ * cosNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) / (10 ^ 26 * (wd : ℤ)) * s1 + (-(sinNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) * 10 ^ 13) / (10 ^ 26 * (wd : ℤ)) * s2).natAbs)
+  have ht0 := eps_term_le εα d2N.natAbs
+  have ht1 := eps_term_le εθ₁ d3N.natAbs
+  have ht2 := eps_term_le εφ₁ d4N.natAbs
+  have ht3 := eps_sq_term_le εα d1N.natAbs
+  have ht4 := eps_mul_term_le εα εθ₁ d5N.natAbs
+  have ht5 := eps_mul_term_le εα εφ₁ d6N.natAbs
+  have ht6 := eps_sq_term_le εθ₁ d7N.natAbs
+  have ht7 := eps_mul_term_le εθ₁ εφ₁ d8N.natAbs
+  have ht8 := eps_sq_term_le εφ₁ d9N.natAbs
   have ht9 := cube_term_le (εα := εα) (εθ₁ := εθ₁) (εφ₁ := εφ₁)
   have ht10 := kappa_term_le (εα := εα) (εθ₁ := εθ₁) (εφ₁ := εφ₁)
   unfold fastG
@@ -1273,7 +1253,32 @@ private lemma glo_bound (hwd : 0 < wd)
     abs_intCast_div29, abs_intCast_div29, abs_intCast_div29, abs_intCast_div29,
     abs_intCast_div29]
   simp only [Int.abs_eq_natAbs]
-  rw [hsplit]
+  rw [show ((d1N / 10 ^ 16
+      - (cdiv (εα.num * (d2N.natAbs : ℤ)) ((εα.den : ℤ) * 10 ^ 16)
+        + cdiv (εθ₁.num * (d3N.natAbs : ℤ)) ((εθ₁.den : ℤ) * 10 ^ 16)
+        + cdiv (εφ₁.num * (d4N.natAbs : ℤ)) ((εφ₁.den : ℤ) * 10 ^ 16)
+        + cdiv (εα.num ^ 2 * (d1N.natAbs : ℤ)) (2 * (εα.den : ℤ) ^ 2 * 10 ^ 16)
+        + cdiv (εα.num * εθ₁.num * (d5N.natAbs : ℤ)) ((εα.den : ℤ) * (εθ₁.den : ℤ) * 10 ^ 16)
+        + cdiv (εα.num * εφ₁.num * (d6N.natAbs : ℤ)) ((εα.den : ℤ) * (εφ₁.den : ℤ) * 10 ^ 16)
+        + cdiv (εθ₁.num ^ 2 * (d7N.natAbs : ℤ)) (2 * (εθ₁.den : ℤ) ^ 2 * 10 ^ 16)
+        + cdiv (εθ₁.num * εφ₁.num * (d8N.natAbs : ℤ)) ((εθ₁.den : ℤ) * (εφ₁.den : ℤ) * 10 ^ 16)
+        + cdiv (εφ₁.num ^ 2 * (d9N.natAbs : ℤ)) (2 * (εφ₁.den : ℤ) ^ 2 * 10 ^ 16)
+        + cdiv ((εα.num * ((εθ₁.den : ℤ) * (εφ₁.den : ℤ)) + εθ₁.num * ((εα.den : ℤ) * (εφ₁.den : ℤ)) + εφ₁.num * ((εα.den : ℤ) * (εθ₁.den : ℤ))) ^ 3 * 10 ^ 13) (6 * ((εα.den : ℤ) * ((εθ₁.den : ℤ) * (εφ₁.den : ℤ))) ^ 3)
+        + cdiv (4000 * (2 * ((εα.den : ℤ) * ((εθ₁.den : ℤ) * (εφ₁.den : ℤ))) ^ 2 + 2 * (εα.num * ((εθ₁.den : ℤ) * (εφ₁.den : ℤ)) + εθ₁.num * ((εα.den : ℤ) * (εφ₁.den : ℤ)) + εφ₁.num * ((εα.den : ℤ) * (εθ₁.den : ℤ))) * ((εα.den : ℤ) * ((εθ₁.den : ℤ) * (εφ₁.den : ℤ))) + (εα.num * ((εθ₁.den : ℤ) * (εφ₁.den : ℤ)) + εθ₁.num * ((εα.den : ℤ) * (εφ₁.den : ℤ)) + εφ₁.num * ((εα.den : ℤ) * (εθ₁.den : ℤ))) ^ 2)) (2 * ((εα.den : ℤ) * ((εθ₁.den : ℤ) * (εφ₁.den : ℤ))) ^ 2)) : ℤ) : ℚ) / 10 ^ 13
+    = ((d1N / 10 ^ 16 : ℤ) : ℚ) / 10 ^ 13
+      - (((cdiv (εα.num * (d2N.natAbs : ℤ)) ((εα.den : ℤ) * 10 ^ 16) : ℤ) : ℚ) / 10 ^ 13
+        + ((cdiv (εθ₁.num * (d3N.natAbs : ℤ)) ((εθ₁.den : ℤ) * 10 ^ 16) : ℤ) : ℚ) / 10 ^ 13
+        + ((cdiv (εφ₁.num * (d4N.natAbs : ℤ)) ((εφ₁.den : ℤ) * 10 ^ 16) : ℤ) : ℚ) / 10 ^ 13
+        + ((cdiv (εα.num ^ 2 * (d1N.natAbs : ℤ)) (2 * (εα.den : ℤ) ^ 2 * 10 ^ 16) : ℤ) : ℚ) / 10 ^ 13
+        + ((cdiv (εα.num * εθ₁.num * (d5N.natAbs : ℤ)) ((εα.den : ℤ) * (εθ₁.den : ℤ) * 10 ^ 16) : ℤ) : ℚ) / 10 ^ 13
+        + ((cdiv (εα.num * εφ₁.num * (d6N.natAbs : ℤ)) ((εα.den : ℤ) * (εφ₁.den : ℤ) * 10 ^ 16) : ℤ) : ℚ) / 10 ^ 13
+        + ((cdiv (εθ₁.num ^ 2 * (d7N.natAbs : ℤ)) (2 * (εθ₁.den : ℤ) ^ 2 * 10 ^ 16) : ℤ) : ℚ) / 10 ^ 13
+        + ((cdiv (εθ₁.num * εφ₁.num * (d8N.natAbs : ℤ)) ((εθ₁.den : ℤ) * (εφ₁.den : ℤ) * 10 ^ 16) : ℤ) : ℚ) / 10 ^ 13
+        + ((cdiv (εφ₁.num ^ 2 * (d9N.natAbs : ℤ)) (2 * (εφ₁.den : ℤ) ^ 2 * 10 ^ 16) : ℤ) : ℚ) / 10 ^ 13
+        + ((cdiv ((εα.num * ((εθ₁.den : ℤ) * (εφ₁.den : ℤ)) + εθ₁.num * ((εα.den : ℤ) * (εφ₁.den : ℤ)) + εφ₁.num * ((εα.den : ℤ) * (εθ₁.den : ℤ))) ^ 3 * 10 ^ 13) (6 * ((εα.den : ℤ) * ((εθ₁.den : ℤ) * (εφ₁.den : ℤ))) ^ 3) : ℤ) : ℚ) / 10 ^ 13
+        + ((cdiv (4000 * (2 * ((εα.den : ℤ) * ((εθ₁.den : ℤ) * (εφ₁.den : ℤ))) ^ 2 + 2 * (εα.num * ((εθ₁.den : ℤ) * (εφ₁.den : ℤ)) + εθ₁.num * ((εα.den : ℤ) * (εφ₁.den : ℤ)) + εφ₁.num * ((εα.den : ℤ) * (εθ₁.den : ℤ))) * ((εα.den : ℤ) * ((εθ₁.den : ℤ) * (εφ₁.den : ℤ))) + (εα.num * ((εθ₁.den : ℤ) * (εφ₁.den : ℤ)) + εθ₁.num * ((εα.den : ℤ) * (εφ₁.den : ℤ)) + εφ₁.num * ((εα.den : ℤ) * (εθ₁.den : ℤ))) ^ 2)) (2 * ((εα.den : ℤ) * ((εθ₁.den : ℤ) * (εφ₁.den : ℤ))) ^ 2) : ℤ) : ℚ) / 10 ^ 13) from by
+    push_cast
+    ring]
   linarith [hlead, ht0, ht1, ht2, ht3, ht4, ht5, ht6, ht7, ht8, ht9, ht10]
 
 end GloBound
@@ -1627,7 +1632,6 @@ def Gℚ_gt_maxHℚ_fastNat (bigT nV sflat : ℕ) (p : Pose ℚ)
      eθN eφN (eθN ^ 2) (2 * eθN * eφN) (eφN ^ 2) nV)
 
 open Gℚ_gt_maxHℚ in
-set_option maxHeartbeats 6400000 in
 /-- **Soundness of the all-`Nat` fast path**: if `Gℚ_gt_maxHℚ_fastNat` accepts,
 the ℚ tiered check accepts. `bigT` is an arbitrary packed vertex table; the
 `hfield`/`hS` hypotheses state (in exactly the shapes the fast path reads)
@@ -1735,7 +1739,13 @@ theorem Gℚ_gt_maxHℚ_fastNat_sound {ι : Type} [Fintype ι] [DecidableEq ι]
     (Int.toNat_of_nonneg hod0) (Int.toNat_of_nonneg hod1) ?hD2
     (Int.toNat_of_nonneg hoe0) (Int.toNat_of_nonneg hoe1) ?hE2
     (Int.toNat_of_nonneg hof0) (Int.toNat_of_nonneg hof1) (Int.toNat_of_nonneg hof2)
-    (glo_bound hwd hw0 hw1 hS0 hS1 hS2) rfl (kR_bound (εθ₂ := εθ₂) (εφ₂ := εφ₂)) ?hfs
+    (glo_bound
+      (gdot_R (p := p) hwd hw0 hw1 hS0 hS1 hS2) (gdot_R' (p := p) hwd hw0 hw1 hS0 hS1 hS2)
+      (gdot_θR (p := p) hwd hw0 hw1 hS0 hS1 hS2) (gdot_φR (p := p) hwd hw0 hw1 hS0 hS1 hS2)
+      (gdot_θR' (p := p) hwd hw0 hw1 hS0 hS1 hS2) (gdot_φR' (p := p) hwd hw0 hw1 hS0 hS1 hS2)
+      (gdot_θθR (p := p) hwd hw0 hw1 hS0 hS1 hS2) (gdot_θφR (p := p) hwd hw0 hw1 hS0 hS1 hS2)
+      (gdot_φφR (p := p) hwd hw0 hw1 hS0 hS1 hS2))
+    rfl (kR_bound (εθ₂ := εθ₂) (εφ₂ := εφ₂)) ?hfs
     (so_bound (εθ₂ := εθ₂) (εφ₂ := εφ₂) hd0 hd1 hd2' he0 he1 he2' hf0 hf1 hf2)
     (eps13_bound εθ₂) (eps13_bound εφ₂) hεθ₂' hεφ₂'
     rfl rfl rfl rfl rfl rfl
