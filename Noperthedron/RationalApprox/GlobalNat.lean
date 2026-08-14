@@ -167,6 +167,22 @@ private lemma abs_intCast_div29 (n : ℤ) :
     |(n : ℚ) / 10 ^ 29| = ((|n| : ℤ) : ℚ) / 10 ^ 29 :=
   RationalApprox.abs_intCast_div_pow 29 n
 
+/-- A three-term `entry·pose` dot (entries at scale `10¹³`, pose coordinates
+at `10¹⁶`) in absolute value, as `|integer numerator| / 10²⁹`. -/
+private lemma dot3_abs_div29 {x0 x1 x2 p0 p1 p2 : ℚ} {X0 X1 X2 P0 P1 P2 : ℤ}
+    (h0 : x0 = (X0 : ℚ) / 10 ^ 13) (h1 : x1 = (X1 : ℚ) / 10 ^ 13)
+    (h2 : x2 = (X2 : ℚ) / 10 ^ 13)
+    (hq0 : p0 = (P0 : ℚ) / 10 ^ 16) (hq1 : p1 = (P1 : ℚ) / 10 ^ 16)
+    (hq2 : p2 = (P2 : ℚ) / 10 ^ 16) :
+    |x0 * p0 + x1 * p1 + x2 * p2|
+      = |((X0 * P0 + X1 * P1 + X2 * P2 : ℤ) : ℚ)| / 10 ^ 29 := by
+  rw [show x0 * p0 + x1 * p1 + x2 * p2
+      = ((X0 * P0 + X1 * P1 + X2 * P2 : ℤ) : ℚ) / 10 ^ 29 from by
+    rw [h0, h1, h2, hq0, hq1, hq2]; push_cast; ring]
+  rw [abs_intCast_div29]
+  push_cast
+  ring
+
 /-- The crux of the fast path: a true `natTierBody` at one vertex implies the
 ℚ tiered test at that vertex. Every argument enters through an equation or a
 directional bound, so the caller controls the exact pipeline shapes. -/
@@ -284,26 +300,8 @@ private lemma natTierBody_sound
         + soHi * 10 ^ 13 * (|p0N| + |p1N| + |p2N|)
         + kRhi * 10 ^ 29 : ℤ) : ℚ) < ((glo * 10 ^ 29 : ℤ) : ℚ) := by exact_mod_cast key
     push_cast at keyQ
-    have hbq : e.b0 * p0q + e.b1 * p1q + e.b2 * p2q
-        = ((b0N * p0N + b1N * p1N + b2N * p2N : ℤ) : ℚ) / 10 ^ 29 := by
-      rw [hb0, hb1, hb2, hp0, hp1, hp2]
-      push_cast
-      ring
-    have hcq : e.c0 * p0q + e.c1 * p1q + e.c2 * p2q
-        = ((c0N * p0N + c1N * p1N + c2N * p2N : ℤ) : ℚ) / 10 ^ 29 := by
-      rw [hc0, hc1, hc2, hp0, hp1, hp2]
-      push_cast
-      ring
-    have hbabs : |e.b0 * p0q + e.b1 * p1q + e.b2 * p2q|
-        = |((b0N * p0N + b1N * p1N + b2N * p2N : ℤ) : ℚ)| / 10 ^ 29 := by
-      rw [hbq, abs_intCast_div29]
-      push_cast
-      ring
-    have hcabs : |e.c0 * p0q + e.c1 * p1q + e.c2 * p2q|
-        = |((c0N * p0N + c1N * p1N + c2N * p2N : ℤ) : ℚ)| / 10 ^ 29 := by
-      rw [hcq, abs_intCast_div29]
-      push_cast
-      ring
+    have hbabs := dot3_abs_div29 hb0 hb1 hb2 hp0 hp1 hp2
+    have hcabs := dot3_abs_div29 hc0 hc1 hc2 hp0 hp1 hp2
     have hbB : εθ * 10 ^ 13 * |((b0N * p0N + b1N * p1N + b2N * p2N : ℤ) : ℚ)|
         ≤ (eθhi : ℚ) * |((b0N * p0N + b1N * p1N + b2N * p2N : ℤ) : ℚ)| :=
       mul_le_mul_of_nonneg_right heθq (abs_nonneg _)
@@ -362,46 +360,11 @@ private lemma natTierBody_sound
         + 2 * kRhi * 10 ^ 42 : ℤ) : ℚ) < ((2 * glo * 10 ^ 42 : ℤ) : ℚ) := by
       exact_mod_cast key
     push_cast at keyQ
-    have hbabs : |e.b0 * p0q + e.b1 * p1q + e.b2 * p2q|
-        = |((b0N * p0N + b1N * p1N + b2N * p2N : ℤ) : ℚ)| / 10 ^ 29 := by
-      rw [show e.b0 * p0q + e.b1 * p1q + e.b2 * p2q
-          = ((b0N * p0N + b1N * p1N + b2N * p2N : ℤ) : ℚ) / 10 ^ 29 from by
-        rw [hb0, hb1, hb2, hp0, hp1, hp2]; push_cast; ring]
-      rw [abs_intCast_div29]
-      push_cast
-      ring
-    have hcabs : |e.c0 * p0q + e.c1 * p1q + e.c2 * p2q|
-        = |((c0N * p0N + c1N * p1N + c2N * p2N : ℤ) : ℚ)| / 10 ^ 29 := by
-      rw [show e.c0 * p0q + e.c1 * p1q + e.c2 * p2q
-          = ((c0N * p0N + c1N * p1N + c2N * p2N : ℤ) : ℚ) / 10 ^ 29 from by
-        rw [hc0, hc1, hc2, hp0, hp1, hp2]; push_cast; ring]
-      rw [abs_intCast_div29]
-      push_cast
-      ring
-    have hdabs : |e.d0 * p0q + e.d1 * p1q + e.d2 * p2q|
-        = |((d0N * p0N + d1N * p1N + d2N * p2N : ℤ) : ℚ)| / 10 ^ 29 := by
-      rw [show e.d0 * p0q + e.d1 * p1q + e.d2 * p2q
-          = ((d0N * p0N + d1N * p1N + d2N * p2N : ℤ) : ℚ) / 10 ^ 29 from by
-        rw [hd0, hd1, hd2, hp0, hp1, hp2]; push_cast; ring]
-      rw [abs_intCast_div29]
-      push_cast
-      ring
-    have heabs : |e.e0 * p0q + e.e1 * p1q + e.e2 * p2q|
-        = |((e0N * p0N + e1N * p1N + e2N * p2N : ℤ) : ℚ)| / 10 ^ 29 := by
-      rw [show e.e0 * p0q + e.e1 * p1q + e.e2 * p2q
-          = ((e0N * p0N + e1N * p1N + e2N * p2N : ℤ) : ℚ) / 10 ^ 29 from by
-        rw [he0, he1, he2, hp0, hp1, hp2]; push_cast; ring]
-      rw [abs_intCast_div29]
-      push_cast
-      ring
-    have hfabs : |e.f0 * p0q + e.f1 * p1q + e.f2 * p2q|
-        = |((f0N * p0N + f1N * p1N + f2N * p2N : ℤ) : ℚ)| / 10 ^ 29 := by
-      rw [show e.f0 * p0q + e.f1 * p1q + e.f2 * p2q
-          = ((f0N * p0N + f1N * p1N + f2N * p2N : ℤ) : ℚ) / 10 ^ 29 from by
-        rw [hf0, hf1, hf2, hp0, hp1, hp2]; push_cast; ring]
-      rw [abs_intCast_div29]
-      push_cast
-      ring
+    have hbabs := dot3_abs_div29 hb0 hb1 hb2 hp0 hp1 hp2
+    have hcabs := dot3_abs_div29 hc0 hc1 hc2 hp0 hp1 hp2
+    have hdabs := dot3_abs_div29 hd0 hd1 hd2 hp0 hp1 hp2
+    have heabs := dot3_abs_div29 he0 he1 he2 hp0 hp1 hp2
+    have hfabs := dot3_abs_div29 hf0 hf1 hf2 hp0 hp1 hp2
     have hbB : εθ * 10 ^ 13 * |((b0N * p0N + b1N * p1N + b2N * p2N : ℤ) : ℚ)|
         ≤ (eθhi : ℚ) * |((b0N * p0N + b1N * p1N + b2N * p2N : ℤ) : ℚ)| :=
       mul_le_mul_of_nonneg_right heθq (abs_nonneg _)
@@ -454,6 +417,38 @@ private lemma cdiv_nonneg {n d : ℤ} (hn : 0 ≤ n) (hd : (0:ℤ) < d) : 0 ≤ 
   have h := le_cdiv (n := n) (d := d) hd
   have hq : (0:ℚ) ≤ (n : ℚ) / (d : ℚ) := by positivity
   exact_mod_cast le_trans hq h
+
+/-- `round13` bridge from an entry known as a single fraction over `10²⁶·wd`
+(H-entry scale). Rephrasing of `round13_intCast_div26` for `entry_tac`. -/
+private lemma round13_eq_div26 {x : ℚ} {A : ℤ} {wd : ℕ}
+    (h : x = (A : ℚ) / (10 ^ 26 * (wd : ℚ))) :
+    RationalApprox.round13 x = ((A / (10 ^ 13 * (wd : ℤ)) : ℤ) : ℚ) / 10 ^ 13 := by
+  rw [h]
+  exact round13_intCast_div26 _ _
+
+/-- `round13` bridge from an entry known as a single fraction over `10³⁹·wd`
+(G-entry scale). Rephrasing of `round13_intCast_div39` for `entry_tac`. -/
+private lemma round13_eq_div39 {x : ℚ} {A : ℤ} {wd : ℕ}
+    (h : x = (A : ℚ) / (10 ^ 39 * (wd : ℚ))) :
+    RationalApprox.round13 x = ((A / (10 ^ 26 * (wd : ℤ)) : ℤ) : ℚ) / 10 ^ 13 := by
+  rw [h]
+  exact round13_intCast_div39 _ _
+
+/-- Closes an entry-bridge goal `<rounded entry> = ((NUM / D : ℤ) : ℚ) / 10^13`:
+`e` is the unrounded entry (so the goal's LHS is `round13 e` by `show`),
+`hlp` is `round13_eq_div26`/`round13_eq_div39`, and `h0`/`h1` are the `w`
+component equations. The target numerator is read off the goal, so it is
+stated once (in the lemma statement) instead of twice. Expects `hwdQ :
+(wd : ℚ) ≠ 0` in context for `field_simp`. -/
+local macro "entry_tac " hlp:term ", " e:term ", " h0:term ", " h1:term : tactic =>
+  `(tactic| (
+    show RationalApprox.round13 $e = _
+    refine $hlp ?_
+    simp only [hEntries, gEntries, Matrix.cons_val_zero, Matrix.cons_val_one,
+      Matrix.cons_val_two, Matrix.tail_cons, Matrix.head_cons, $h0:term, $h1:term]
+    push_cast
+    all_goals field_simp
+    all_goals ring))
 section HEntryBridge
 
 open RationalApprox (sinNum13 cosNum13)
@@ -465,234 +460,105 @@ private lemma hentry_a0 (hwd : 0 < wd)
     (hEntriesR p w).scalars.a0
       = (((-(sinNum13 p.θ₂ * wxn) * 10 ^ 13 - cosNum13 p.θ₂ * cosNum13 p.φ₂ * wyn) / (10 ^ 13 * (wd : ℤ)) : ℤ) : ℚ) / 10 ^ 13 := by
   have hwdQ : ((wd : ℚ)) ≠ 0 := Nat.cast_ne_zero.mpr hwd.ne'
-  have hstep : (hEntries p w).m2tw 0
-      = (((-(sinNum13 p.θ₂ * wxn) * 10 ^ 13 - cosNum13 p.θ₂ * cosNum13 p.φ₂ * wyn) : ℤ) : ℚ) / (10 ^ 26 * (wd : ℚ)) := by
-    simp only [hEntries, Matrix.cons_val_zero]
-    simp only [hw0, hw1]
-    push_cast
-    all_goals field_simp
-    all_goals ring
-  show RationalApprox.round13 ((hEntries p w).m2tw 0) = _
-  rw [hstep]
-  exact round13_intCast_div26 _ _
+  entry_tac round13_eq_div26, (hEntries p w).m2tw 0, hw0, hw1
 
 private lemma hentry_a1 (hwd : 0 < wd)
     (hw0 : w 0 = (wxn : ℚ) / (wd : ℚ)) (hw1 : w 1 = (wyn : ℚ) / (wd : ℚ)) :
     (hEntriesR p w).scalars.a1
       = (((cosNum13 p.θ₂ * wxn * 10 ^ 13 - sinNum13 p.θ₂ * cosNum13 p.φ₂ * wyn) / (10 ^ 13 * (wd : ℤ)) : ℤ) : ℚ) / 10 ^ 13 := by
   have hwdQ : ((wd : ℚ)) ≠ 0 := Nat.cast_ne_zero.mpr hwd.ne'
-  have hstep : (hEntries p w).m2tw 1
-      = (((cosNum13 p.θ₂ * wxn * 10 ^ 13 - sinNum13 p.θ₂ * cosNum13 p.φ₂ * wyn) : ℤ) : ℚ) / (10 ^ 26 * (wd : ℚ)) := by
-    simp only [hEntries, Matrix.cons_val_zero, Matrix.cons_val_one]
-    simp only [hw0, hw1]
-    push_cast
-    all_goals field_simp
-    all_goals ring
-  show RationalApprox.round13 ((hEntries p w).m2tw 1) = _
-  rw [hstep]
-  exact round13_intCast_div26 _ _
+  entry_tac round13_eq_div26, (hEntries p w).m2tw 1, hw0, hw1
 
 private lemma hentry_a2 (hwd : 0 < wd)
     (_hw0 : w 0 = (wxn : ℚ) / (wd : ℚ)) (hw1 : w 1 = (wyn : ℚ) / (wd : ℚ)) :
     (hEntriesR p w).scalars.a2
       = (((sinNum13 p.φ₂ * wyn * 10 ^ 13) / (10 ^ 13 * (wd : ℤ)) : ℤ) : ℚ) / 10 ^ 13 := by
   have hwdQ : ((wd : ℚ)) ≠ 0 := Nat.cast_ne_zero.mpr hwd.ne'
-  have hstep : (hEntries p w).m2tw 2
-      = (((sinNum13 p.φ₂ * wyn * 10 ^ 13) : ℤ) : ℚ) / (10 ^ 26 * (wd : ℚ)) := by
-    simp only [hEntries, Matrix.cons_val_two, Matrix.tail_cons, Matrix.head_cons]
-    simp only [hw1]
-    push_cast
-    all_goals field_simp
-    all_goals ring
-  show RationalApprox.round13 ((hEntries p w).m2tw 2) = _
-  rw [hstep]
-  exact round13_intCast_div26 _ _
+  entry_tac round13_eq_div26, (hEntries p w).m2tw 2, _hw0, hw1
 
 private lemma hentry_b0 (hwd : 0 < wd)
     (hw0 : w 0 = (wxn : ℚ) / (wd : ℚ)) (hw1 : w 1 = (wyn : ℚ) / (wd : ℚ)) :
     (hEntriesR p w).scalars.b0
       = (((-(cosNum13 p.θ₂ * wxn) * 10 ^ 13 + sinNum13 p.θ₂ * cosNum13 p.φ₂ * wyn) / (10 ^ 13 * (wd : ℤ)) : ℤ) : ℚ) / 10 ^ 13 := by
   have hwdQ : ((wd : ℚ)) ≠ 0 := Nat.cast_ne_zero.mpr hwd.ne'
-  have hstep : (hEntries p w).m2θtw 0
-      = (((-(cosNum13 p.θ₂ * wxn) * 10 ^ 13 + sinNum13 p.θ₂ * cosNum13 p.φ₂ * wyn) : ℤ) : ℚ) / (10 ^ 26 * (wd : ℚ)) := by
-    simp only [hEntries, Matrix.cons_val_zero]
-    simp only [hw0, hw1]
-    push_cast
-    all_goals field_simp
-    all_goals ring
-  show RationalApprox.round13 ((hEntries p w).m2θtw 0) = _
-  rw [hstep]
-  exact round13_intCast_div26 _ _
+  entry_tac round13_eq_div26, (hEntries p w).m2θtw 0, hw0, hw1
 
 private lemma hentry_b1 (hwd : 0 < wd)
     (hw0 : w 0 = (wxn : ℚ) / (wd : ℚ)) (hw1 : w 1 = (wyn : ℚ) / (wd : ℚ)) :
     (hEntriesR p w).scalars.b1
       = (((-(sinNum13 p.θ₂ * wxn) * 10 ^ 13 - cosNum13 p.θ₂ * cosNum13 p.φ₂ * wyn) / (10 ^ 13 * (wd : ℤ)) : ℤ) : ℚ) / 10 ^ 13 := by
   have hwdQ : ((wd : ℚ)) ≠ 0 := Nat.cast_ne_zero.mpr hwd.ne'
-  have hstep : (hEntries p w).m2θtw 1
-      = (((-(sinNum13 p.θ₂ * wxn) * 10 ^ 13 - cosNum13 p.θ₂ * cosNum13 p.φ₂ * wyn) : ℤ) : ℚ) / (10 ^ 26 * (wd : ℚ)) := by
-    simp only [hEntries, Matrix.cons_val_zero, Matrix.cons_val_one]
-    simp only [hw0, hw1]
-    push_cast
-    all_goals field_simp
-    all_goals ring
-  show RationalApprox.round13 ((hEntries p w).m2θtw 1) = _
-  rw [hstep]
-  exact round13_intCast_div26 _ _
+  entry_tac round13_eq_div26, (hEntries p w).m2θtw 1, hw0, hw1
 
 private lemma hentry_c0 (hwd : 0 < wd)
     (_hw0 : w 0 = (wxn : ℚ) / (wd : ℚ)) (hw1 : w 1 = (wyn : ℚ) / (wd : ℚ)) :
     (hEntriesR p w).scalars.c0
       = (((cosNum13 p.θ₂ * sinNum13 p.φ₂ * wyn) / (10 ^ 13 * (wd : ℤ)) : ℤ) : ℚ) / 10 ^ 13 := by
   have hwdQ : ((wd : ℚ)) ≠ 0 := Nat.cast_ne_zero.mpr hwd.ne'
-  have hstep : (hEntries p w).m2φtw 0
-      = (((cosNum13 p.θ₂ * sinNum13 p.φ₂ * wyn) : ℤ) : ℚ) / (10 ^ 26 * (wd : ℚ)) := by
-    simp only [hEntries, Matrix.cons_val_zero]
-    simp only [hw1]
-    push_cast
-    all_goals field_simp
-  show RationalApprox.round13 ((hEntries p w).m2φtw 0) = _
-  rw [hstep]
-  exact round13_intCast_div26 _ _
+  entry_tac round13_eq_div26, (hEntries p w).m2φtw 0, _hw0, hw1
 
 private lemma hentry_c1 (hwd : 0 < wd)
     (_hw0 : w 0 = (wxn : ℚ) / (wd : ℚ)) (hw1 : w 1 = (wyn : ℚ) / (wd : ℚ)) :
     (hEntriesR p w).scalars.c1
       = (((sinNum13 p.θ₂ * sinNum13 p.φ₂ * wyn) / (10 ^ 13 * (wd : ℤ)) : ℤ) : ℚ) / 10 ^ 13 := by
   have hwdQ : ((wd : ℚ)) ≠ 0 := Nat.cast_ne_zero.mpr hwd.ne'
-  have hstep : (hEntries p w).m2φtw 1
-      = (((sinNum13 p.θ₂ * sinNum13 p.φ₂ * wyn) : ℤ) : ℚ) / (10 ^ 26 * (wd : ℚ)) := by
-    simp only [hEntries, Matrix.cons_val_zero, Matrix.cons_val_one]
-    simp only [hw1]
-    push_cast
-    all_goals field_simp
-  show RationalApprox.round13 ((hEntries p w).m2φtw 1) = _
-  rw [hstep]
-  exact round13_intCast_div26 _ _
+  entry_tac round13_eq_div26, (hEntries p w).m2φtw 1, _hw0, hw1
 
 private lemma hentry_c2 (hwd : 0 < wd)
     (_hw0 : w 0 = (wxn : ℚ) / (wd : ℚ)) (hw1 : w 1 = (wyn : ℚ) / (wd : ℚ)) :
     (hEntriesR p w).scalars.c2
       = (((cosNum13 p.φ₂ * wyn * 10 ^ 13) / (10 ^ 13 * (wd : ℤ)) : ℤ) : ℚ) / 10 ^ 13 := by
   have hwdQ : ((wd : ℚ)) ≠ 0 := Nat.cast_ne_zero.mpr hwd.ne'
-  have hstep : (hEntries p w).m2φtw 2
-      = (((cosNum13 p.φ₂ * wyn * 10 ^ 13) : ℤ) : ℚ) / (10 ^ 26 * (wd : ℚ)) := by
-    simp only [hEntries, Matrix.cons_val_two, Matrix.tail_cons, Matrix.head_cons]
-    simp only [hw1]
-    push_cast
-    all_goals field_simp
-    all_goals ring
-  show RationalApprox.round13 ((hEntries p w).m2φtw 2) = _
-  rw [hstep]
-  exact round13_intCast_div26 _ _
+  entry_tac round13_eq_div26, (hEntries p w).m2φtw 2, _hw0, hw1
 
 private lemma hentry_d0 (hwd : 0 < wd)
     (hw0 : w 0 = (wxn : ℚ) / (wd : ℚ)) (hw1 : w 1 = (wyn : ℚ) / (wd : ℚ)) :
     (hEntriesR p w).scalars.d0
       = (((-(-(sinNum13 p.θ₂ * wxn) * 10 ^ 13 - cosNum13 p.θ₂ * cosNum13 p.φ₂ * wyn)) / (10 ^ 13 * (wd : ℤ)) : ℤ) : ℚ) / 10 ^ 13 := by
   have hwdQ : ((wd : ℚ)) ≠ 0 := Nat.cast_ne_zero.mpr hwd.ne'
-  have hstep : (hEntries p w).m2θθtw 0
-      = (((-(-(sinNum13 p.θ₂ * wxn) * 10 ^ 13 - cosNum13 p.θ₂ * cosNum13 p.φ₂ * wyn)) : ℤ) : ℚ) / (10 ^ 26 * (wd : ℚ)) := by
-    simp only [hEntries, Matrix.cons_val_zero]
-    simp only [hw0, hw1]
-    push_cast
-    all_goals field_simp
-    all_goals ring
-  show RationalApprox.round13 ((hEntries p w).m2θθtw 0) = _
-  rw [hstep]
-  exact round13_intCast_div26 _ _
+  entry_tac round13_eq_div26, (hEntries p w).m2θθtw 0, hw0, hw1
 
 private lemma hentry_d1 (hwd : 0 < wd)
     (hw0 : w 0 = (wxn : ℚ) / (wd : ℚ)) (hw1 : w 1 = (wyn : ℚ) / (wd : ℚ)) :
     (hEntriesR p w).scalars.d1
       = (((-(cosNum13 p.θ₂ * wxn) * 10 ^ 13 + sinNum13 p.θ₂ * cosNum13 p.φ₂ * wyn) / (10 ^ 13 * (wd : ℤ)) : ℤ) : ℚ) / 10 ^ 13 := by
   have hwdQ : ((wd : ℚ)) ≠ 0 := Nat.cast_ne_zero.mpr hwd.ne'
-  have hstep : (hEntries p w).m2θθtw 1
-      = (((-(cosNum13 p.θ₂ * wxn) * 10 ^ 13 + sinNum13 p.θ₂ * cosNum13 p.φ₂ * wyn) : ℤ) : ℚ) / (10 ^ 26 * (wd : ℚ)) := by
-    simp only [hEntries, Matrix.cons_val_zero, Matrix.cons_val_one]
-    simp only [hw0, hw1]
-    push_cast
-    all_goals field_simp
-    all_goals ring
-  show RationalApprox.round13 ((hEntries p w).m2θθtw 1) = _
-  rw [hstep]
-  exact round13_intCast_div26 _ _
+  entry_tac round13_eq_div26, (hEntries p w).m2θθtw 1, hw0, hw1
 
 private lemma hentry_e0 (hwd : 0 < wd)
     (_hw0 : w 0 = (wxn : ℚ) / (wd : ℚ)) (hw1 : w 1 = (wyn : ℚ) / (wd : ℚ)) :
     (hEntriesR p w).scalars.e0
       = (((-(sinNum13 p.θ₂ * sinNum13 p.φ₂ * wyn)) / (10 ^ 13 * (wd : ℤ)) : ℤ) : ℚ) / 10 ^ 13 := by
   have hwdQ : ((wd : ℚ)) ≠ 0 := Nat.cast_ne_zero.mpr hwd.ne'
-  have hstep : (hEntries p w).m2θφtw 0
-      = (((-(sinNum13 p.θ₂ * sinNum13 p.φ₂ * wyn)) : ℤ) : ℚ) / (10 ^ 26 * (wd : ℚ)) := by
-    simp only [hEntries, Matrix.cons_val_zero]
-    simp only [hw1]
-    push_cast
-    all_goals field_simp
-  show RationalApprox.round13 ((hEntries p w).m2θφtw 0) = _
-  rw [hstep]
-  exact round13_intCast_div26 _ _
+  entry_tac round13_eq_div26, (hEntries p w).m2θφtw 0, _hw0, hw1
 
 private lemma hentry_e1 (hwd : 0 < wd)
     (_hw0 : w 0 = (wxn : ℚ) / (wd : ℚ)) (hw1 : w 1 = (wyn : ℚ) / (wd : ℚ)) :
     (hEntriesR p w).scalars.e1
       = (((cosNum13 p.θ₂ * sinNum13 p.φ₂ * wyn) / (10 ^ 13 * (wd : ℤ)) : ℤ) : ℚ) / 10 ^ 13 := by
   have hwdQ : ((wd : ℚ)) ≠ 0 := Nat.cast_ne_zero.mpr hwd.ne'
-  have hstep : (hEntries p w).m2θφtw 1
-      = (((cosNum13 p.θ₂ * sinNum13 p.φ₂ * wyn) : ℤ) : ℚ) / (10 ^ 26 * (wd : ℚ)) := by
-    simp only [hEntries, Matrix.cons_val_zero, Matrix.cons_val_one]
-    simp only [hw1]
-    push_cast
-    all_goals field_simp
-  show RationalApprox.round13 ((hEntries p w).m2θφtw 1) = _
-  rw [hstep]
-  exact round13_intCast_div26 _ _
+  entry_tac round13_eq_div26, (hEntries p w).m2θφtw 1, _hw0, hw1
 
 private lemma hentry_f0 (hwd : 0 < wd)
     (_hw0 : w 0 = (wxn : ℚ) / (wd : ℚ)) (hw1 : w 1 = (wyn : ℚ) / (wd : ℚ)) :
     (hEntriesR p w).scalars.f0
       = (((cosNum13 p.θ₂ * cosNum13 p.φ₂ * wyn) / (10 ^ 13 * (wd : ℤ)) : ℤ) : ℚ) / 10 ^ 13 := by
   have hwdQ : ((wd : ℚ)) ≠ 0 := Nat.cast_ne_zero.mpr hwd.ne'
-  have hstep : (hEntries p w).m2φφtw 0
-      = (((cosNum13 p.θ₂ * cosNum13 p.φ₂ * wyn) : ℤ) : ℚ) / (10 ^ 26 * (wd : ℚ)) := by
-    simp only [hEntries, Matrix.cons_val_zero]
-    simp only [hw1]
-    push_cast
-    all_goals field_simp
-  show RationalApprox.round13 ((hEntries p w).m2φφtw 0) = _
-  rw [hstep]
-  exact round13_intCast_div26 _ _
+  entry_tac round13_eq_div26, (hEntries p w).m2φφtw 0, _hw0, hw1
 
 private lemma hentry_f1 (hwd : 0 < wd)
     (_hw0 : w 0 = (wxn : ℚ) / (wd : ℚ)) (hw1 : w 1 = (wyn : ℚ) / (wd : ℚ)) :
     (hEntriesR p w).scalars.f1
       = (((sinNum13 p.θ₂ * cosNum13 p.φ₂ * wyn) / (10 ^ 13 * (wd : ℤ)) : ℤ) : ℚ) / 10 ^ 13 := by
   have hwdQ : ((wd : ℚ)) ≠ 0 := Nat.cast_ne_zero.mpr hwd.ne'
-  have hstep : (hEntries p w).m2φφtw 1
-      = (((sinNum13 p.θ₂ * cosNum13 p.φ₂ * wyn) : ℤ) : ℚ) / (10 ^ 26 * (wd : ℚ)) := by
-    simp only [hEntries, Matrix.cons_val_zero, Matrix.cons_val_one]
-    simp only [hw1]
-    push_cast
-    all_goals field_simp
-  show RationalApprox.round13 ((hEntries p w).m2φφtw 1) = _
-  rw [hstep]
-  exact round13_intCast_div26 _ _
+  entry_tac round13_eq_div26, (hEntries p w).m2φφtw 1, _hw0, hw1
 
 private lemma hentry_f2 (hwd : 0 < wd)
     (_hw0 : w 0 = (wxn : ℚ) / (wd : ℚ)) (hw1 : w 1 = (wyn : ℚ) / (wd : ℚ)) :
     (hEntriesR p w).scalars.f2
       = (((-(sinNum13 p.φ₂ * wyn * 10 ^ 13)) / (10 ^ 13 * (wd : ℤ)) : ℤ) : ℚ) / 10 ^ 13 := by
   have hwdQ : ((wd : ℚ)) ≠ 0 := Nat.cast_ne_zero.mpr hwd.ne'
-  have hstep : (hEntries p w).m2φφtw 2
-      = (((-(sinNum13 p.φ₂ * wyn * 10 ^ 13)) : ℤ) : ℚ) / (10 ^ 26 * (wd : ℚ)) := by
-    simp only [hEntries, Matrix.cons_val_two, Matrix.tail_cons, Matrix.head_cons]
-    simp only [hw1]
-    push_cast
-    all_goals field_simp
-    all_goals ring
-  show RationalApprox.round13 ((hEntries p w).m2φφtw 2) = _
-  rw [hstep]
-  exact round13_intCast_div26 _ _
+  entry_tac round13_eq_div26, (hEntries p w).m2φφtw 2, _hw0, hw1
 
 /-- The identically-zero component `b2` rounds to `0`. -/
 private lemma hentry_b2 : (hEntriesR p w).scalars.b2 = ((0 : ℤ) : ℚ) / 10 ^ 13 := by
@@ -748,34 +614,13 @@ private lemma gdot_R (hwd : 0 < wd)
   have hwdQ : ((wd : ℚ)) ≠ 0 := Nat.cast_ne_zero.mpr hwd.ne'
   have hc0 : (gEntriesR p w).m1RTw 0
       = (((-(sinNum13 p.θ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn)) * 10 ^ 13 - cosNum13 p.θ₁ * cosNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) / (10 ^ 26 * (wd : ℤ)) : ℤ) : ℚ) / 10 ^ 13 := by
-    show RationalApprox.round13 ((gEntries p w).m1RTw 0) = _
-    rw [show (gEntries p w).m1RTw 0 = (((-(sinNum13 p.θ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn)) * 10 ^ 13 - cosNum13 p.θ₁ * cosNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) : ℤ) : ℚ) / (10 ^ 39 * (wd : ℚ)) from by
-      simp only [gEntries, Matrix.cons_val_zero]
-      simp only [hw0, hw1]
-      push_cast
-      all_goals field_simp
-      all_goals ring]
-    exact round13_intCast_div39 _ _
+    entry_tac round13_eq_div39, (gEntries p w).m1RTw 0, hw0, hw1
   have hc1 : (gEntriesR p w).m1RTw 1
       = (((cosNum13 p.θ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn) * 10 ^ 13 - sinNum13 p.θ₁ * cosNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) / (10 ^ 26 * (wd : ℤ)) : ℤ) : ℚ) / 10 ^ 13 := by
-    show RationalApprox.round13 ((gEntries p w).m1RTw 1) = _
-    rw [show (gEntries p w).m1RTw 1 = (((cosNum13 p.θ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn) * 10 ^ 13 - sinNum13 p.θ₁ * cosNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) : ℤ) : ℚ) / (10 ^ 39 * (wd : ℚ)) from by
-      simp only [gEntries, Matrix.cons_val_zero, Matrix.cons_val_one]
-      simp only [hw0, hw1]
-      push_cast
-      all_goals field_simp
-      all_goals ring]
-    exact round13_intCast_div39 _ _
+    entry_tac round13_eq_div39, (gEntries p w).m1RTw 1, hw0, hw1
   have hc2 : (gEntriesR p w).m1RTw 2
       = (((sinNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn) * 10 ^ 13) / (10 ^ 26 * (wd : ℤ)) : ℤ) : ℚ) / 10 ^ 13 := by
-    show RationalApprox.round13 ((gEntries p w).m1RTw 2) = _
-    rw [show (gEntries p w).m1RTw 2 = (((sinNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn) * 10 ^ 13) : ℤ) : ℚ) / (10 ^ 39 * (wd : ℚ)) from by
-      simp only [gEntries, Matrix.cons_val_two, Matrix.tail_cons, Matrix.head_cons]
-      simp only [hw0, hw1]
-      push_cast
-      all_goals field_simp
-      all_goals ring]
-    exact round13_intCast_div39 _ _
+    entry_tac round13_eq_div39, (gEntries p w).m1RTw 2, hw0, hw1
   simp only [dotProduct, Fin.sum_univ_three]
   rw [hc0, hc1, hc2, hS0, hS1, hS2]
   push_cast
@@ -790,34 +635,13 @@ private lemma gdot_R' (hwd : 0 < wd)
   have hwdQ : ((wd : ℚ)) ≠ 0 := Nat.cast_ne_zero.mpr hwd.ne'
   have hc0 : (gEntriesR p w).m1R'Tw 0
       = (((-(sinNum13 p.θ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) * 10 ^ 13 + cosNum13 p.θ₁ * cosNum13 p.φ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn)) / (10 ^ 26 * (wd : ℤ)) : ℤ) : ℚ) / 10 ^ 13 := by
-    show RationalApprox.round13 ((gEntries p w).m1R'Tw 0) = _
-    rw [show (gEntries p w).m1R'Tw 0 = (((-(sinNum13 p.θ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) * 10 ^ 13 + cosNum13 p.θ₁ * cosNum13 p.φ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn)) : ℤ) : ℚ) / (10 ^ 39 * (wd : ℚ)) from by
-      simp only [gEntries, Matrix.cons_val_zero]
-      simp only [hw0, hw1]
-      push_cast
-      all_goals field_simp
-      all_goals ring]
-    exact round13_intCast_div39 _ _
+    entry_tac round13_eq_div39, (gEntries p w).m1R'Tw 0, hw0, hw1
   have hc1 : (gEntriesR p w).m1R'Tw 1
       = (((cosNum13 p.θ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn) * 10 ^ 13 + sinNum13 p.θ₁ * cosNum13 p.φ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn)) / (10 ^ 26 * (wd : ℤ)) : ℤ) : ℚ) / 10 ^ 13 := by
-    show RationalApprox.round13 ((gEntries p w).m1R'Tw 1) = _
-    rw [show (gEntries p w).m1R'Tw 1 = (((cosNum13 p.θ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn) * 10 ^ 13 + sinNum13 p.θ₁ * cosNum13 p.φ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn)) : ℤ) : ℚ) / (10 ^ 39 * (wd : ℚ)) from by
-      simp only [gEntries, Matrix.cons_val_zero, Matrix.cons_val_one]
-      simp only [hw0, hw1]
-      push_cast
-      all_goals field_simp
-      all_goals ring]
-    exact round13_intCast_div39 _ _
+    entry_tac round13_eq_div39, (gEntries p w).m1R'Tw 1, hw0, hw1
   have hc2 : (gEntriesR p w).m1R'Tw 2
       = (((-(sinNum13 p.φ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn)) * 10 ^ 13) / (10 ^ 26 * (wd : ℤ)) : ℤ) : ℚ) / 10 ^ 13 := by
-    show RationalApprox.round13 ((gEntries p w).m1R'Tw 2) = _
-    rw [show (gEntries p w).m1R'Tw 2 = (((-(sinNum13 p.φ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn)) * 10 ^ 13) : ℤ) : ℚ) / (10 ^ 39 * (wd : ℚ)) from by
-      simp only [gEntries, Matrix.cons_val_two, Matrix.tail_cons, Matrix.head_cons]
-      simp only [hw0, hw1]
-      push_cast
-      all_goals field_simp
-      all_goals ring]
-    exact round13_intCast_div39 _ _
+    entry_tac round13_eq_div39, (gEntries p w).m1R'Tw 2, hw0, hw1
   simp only [dotProduct, Fin.sum_univ_three]
   rw [hc0, hc1, hc2, hS0, hS1, hS2]
   push_cast
@@ -832,24 +656,10 @@ private lemma gdot_θR (hwd : 0 < wd)
   have hwdQ : ((wd : ℚ)) ≠ 0 := Nat.cast_ne_zero.mpr hwd.ne'
   have hc0 : (gEntriesR p w).m1θRTw 0
       = (((-(cosNum13 p.θ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn)) * 10 ^ 13 + sinNum13 p.θ₁ * cosNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) / (10 ^ 26 * (wd : ℤ)) : ℤ) : ℚ) / 10 ^ 13 := by
-    show RationalApprox.round13 ((gEntries p w).m1θRTw 0) = _
-    rw [show (gEntries p w).m1θRTw 0 = (((-(cosNum13 p.θ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn)) * 10 ^ 13 + sinNum13 p.θ₁ * cosNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) : ℤ) : ℚ) / (10 ^ 39 * (wd : ℚ)) from by
-      simp only [gEntries, Matrix.cons_val_zero]
-      simp only [hw0, hw1]
-      push_cast
-      all_goals field_simp
-      all_goals ring]
-    exact round13_intCast_div39 _ _
+    entry_tac round13_eq_div39, (gEntries p w).m1θRTw 0, hw0, hw1
   have hc1 : (gEntriesR p w).m1θRTw 1
       = (((-(sinNum13 p.θ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn)) * 10 ^ 13 - cosNum13 p.θ₁ * cosNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) / (10 ^ 26 * (wd : ℤ)) : ℤ) : ℚ) / 10 ^ 13 := by
-    show RationalApprox.round13 ((gEntries p w).m1θRTw 1) = _
-    rw [show (gEntries p w).m1θRTw 1 = (((-(sinNum13 p.θ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn)) * 10 ^ 13 - cosNum13 p.θ₁ * cosNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) : ℤ) : ℚ) / (10 ^ 39 * (wd : ℚ)) from by
-      simp only [gEntries, Matrix.cons_val_zero, Matrix.cons_val_one]
-      simp only [hw0, hw1]
-      push_cast
-      all_goals field_simp
-      all_goals ring]
-    exact round13_intCast_div39 _ _
+    entry_tac round13_eq_div39, (gEntries p w).m1θRTw 1, hw0, hw1
   have hc2 : (gEntriesR p w).m1θRTw 2 = 0 := by
     show RationalApprox.round13 ((gEntries p w).m1θRTw 2) = _
     rw [show (gEntries p w).m1θRTw 2 = 0 from by
@@ -870,32 +680,13 @@ private lemma gdot_φR (hwd : 0 < wd)
   have hwdQ : ((wd : ℚ)) ≠ 0 := Nat.cast_ne_zero.mpr hwd.ne'
   have hc0 : (gEntriesR p w).m1φRTw 0
       = (((cosNum13 p.θ₁ * sinNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) / (10 ^ 26 * (wd : ℤ)) : ℤ) : ℚ) / 10 ^ 13 := by
-    show RationalApprox.round13 ((gEntries p w).m1φRTw 0) = _
-    rw [show (gEntries p w).m1φRTw 0 = (((cosNum13 p.θ₁ * sinNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) : ℤ) : ℚ) / (10 ^ 39 * (wd : ℚ)) from by
-      simp only [gEntries, Matrix.cons_val_zero]
-      simp only [hw0, hw1]
-      push_cast
-      all_goals field_simp]
-    exact round13_intCast_div39 _ _
+    entry_tac round13_eq_div39, (gEntries p w).m1φRTw 0, hw0, hw1
   have hc1 : (gEntriesR p w).m1φRTw 1
       = (((sinNum13 p.θ₁ * sinNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) / (10 ^ 26 * (wd : ℤ)) : ℤ) : ℚ) / 10 ^ 13 := by
-    show RationalApprox.round13 ((gEntries p w).m1φRTw 1) = _
-    rw [show (gEntries p w).m1φRTw 1 = (((sinNum13 p.θ₁ * sinNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) : ℤ) : ℚ) / (10 ^ 39 * (wd : ℚ)) from by
-      simp only [gEntries, Matrix.cons_val_zero, Matrix.cons_val_one]
-      simp only [hw0, hw1]
-      push_cast
-      all_goals field_simp]
-    exact round13_intCast_div39 _ _
+    entry_tac round13_eq_div39, (gEntries p w).m1φRTw 1, hw0, hw1
   have hc2 : (gEntriesR p w).m1φRTw 2
       = (((cosNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn) * 10 ^ 13) / (10 ^ 26 * (wd : ℤ)) : ℤ) : ℚ) / 10 ^ 13 := by
-    show RationalApprox.round13 ((gEntries p w).m1φRTw 2) = _
-    rw [show (gEntries p w).m1φRTw 2 = (((cosNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn) * 10 ^ 13) : ℤ) : ℚ) / (10 ^ 39 * (wd : ℚ)) from by
-      simp only [gEntries, Matrix.cons_val_two, Matrix.tail_cons, Matrix.head_cons]
-      simp only [hw0, hw1]
-      push_cast
-      all_goals field_simp
-      all_goals ring]
-    exact round13_intCast_div39 _ _
+    entry_tac round13_eq_div39, (gEntries p w).m1φRTw 2, hw0, hw1
   simp only [dotProduct, Fin.sum_univ_three]
   rw [hc0, hc1, hc2, hS0, hS1, hS2]
   push_cast
@@ -910,24 +701,10 @@ private lemma gdot_θR' (hwd : 0 < wd)
   have hwdQ : ((wd : ℚ)) ≠ 0 := Nat.cast_ne_zero.mpr hwd.ne'
   have hc0 : (gEntriesR p w).m1θR'Tw 0
       = (((-(cosNum13 p.θ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) * 10 ^ 13 - sinNum13 p.θ₁ * cosNum13 p.φ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn)) / (10 ^ 26 * (wd : ℤ)) : ℤ) : ℚ) / 10 ^ 13 := by
-    show RationalApprox.round13 ((gEntries p w).m1θR'Tw 0) = _
-    rw [show (gEntries p w).m1θR'Tw 0 = (((-(cosNum13 p.θ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) * 10 ^ 13 - sinNum13 p.θ₁ * cosNum13 p.φ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn)) : ℤ) : ℚ) / (10 ^ 39 * (wd : ℚ)) from by
-      simp only [gEntries, Matrix.cons_val_zero]
-      simp only [hw0, hw1]
-      push_cast
-      all_goals field_simp
-      all_goals ring]
-    exact round13_intCast_div39 _ _
+    entry_tac round13_eq_div39, (gEntries p w).m1θR'Tw 0, hw0, hw1
   have hc1 : (gEntriesR p w).m1θR'Tw 1
       = (((-(sinNum13 p.θ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) * 10 ^ 13 + cosNum13 p.θ₁ * cosNum13 p.φ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn)) / (10 ^ 26 * (wd : ℤ)) : ℤ) : ℚ) / 10 ^ 13 := by
-    show RationalApprox.round13 ((gEntries p w).m1θR'Tw 1) = _
-    rw [show (gEntries p w).m1θR'Tw 1 = (((-(sinNum13 p.θ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) * 10 ^ 13 + cosNum13 p.θ₁ * cosNum13 p.φ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn)) : ℤ) : ℚ) / (10 ^ 39 * (wd : ℚ)) from by
-      simp only [gEntries, Matrix.cons_val_zero, Matrix.cons_val_one]
-      simp only [hw0, hw1]
-      push_cast
-      all_goals field_simp
-      all_goals ring]
-    exact round13_intCast_div39 _ _
+    entry_tac round13_eq_div39, (gEntries p w).m1θR'Tw 1, hw0, hw1
   have hc2 : (gEntriesR p w).m1θR'Tw 2 = 0 := by
     show RationalApprox.round13 ((gEntries p w).m1θR'Tw 2) = _
     rw [show (gEntries p w).m1θR'Tw 2 = 0 from by
@@ -948,34 +725,13 @@ private lemma gdot_φR' (hwd : 0 < wd)
   have hwdQ : ((wd : ℚ)) ≠ 0 := Nat.cast_ne_zero.mpr hwd.ne'
   have hc0 : (gEntriesR p w).m1φR'Tw 0
       = (((-(cosNum13 p.θ₁ * sinNum13 p.φ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn))) / (10 ^ 26 * (wd : ℤ)) : ℤ) : ℚ) / 10 ^ 13 := by
-    show RationalApprox.round13 ((gEntries p w).m1φR'Tw 0) = _
-    rw [show (gEntries p w).m1φR'Tw 0 = (((-(cosNum13 p.θ₁ * sinNum13 p.φ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn))) : ℤ) : ℚ) / (10 ^ 39 * (wd : ℚ)) from by
-      simp only [gEntries, Matrix.cons_val_zero]
-      simp only [hw0, hw1]
-      push_cast
-      all_goals field_simp
-      all_goals ring]
-    exact round13_intCast_div39 _ _
+    entry_tac round13_eq_div39, (gEntries p w).m1φR'Tw 0, hw0, hw1
   have hc1 : (gEntriesR p w).m1φR'Tw 1
       = (((-(sinNum13 p.θ₁ * sinNum13 p.φ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn))) / (10 ^ 26 * (wd : ℤ)) : ℤ) : ℚ) / 10 ^ 13 := by
-    show RationalApprox.round13 ((gEntries p w).m1φR'Tw 1) = _
-    rw [show (gEntries p w).m1φR'Tw 1 = (((-(sinNum13 p.θ₁ * sinNum13 p.φ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn))) : ℤ) : ℚ) / (10 ^ 39 * (wd : ℚ)) from by
-      simp only [gEntries, Matrix.cons_val_zero, Matrix.cons_val_one]
-      simp only [hw0, hw1]
-      push_cast
-      all_goals field_simp
-      all_goals ring]
-    exact round13_intCast_div39 _ _
+    entry_tac round13_eq_div39, (gEntries p w).m1φR'Tw 1, hw0, hw1
   have hc2 : (gEntriesR p w).m1φR'Tw 2
       = (((-(cosNum13 p.φ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn)) * 10 ^ 13) / (10 ^ 26 * (wd : ℤ)) : ℤ) : ℚ) / 10 ^ 13 := by
-    show RationalApprox.round13 ((gEntries p w).m1φR'Tw 2) = _
-    rw [show (gEntries p w).m1φR'Tw 2 = (((-(cosNum13 p.φ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn)) * 10 ^ 13) : ℤ) : ℚ) / (10 ^ 39 * (wd : ℚ)) from by
-      simp only [gEntries, Matrix.cons_val_two, Matrix.tail_cons, Matrix.head_cons]
-      simp only [hw0, hw1]
-      push_cast
-      all_goals field_simp
-      all_goals ring]
-    exact round13_intCast_div39 _ _
+    entry_tac round13_eq_div39, (gEntries p w).m1φR'Tw 2, hw0, hw1
   simp only [dotProduct, Fin.sum_univ_three]
   rw [hc0, hc1, hc2, hS0, hS1, hS2]
   push_cast
@@ -990,24 +746,10 @@ private lemma gdot_θθR (hwd : 0 < wd)
   have hwdQ : ((wd : ℚ)) ≠ 0 := Nat.cast_ne_zero.mpr hwd.ne'
   have hc0 : (gEntriesR p w).m1θθRTw 0
       = (((sinNum13 p.θ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn) * 10 ^ 13 + cosNum13 p.θ₁ * cosNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) / (10 ^ 26 * (wd : ℤ)) : ℤ) : ℚ) / 10 ^ 13 := by
-    show RationalApprox.round13 ((gEntries p w).m1θθRTw 0) = _
-    rw [show (gEntries p w).m1θθRTw 0 = (((sinNum13 p.θ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn) * 10 ^ 13 + cosNum13 p.θ₁ * cosNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) : ℤ) : ℚ) / (10 ^ 39 * (wd : ℚ)) from by
-      simp only [gEntries, Matrix.cons_val_zero]
-      simp only [hw0, hw1]
-      push_cast
-      all_goals field_simp
-      all_goals ring]
-    exact round13_intCast_div39 _ _
+    entry_tac round13_eq_div39, (gEntries p w).m1θθRTw 0, hw0, hw1
   have hc1 : (gEntriesR p w).m1θθRTw 1
       = (((-(cosNum13 p.θ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn)) * 10 ^ 13 + sinNum13 p.θ₁ * cosNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) / (10 ^ 26 * (wd : ℤ)) : ℤ) : ℚ) / 10 ^ 13 := by
-    show RationalApprox.round13 ((gEntries p w).m1θθRTw 1) = _
-    rw [show (gEntries p w).m1θθRTw 1 = (((-(cosNum13 p.θ₁ * (cosNum13 p.α * wxn + sinNum13 p.α * wyn)) * 10 ^ 13 + sinNum13 p.θ₁ * cosNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) : ℤ) : ℚ) / (10 ^ 39 * (wd : ℚ)) from by
-      simp only [gEntries, Matrix.cons_val_zero, Matrix.cons_val_one]
-      simp only [hw0, hw1]
-      push_cast
-      all_goals field_simp
-      all_goals ring]
-    exact round13_intCast_div39 _ _
+    entry_tac round13_eq_div39, (gEntries p w).m1θθRTw 1, hw0, hw1
   have hc2 : (gEntriesR p w).m1θθRTw 2 = 0 := by
     show RationalApprox.round13 ((gEntries p w).m1θθRTw 2) = _
     rw [show (gEntries p w).m1θθRTw 2 = 0 from by
@@ -1028,22 +770,10 @@ private lemma gdot_θφR (hwd : 0 < wd)
   have hwdQ : ((wd : ℚ)) ≠ 0 := Nat.cast_ne_zero.mpr hwd.ne'
   have hc0 : (gEntriesR p w).m1θφRTw 0
       = (((-(sinNum13 p.θ₁ * sinNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn))) / (10 ^ 26 * (wd : ℤ)) : ℤ) : ℚ) / 10 ^ 13 := by
-    show RationalApprox.round13 ((gEntries p w).m1θφRTw 0) = _
-    rw [show (gEntries p w).m1θφRTw 0 = (((-(sinNum13 p.θ₁ * sinNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn))) : ℤ) : ℚ) / (10 ^ 39 * (wd : ℚ)) from by
-      simp only [gEntries, Matrix.cons_val_zero]
-      simp only [hw0, hw1]
-      push_cast
-      all_goals field_simp]
-    exact round13_intCast_div39 _ _
+    entry_tac round13_eq_div39, (gEntries p w).m1θφRTw 0, hw0, hw1
   have hc1 : (gEntriesR p w).m1θφRTw 1
       = (((cosNum13 p.θ₁ * sinNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) / (10 ^ 26 * (wd : ℤ)) : ℤ) : ℚ) / 10 ^ 13 := by
-    show RationalApprox.round13 ((gEntries p w).m1θφRTw 1) = _
-    rw [show (gEntries p w).m1θφRTw 1 = (((cosNum13 p.θ₁ * sinNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) : ℤ) : ℚ) / (10 ^ 39 * (wd : ℚ)) from by
-      simp only [gEntries, Matrix.cons_val_zero, Matrix.cons_val_one]
-      simp only [hw0, hw1]
-      push_cast
-      all_goals field_simp]
-    exact round13_intCast_div39 _ _
+    entry_tac round13_eq_div39, (gEntries p w).m1θφRTw 1, hw0, hw1
   have hc2 : (gEntriesR p w).m1θφRTw 2 = 0 := by
     show RationalApprox.round13 ((gEntries p w).m1θφRTw 2) = _
     rw [show (gEntries p w).m1θφRTw 2 = 0 from by
@@ -1064,32 +794,13 @@ private lemma gdot_φφR (hwd : 0 < wd)
   have hwdQ : ((wd : ℚ)) ≠ 0 := Nat.cast_ne_zero.mpr hwd.ne'
   have hc0 : (gEntriesR p w).m1φφRTw 0
       = (((cosNum13 p.θ₁ * cosNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) / (10 ^ 26 * (wd : ℤ)) : ℤ) : ℚ) / 10 ^ 13 := by
-    show RationalApprox.round13 ((gEntries p w).m1φφRTw 0) = _
-    rw [show (gEntries p w).m1φφRTw 0 = (((cosNum13 p.θ₁ * cosNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) : ℤ) : ℚ) / (10 ^ 39 * (wd : ℚ)) from by
-      simp only [gEntries, Matrix.cons_val_zero]
-      simp only [hw0, hw1]
-      push_cast
-      all_goals field_simp]
-    exact round13_intCast_div39 _ _
+    entry_tac round13_eq_div39, (gEntries p w).m1φφRTw 0, hw0, hw1
   have hc1 : (gEntriesR p w).m1φφRTw 1
       = (((sinNum13 p.θ₁ * cosNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) / (10 ^ 26 * (wd : ℤ)) : ℤ) : ℚ) / 10 ^ 13 := by
-    show RationalApprox.round13 ((gEntries p w).m1φφRTw 1) = _
-    rw [show (gEntries p w).m1φφRTw 1 = (((sinNum13 p.θ₁ * cosNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) : ℤ) : ℚ) / (10 ^ 39 * (wd : ℚ)) from by
-      simp only [gEntries, Matrix.cons_val_zero, Matrix.cons_val_one]
-      simp only [hw0, hw1]
-      push_cast
-      all_goals field_simp]
-    exact round13_intCast_div39 _ _
+    entry_tac round13_eq_div39, (gEntries p w).m1φφRTw 1, hw0, hw1
   have hc2 : (gEntriesR p w).m1φφRTw 2
       = (((-(sinNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) * 10 ^ 13) / (10 ^ 26 * (wd : ℤ)) : ℤ) : ℚ) / 10 ^ 13 := by
-    show RationalApprox.round13 ((gEntries p w).m1φφRTw 2) = _
-    rw [show (gEntries p w).m1φφRTw 2 = (((-(sinNum13 p.φ₁ * (-(sinNum13 p.α * wxn) + cosNum13 p.α * wyn)) * 10 ^ 13) : ℤ) : ℚ) / (10 ^ 39 * (wd : ℚ)) from by
-      simp only [gEntries, Matrix.cons_val_two, Matrix.tail_cons, Matrix.head_cons]
-      simp only [hw0, hw1]
-      push_cast
-      all_goals field_simp
-      all_goals ring]
-    exact round13_intCast_div39 _ _
+    entry_tac round13_eq_div39, (gEntries p w).m1φφRTw 2, hw0, hw1
   simp only [dotProduct, Fin.sum_univ_three]
   rw [hc0, hc1, hc2, hS0, hS1, hS2]
   push_cast
@@ -1292,6 +1003,28 @@ private lemma abs_intCast_div13 (n : ℤ) :
     |(n : ℚ) / 10 ^ 13| = ((|n| : ℤ) : ℚ) / 10 ^ 13 :=
   RationalApprox.abs_intCast_div_pow 13 n
 
+/-- `max`-of-abs over a scale-`10¹³` entry triple whose third entry is `0`. -/
+private lemma max3_abs_div13₀ {x0 x1 x2 : ℚ} {X0 X1 : ℤ}
+    (h0 : x0 = (X0 : ℚ) / 10 ^ 13) (h1 : x1 = (X1 : ℚ) / 10 ^ 13) (h2 : x2 = 0) :
+    max |x0| (max |x1| |x2|)
+      = ((max (X0.natAbs : ℤ) (X1.natAbs : ℤ) : ℤ) : ℚ) / 10 ^ 13 := by
+  rw [h0, h1, h2, abs_intCast_div13, abs_intCast_div13, abs_zero]
+  rw [show max (((|X1| : ℤ) : ℚ) / 10 ^ 13) 0 = ((|X1| : ℤ) : ℚ) / 10 ^ 13 from
+    max_eq_left (by positivity)]
+  rw [max_div_div_right (by positivity : (0:ℚ) ≤ 10 ^ 13), ← Int.cast_max,
+    Int.abs_eq_natAbs, Int.abs_eq_natAbs]
+
+/-- `max`-of-abs over a scale-`10¹³` entry triple. -/
+private lemma max3_abs_div13 {x0 x1 x2 : ℚ} {X0 X1 X2 : ℤ}
+    (h0 : x0 = (X0 : ℚ) / 10 ^ 13) (h1 : x1 = (X1 : ℚ) / 10 ^ 13)
+    (h2 : x2 = (X2 : ℚ) / 10 ^ 13) :
+    max |x0| (max |x1| |x2|)
+      = ((max (X0.natAbs : ℤ) (max (X1.natAbs : ℤ) (X2.natAbs : ℤ)) : ℤ) : ℚ) / 10 ^ 13 := by
+  rw [h0, h1, h2, abs_intCast_div13, abs_intCast_div13, abs_intCast_div13]
+  rw [max_div_div_right (by positivity : (0:ℚ) ≤ 10 ^ 13),
+    max_div_div_right (by positivity : (0:ℚ) ≤ 10 ^ 13), ← Int.cast_max, ← Int.cast_max,
+    Int.abs_eq_natAbs, Int.abs_eq_natAbs, Int.abs_eq_natAbs]
+
 /-- The pipeline `kRhi` bounds `(εθ₂+εφ₂)³/6 + kappaTerm` from above. -/
 private lemma kR_bound :
     ((εθ₂ + εφ₂) ^ 3 / 6
@@ -1353,26 +1086,9 @@ private lemma so_bound {e : HScalars} {d0 d1 e0 e1 f0 f1 f2 : ℤ}
           (2 * ((εθ₂.den : ℤ) * (εφ₂.den : ℤ)) ^ 2) : ℤ) : ℚ) := by
   have hdQ : ((εθ₂.den : ℚ)) ≠ 0 := by positivity
   have hdQ' : ((εφ₂.den : ℚ)) ≠ 0 := by positivity
-  have hmaxd : max |e.d0| (max |e.d1| |e.d2|)
-      = ((max (d0.natAbs : ℤ) (d1.natAbs : ℤ) : ℤ) : ℚ) / 10 ^ 13 := by
-    rw [hd0, hd1, hd2, abs_intCast_div13, abs_intCast_div13, abs_zero]
-    rw [show max (((|d1| : ℤ) : ℚ) / 10 ^ 13) 0 = ((|d1| : ℤ) : ℚ) / 10 ^ 13 from
-      max_eq_left (by positivity)]
-    rw [max_div_div_right (by positivity : (0:ℚ) ≤ 10 ^ 13), ← Int.cast_max,
-      Int.abs_eq_natAbs, Int.abs_eq_natAbs]
-  have hmaxe : max |e.e0| (max |e.e1| |e.e2|)
-      = ((max (e0.natAbs : ℤ) (e1.natAbs : ℤ) : ℤ) : ℚ) / 10 ^ 13 := by
-    rw [he0, he1, he2, abs_intCast_div13, abs_intCast_div13, abs_zero]
-    rw [show max (((|e1| : ℤ) : ℚ) / 10 ^ 13) 0 = ((|e1| : ℤ) : ℚ) / 10 ^ 13 from
-      max_eq_left (by positivity)]
-    rw [max_div_div_right (by positivity : (0:ℚ) ≤ 10 ^ 13), ← Int.cast_max,
-      Int.abs_eq_natAbs, Int.abs_eq_natAbs]
-  have hmaxf : max |e.f0| (max |e.f1| |e.f2|)
-      = ((max (f0.natAbs : ℤ) (max (f1.natAbs : ℤ) (f2.natAbs : ℤ)) : ℤ) : ℚ) / 10 ^ 13 := by
-    rw [hf0, hf1, hf2, abs_intCast_div13, abs_intCast_div13, abs_intCast_div13]
-    rw [max_div_div_right (by positivity : (0:ℚ) ≤ 10 ^ 13),
-      max_div_div_right (by positivity : (0:ℚ) ≤ 10 ^ 13), ← Int.cast_max, ← Int.cast_max,
-      Int.abs_eq_natAbs, Int.abs_eq_natAbs, Int.abs_eq_natAbs]
+  have hmaxd := max3_abs_div13₀ hd0 hd1 hd2
+  have hmaxe := max3_abs_div13₀ he0 he1 he2
+  have hmaxf := max3_abs_div13 hf0 hf1 hf2
   unfold soBound
   rw [hmaxd, hmaxe, hmaxf]
   calc 1 / 2 * (εθ₂ ^ 2 * (((max (d0.natAbs : ℤ) (d1.natAbs : ℤ) : ℤ) : ℚ) / 10 ^ 13)
@@ -1402,19 +1118,8 @@ private lemma fo_bound {e : HScalars} {b0 b1 c0 c1 c2 : ℤ}
           ((εθ₂.den : ℤ) * (εφ₂.den : ℤ)) : ℤ) : ℚ) := by
   have hdQ : ((εθ₂.den : ℚ)) ≠ 0 := by positivity
   have hdQ' : ((εφ₂.den : ℚ)) ≠ 0 := by positivity
-  have hmaxb : max |e.b0| (max |e.b1| |e.b2|)
-      = ((max (b0.natAbs : ℤ) (b1.natAbs : ℤ) : ℤ) : ℚ) / 10 ^ 13 := by
-    rw [hb0, hb1, hb2, abs_intCast_div13, abs_intCast_div13, abs_zero]
-    rw [show max (((|b1| : ℤ) : ℚ) / 10 ^ 13) 0 = ((|b1| : ℤ) : ℚ) / 10 ^ 13 from
-      max_eq_left (by positivity)]
-    rw [max_div_div_right (by positivity : (0:ℚ) ≤ 10 ^ 13), ← Int.cast_max,
-      Int.abs_eq_natAbs, Int.abs_eq_natAbs]
-  have hmaxc : max |e.c0| (max |e.c1| |e.c2|)
-      = ((max (c0.natAbs : ℤ) (max (c1.natAbs : ℤ) (c2.natAbs : ℤ)) : ℤ) : ℚ) / 10 ^ 13 := by
-    rw [hc0, hc1, hc2, abs_intCast_div13, abs_intCast_div13, abs_intCast_div13]
-    rw [max_div_div_right (by positivity : (0:ℚ) ≤ 10 ^ 13),
-      max_div_div_right (by positivity : (0:ℚ) ≤ 10 ^ 13), ← Int.cast_max, ← Int.cast_max,
-      Int.abs_eq_natAbs, Int.abs_eq_natAbs, Int.abs_eq_natAbs]
+  have hmaxb := max3_abs_div13₀ hb0 hb1 hb2
+  have hmaxc := max3_abs_div13 hc0 hc1 hc2
   unfold foBound
   rw [hmaxb, hmaxc]
   calc (εθ₂ * (((max (b0.natAbs : ℤ) (b1.natAbs : ℤ) : ℤ) : ℚ) / 10 ^ 13)
