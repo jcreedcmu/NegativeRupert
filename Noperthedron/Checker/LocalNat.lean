@@ -203,6 +203,37 @@ def checkN (Qi : Fin 3 → VertexIndex) (p : Pose ℚ) (ε δ r : ℚ) : Bool :=
          let denom2N := 100 * εd * s2 + 284 * εn * 10 ^ 16 + 600 * εd * 10 ^ 6
          boundN * (Dn * (denom1N * denom2N)) < numerN * Dd1 ^ 2 * Db)
 
+/-- The per-pair integer test of `checkN`, as a standalone `Prop` over its
+atoms. `denom1N` and `F2N` enter as parameters so the fast-path soundness
+lemmas (`Checker/LocalFastNat.lean`) can link them one-sidedly; `checkN`'s
+inner `decide` body and the conclusions of `pairBody_sound`/`perIFast_sound`
+are all zeta/delta-reducible to instances of this definition, so the
+correspondence is machine-checked instead of hand-mirrored. Reducible so
+that `Decidable` instance synthesis and `refine`/`exact` see through it. -/
+abbrev checkNPairTest (E00 E01 E10 E11 E12 εn εd δn δd rn rd denom1N F2N
+    w0 w1 w2 v0 v1 v2 ndv : ℤ) : Prop :=
+  let mq0 := E00 * w0 + E01 * w1
+  let mq1 := E10 * w0 + E11 * w1 + E12 * w2
+  let q0 := mq0 / 10 ^ 29
+  let q1 := mq1 / 10 ^ 29
+  let Dd1 := 100 * εd * 10 ^ 16
+  let Dn := 50 * εd ^ 2 * 10 ^ 26
+  let Db := 100 * δd * εd * rn
+  let boundN := (100 * δn * εd + 224 * εn * δd) * rd
+  let cDN := 200 * εd * 10 ^ 3 + 200 * εd + 284 * εn * 10 ^ 16 + 600 * εd * 10 ^ 6
+  let etermC := εn * (142 * εd + 100 * εn)
+  let cheapM := Db * Dd1 ^ 2 * 10 ^ 32
+  let d0 := (mq0 - (E00 * v0 + E01 * v1)) / 10 ^ 29
+  let d1 := (mq1 - (E10 * v0 + E11 * v1 + E12 * v2)) / 10 ^ 29
+  let A := q0 * d0 + q1 * d1 - 10 ^ 17
+  let B := ndv + 2 * 10 ^ 6
+  let numerN := 50 * εd ^ 2 * A - etermC * B * 10 ^ 10
+  (0 ≤ numerN ∧ 0 ≤ εn ∧
+    boundN * denom1N * (F2N * ndv * Dd1 + cDN * 10 ^ 32) * Dn < numerN * cheapM) ∨
+    (let s2 := sqrtNum26 (d0 * d0 + d1 * d1)
+     let denom2N := 100 * εd * s2 + 284 * εn * 10 ^ 16 + 600 * εd * 10 ^ 6
+     boundN * (Dn * (denom1N * denom2N)) < numerN * Dd1 ^ 2 * Db)
+
 
 /-! ## Soundness: value bridges between the ℚ and ℤ pipelines -/
 
@@ -297,38 +328,14 @@ private lemma pair_test_iff
     (hv2 : vq2 = (v2 : ℚ) / 10 ^ 16)
     (hnd : ndq = (ndv : ℚ) / 10 ^ 16)
     (hε : 0 < ε) (hr : 0 < r) :
-    (let εn : ℤ := ε.num
-      let εd : ℤ := ε.den
-      let δn : ℤ := δ.num
-      let δd : ℤ := δ.den
-      let rn : ℤ := r.num
-      let rd : ℤ := r.den
-      let froN := E00 * E00 + E01 * E01 + E10 * E10 + E11 * E11 + E12 * E12
-      let F2N := sqrtNum52 froN
-      let Dd1 := 100 * εd * 10 ^ 16
-      let Dn := 50 * εd ^ 2 * 10 ^ 26
-      let Db := 100 * δd * εd * rn
-      let boundN := (100 * δn * εd + 224 * εn * δd) * rd
-      let cDN := 200 * εd * 10 ^ 3 + 200 * εd + 284 * εn * 10 ^ 16 + 600 * εd * 10 ^ 6
-      let etermC := εn * (142 * εd + 100 * εn)
-      let cheapM := Db * Dd1 ^ 2 * 10 ^ 32
-      let mq0 := E00 * w0 + E01 * w1
-      let mq1 := E10 * w0 + E11 * w1 + E12 * w2
-      let q0 := mq0 / 10 ^ 29
-      let q1 := mq1 / 10 ^ 29
-      let s1 := sqrtNum26 (q0 * q0 + q1 * q1)
-      let denom1N := 100 * εd * s1 + 142 * εn * 10 ^ 16 + 300 * εd * 10 ^ 6
-      let bdN := boundN * denom1N
-      let d0 := (mq0 - (E00 * v0 + E01 * v1)) / 10 ^ 29
-      let d1 := (mq1 - (E10 * v0 + E11 * v1 + E12 * v2)) / 10 ^ 29
-      let A := q0 * d0 + q1 * d1 - 10 ^ 17
-      let B := ndv + 2 * 10 ^ 6
-      let numerN := 50 * εd ^ 2 * A - etermC * B * 10 ^ 10
-      (0 ≤ numerN ∧ 0 ≤ εn ∧
-        bdN * (F2N * ndv * Dd1 + cDN * 10 ^ 32) * Dn < numerN * cheapM) ∨
-        (let s2 := sqrtNum26 (d0 * d0 + d1 * d1)
-         let denom2N := 100 * εd * s2 + 284 * εn * 10 ^ 16 + 600 * εd * 10 ^ 6
-         boundN * (Dn * (denom1N * denom2N)) < numerN * Dd1 ^ 2 * Db)) ↔
+    checkNPairTest E00 E01 E10 E11 E12 ε.num ε.den δ.num δ.den r.num r.den
+      (100 * ε.den * sqrtNum26 ((E00 * w0 + E01 * w1) / 10 ^ 29
+          * ((E00 * w0 + E01 * w1) / 10 ^ 29)
+        + (E10 * w0 + E11 * w1 + E12 * w2) / 10 ^ 29
+          * ((E10 * w0 + E11 * w1 + E12 * w2) / 10 ^ 29))
+        + 142 * ε.num * 10 ^ 16 + 300 * ε.den * 10 ^ 6)
+      (sqrtNum52 (E00 * E00 + E01 * E01 + E10 * E10 + E11 * E11 + E12 * E12))
+      w0 w1 w2 v0 v1 v2 ndv ↔
      (let bound := (δ + sqrtApprox16.upper_sqrt_five * ε) / r
       let F2 := sqrtApprox16.upper_sqrt.f
         (m00 * m00 + m01 * m01 + m02 * m02 + m10 * m10 + m11 * m11 + m12 * m12)
@@ -347,7 +354,7 @@ private lemma pair_test_iff
       (0 ≤ numer ∧ 0 ≤ ε ∧ bd * (F2 * ndq + cD) < numer) ∨
         bound < numer / (denom1 * (sqrtApprox16.upper_sqrt.f (d0 * d0 + d1 * d1)
           + 2 * sqrtApprox16.upper_sqrt_two * ε + 6 * κℚ))) := by
-  simp only []
+  simp only [checkNPairTest]
   -- constants and atoms
   have hf : sqrtApprox16.upper_sqrt.f = RationalApprox.sqrtℚUp16 := rfl
   have h2c : sqrtApprox16.upper_sqrt_two = 71 / 50 := by

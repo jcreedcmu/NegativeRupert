@@ -467,35 +467,9 @@ private lemma pairBody_sound
         (Nat.mul 171 J)) (2 ^ 171 - 1)) 57) (2 ^ 57 - 1) = V1)
     (hvRead2 : Nat.shiftRight (Nat.land (Nat.shiftRight pythonVertexBig
         (Nat.mul 171 J)) (2 ^ 171 - 1)) 114 = V2) :
-    (let mq0 := E00 * w0 + E01 * w1
-     let mq1 := E10 * w0 + E11 * w1 + E12 * w2
-     let q0 := mq0 / 10 ^ 29
-     let q1 := mq1 / 10 ^ 29
-     let εnl : ℤ := εn
-     let εdl : ℤ := εd
-     let δnl : ℤ := δn
-     let δdl : ℤ := δd
-     let rnl : ℤ := rn
-     let rdl : ℤ := rd
-     let Dd1 := 100 * εdl * 10 ^ 16
-     let Dn := 50 * εdl ^ 2 * 10 ^ 26
-     let Db := 100 * δdl * εdl * rnl
-     let boundN := (100 * δnl * εdl + 224 * εnl * δdl) * rdl
-     let cDN := 200 * εdl * 10 ^ 3 + 200 * εdl + 284 * εnl * 10 ^ 16
-       + 600 * εdl * 10 ^ 6
-     let etermC := εnl * (142 * εdl + 100 * εnl)
-     let cheapMl := Db * Dd1 ^ 2 * 10 ^ 32
-     let d0 := (mq0 - (E00 * v0 + E01 * v1)) / 10 ^ 29
-     let d1 := (mq1 - (E10 * v0 + E11 * v1 + E12 * v2)) / 10 ^ 29
-     let A := q0 * d0 + q1 * d1 - 10 ^ 17
-     let B := ndv + 2 * 10 ^ 6
-     let numerN := 50 * εdl ^ 2 * A - etermC * B * 10 ^ 10
-     (0 ≤ numerN ∧ 0 ≤ εnl ∧
-       boundN * denom1N * (F2N * ndv * Dd1 + cDN * 10 ^ 32) * Dn
-         < numerN * cheapMl) ∨
-       (let s2 := sqrtNum26 (d0 * d0 + d1 * d1)
-        let denom2N := 100 * εdl * s2 + 284 * εnl * 10 ^ 16 + 600 * εdl * 10 ^ 6
-        boundN * (Dn * (denom1N * denom2N)) < numerN * Dd1 ^ 2 * Db)) := by
+    checkNPairTest E00 E01 E10 E11 E12 εn εd δn δd rn rd denom1N F2N
+      w0 w1 w2 v0 v1 v2 ndv := by
+  unfold checkNPairTest
   -- reduce the fast body to its three guards and the tier disjunction
   unfold pairBody at hbody
   rw [hne, Bool.false_or] at hbody
@@ -679,28 +653,13 @@ private lemma perIFast_sound
      let q1 := mq1 / 10 ^ 29
      let s1 := sqrtNum26 (q0 * q0 + q1 * q1)
      let denom1N := 100 * εd * s1 + 142 * εn * 10 ^ 16 + 300 * εd * 10 ^ 6
-     let bdN := ((100 * δn * εd + 224 * εn * δd) * rd) * denom1N
      decide (∀ k : VertexIndex, k ≠ qi →
-      let v0 := pythonVertexNumCurried k.ℓ k.i k.k 0
-      let v1 := pythonVertexNumCurried k.ℓ k.i k.k 1
-      let v2 := pythonVertexNumCurried k.ℓ k.i k.k 2
-      let d0 := (mq0 - (E00 * v0 + E01 * v1)) / 10 ^ 29
-      let d1 := (mq1 - (E10 * v0 + E11 * v1 + E12 * v2)) / 10 ^ 29
-      let ndv := sqrtDvCurriedN qi.ℓ qi.i qi.k k.ℓ k.i k.k
-      let A := q0 * d0 + q1 * d1 - 10 ^ 17
-      let B := ndv + 2 * 10 ^ 6
-      let numerN := 50 * εd ^ 2 * A - (εn * (142 * εd + 100 * εn)) * B * 10 ^ 10
-      (0 ≤ numerN ∧ 0 ≤ εn ∧
-        bdN * (sqrtNum52 (E00 * E00 + E01 * E01 + E10 * E10 + E11 * E11
-            + E12 * E12) * ndv * (100 * εd * 10 ^ 16)
-          + (200 * εd * 10 ^ 3 + 200 * εd + 284 * εn * 10 ^ 16
-            + 600 * εd * 10 ^ 6) * 10 ^ 32) * (50 * εd ^ 2 * 10 ^ 26)
-          < numerN * (100 * δd * εd * rn * (100 * εd * 10 ^ 16) ^ 2 * 10 ^ 32)) ∨
-        (let s2 := sqrtNum26 (d0 * d0 + d1 * d1)
-         let denom2N := 100 * εd * s2 + 284 * εn * 10 ^ 16 + 600 * εd * 10 ^ 6
-         ((100 * δn * εd + 224 * εn * δd) * rd)
-           * ((50 * εd ^ 2 * 10 ^ 26) * (denom1N * denom2N))
-           < numerN * (100 * εd * 10 ^ 16) ^ 2 * (100 * δd * εd * rn))) = true) := by
+      checkNPairTest E00 E01 E10 E11 E12 εn εd δn δd rn rd denom1N
+        (sqrtNum52 (E00 * E00 + E01 * E01 + E10 * E10 + E11 * E11 + E12 * E12))
+        w0 w1 w2 (pythonVertexNumCurried k.ℓ k.i k.k 0)
+        (pythonVertexNumCurried k.ℓ k.i k.k 1)
+        (pythonVertexNumCurried k.ℓ k.i k.k 2)
+        (sqrtDvCurriedN qi.ℓ qi.i qi.k k.ℓ k.i k.k)) = true) := by
   -- destructure the fast per-`i` stage
   unfold perIFast at hp
   rw [Bool.and_eq_true] at hp
