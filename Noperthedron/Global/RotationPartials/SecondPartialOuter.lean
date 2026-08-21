@@ -111,6 +111,18 @@ private lemma fderiv_rotMφ_inner_e1 (S : ℝ³) (w : ℝ²) (x : E 2) :
   rw [fderiv_inner_const _ w x _ (differentiableAt_rotMφ_outer S x), fderiv_rotMφ_outer_eq S x]
   congr 1; ext i; simp
 
+/-- First partial of the outer projection in the θ-direction, identified. -/
+theorem first_partial_rotproj_outer_e0 (S : ℝ³) (w : ℝ²) (x : E 2) :
+    nth_partial 0 (fun y : E 2 => ⟪rotM (y.ofLp 0) (y.ofLp 1) S, w⟫) x =
+      ⟪rotMθ (x.ofLp 0) (x.ofLp 1) S, w⟫ :=
+  fderiv_rotM_inner_e0 S w x
+
+/-- First partial of the outer projection in the φ-direction, identified. -/
+theorem first_partial_rotproj_outer_e1 (S : ℝ³) (w : ℝ²) (x : E 2) :
+    nth_partial 1 (fun y : E 2 => ⟪rotM (y.ofLp 0) (y.ofLp 1) S, w⟫) x =
+      ⟪rotMφ (x.ofLp 0) (x.ofLp 1) S, w⟫ :=
+  fderiv_rotM_inner_e1 S w x
+
 /-!
 ## Private lemma: second partials as inner products
 -/
