@@ -146,7 +146,7 @@ lemma nth_partial_neg {n : ℕ} (f : E n → ℝ) (i : Fin n) :
   funext y
   show fderiv ℝ (-f) y (EuclideanSpace.single i 1) = -(fderiv ℝ f y (EuclideanSpace.single i 1))
   rw [fderiv_neg]
-  simp only [ContinuousLinearMap.neg_apply]
+  simp only [neg_apply]
 
 /-- Coordinate extraction in `E 2`: direction `e_i`, same coordinate (moves). -/
 private lemma coord2_same (i : Fin 2) (y : E 2) (t : ℝ) :
