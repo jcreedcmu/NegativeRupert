@@ -333,6 +333,24 @@ noncomputable def ΔprodMM (T : ℝ² →L[ℝ] ℝ²) (v w : ℝ³) (εθ εφ 
               + ⟪T (rotM θ_ φ_ v), rotMφφ θ_ φ_ w⟫|)
   + 8 * ‖v‖ * ‖w‖ * (εθ + εφ)^3 / 6
 
+/-- Paired sign flips cancel in an inner product. -/
+lemma inner_neg_one_pow_smul_smul (e : ℕ) (x y : ℝ²) :
+    ⟪((-1 : ℝ)^e • x : ℝ²), ((-1 : ℝ)^e • y : ℝ²)⟫ = ⟪x, y⟫ := by
+  rw [real_inner_smul_left, real_inner_smul_right, ← mul_assoc, ← pow_add,
+    ← two_mul, pow_mul]
+  norm_num
+
+/-- `ΔprodMM` only sees `v` and `w` through paired inner products and norms,
+so it is invariant under the sign flips of the local theorem's
+`σ`-convention. -/
+lemma ΔprodMM_neg_one_pow_smul (T : ℝ² →L[ℝ] ℝ²) (e : ℕ) (v w : ℝ³)
+    (εθ εφ θ_ φ_ : ℝ) :
+    ΔprodMM T ((-1 : ℝ)^e • v) ((-1 : ℝ)^e • w) εθ εφ θ_ φ_
+    = ΔprodMM T v w εθ εφ θ_ φ_ := by
+  unfold ΔprodMM
+  simp only [map_smul, inner_neg_one_pow_smul_smul, norm_smul, Real.norm_eq_abs,
+    abs_neg_one_pow, one_mul]
+
 /-- **Second-order variation of the product quantity** `⟪T (M v), M w⟫`.
 Powers the spanning condition (`T = rotR (π/2)`) and the LMD numerator
 (`T = id`) of the second-order local certificate. -/

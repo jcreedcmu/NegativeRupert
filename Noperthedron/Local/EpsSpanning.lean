@@ -157,6 +157,14 @@ def Triangle.Spanning₂ (P : Triangle) (θ_ φ_ εθ εφ : ℝ) : Prop :=
   ∀ i : Fin 3, GlobalTheorem.ΔprodMM (rotR (π/2)) (P i) (P (i + 1)) εθ εφ θ_ φ_
     < ⟪rotR (π/2) (rotM θ_ φ_ (P i)), rotM θ_ φ_ (P (i + 1))⟫
 
+lemma spanning₂_neg {P : Triangle} {θ_ φ_ εθ εφ : ℝ} (e : ℕ)
+    (h : P.Spanning₂ θ_ φ_ εθ εφ) :
+    Triangle.Spanning₂ (fun i ↦ (-1 : ℝ)^e • P i) θ_ φ_ εθ εφ := by
+  intro i
+  have hlt := h i
+  simpa [Triangle.Spanning₂, GlobalTheorem.ΔprodMM_neg_one_pow_smul, map_smul,
+    GlobalTheorem.inner_neg_one_pow_smul_smul] using hlt
+
 /-- [SY25] Lemma 28, second-order version: no norm hypothesis on `P` is
 needed since the budget carries `‖P i‖` explicitly. -/
 theorem vecX_spanning₂ {εθ εφ θ θ_ φ φ_ : ℝ} (P : Triangle)

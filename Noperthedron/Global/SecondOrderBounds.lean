@@ -54,6 +54,44 @@ noncomputable def ΔrotRM (P : ℝ³) (εα εθ εφ θ_ φ_ : ℝ) : ℝ :=
       + εφ^2 * ‖rotMφφ θ_ φ_ P‖)
   + ‖P‖ * (εα + εθ + εφ)^3 / 6
 
+/-- The outer variation budget is nonnegative on nonnegative radii. -/
+lemma ΔrotM_nonneg {P : ℝ³} {εθ εφ θ_ φ_ : ℝ} (hεθ : 0 ≤ εθ) (hεφ : 0 ≤ εφ) :
+    0 ≤ ΔrotM P εθ εφ θ_ φ_ := by
+  unfold ΔrotM
+  refine add_nonneg (add_nonneg (add_nonneg ?_ ?_) ?_) ?_
+  · exact mul_nonneg hεθ (norm_nonneg _)
+  · exact mul_nonneg hεφ (norm_nonneg _)
+  · refine mul_nonneg (by norm_num) (add_nonneg (add_nonneg ?_ ?_) ?_)
+    · exact mul_nonneg (sq_nonneg _) (norm_nonneg _)
+    · exact mul_nonneg (mul_nonneg (by norm_num)
+        (mul_nonneg hεθ hεφ)) (norm_nonneg _)
+    · exact mul_nonneg (sq_nonneg _) (norm_nonneg _)
+  · exact div_nonneg (mul_nonneg (norm_nonneg _)
+      (pow_nonneg (add_nonneg hεθ hεφ) 3)) (by norm_num)
+
+/-- The inner variation budget is nonnegative on nonnegative radii. -/
+lemma ΔrotRM_nonneg {P : ℝ³} {εα εθ εφ θ_ φ_ : ℝ}
+    (hεα : 0 ≤ εα) (hεθ : 0 ≤ εθ) (hεφ : 0 ≤ εφ) :
+    0 ≤ ΔrotRM P εα εθ εφ θ_ φ_ := by
+  unfold ΔrotRM
+  refine add_nonneg (add_nonneg (add_nonneg (add_nonneg ?_ ?_) ?_) ?_) ?_
+  · exact mul_nonneg hεα (norm_nonneg _)
+  · exact mul_nonneg hεθ (norm_nonneg _)
+  · exact mul_nonneg hεφ (norm_nonneg _)
+  · refine mul_nonneg (by norm_num) ?_
+    refine add_nonneg (add_nonneg (add_nonneg (add_nonneg (add_nonneg ?_ ?_) ?_) ?_) ?_) ?_
+    · exact mul_nonneg (sq_nonneg _) (norm_nonneg _)
+    · exact mul_nonneg (mul_nonneg (by norm_num)
+        (mul_nonneg hεα hεθ)) (norm_nonneg _)
+    · exact mul_nonneg (mul_nonneg (by norm_num)
+        (mul_nonneg hεα hεφ)) (norm_nonneg _)
+    · exact mul_nonneg (sq_nonneg _) (norm_nonneg _)
+    · exact mul_nonneg (mul_nonneg (by norm_num)
+        (mul_nonneg hεθ hεφ)) (norm_nonneg _)
+    · exact mul_nonneg (sq_nonneg _) (norm_nonneg _)
+  · exact div_nonneg (mul_nonneg (norm_nonneg _)
+      (pow_nonneg (add_nonneg (add_nonneg hεα hεθ) hεφ) 3)) (by norm_num)
+
 /-- **Second-order variation of the outer applied vector.**  The per-axis
 first-order charges are the norms of the derivative-family vectors at the
 center, the second-order charges the second-family norms, and the remainder
@@ -210,8 +248,8 @@ theorem inCirc₂ {P Q : ℝ³}
     (hα : |α - α_| ≤ εα) (hθ₁ : |θ₁ - θ₁_| ≤ εθ₁) (hφ₁ : |φ₁ - φ₁_| ≤ εφ₁)
     (hθ₂ : |θ₂ - θ₂_| ≤ εθ₂) (hφ₂ : |φ₂ - φ₂_| ≤ εφ₂)
     (hδ : ‖rotR α_ (rotM θ₁_ φ₁_ P) - rotM θ₂_ φ₂_ Q‖
-        + ΔrotRM P εα εθ₁ εφ₁ θ₁_ φ₁_ + ΔrotM Q εθ₂ εφ₂ θ₂_ φ₂_ ≤ 2 * δ) :
-    ‖rotR α (rotM θ₁ φ₁ P) - rotM θ₂ φ₂ Q‖ ≤ 2 * δ := by
+        + ΔrotRM P εα εθ₁ εφ₁ θ₁_ φ₁_ + ΔrotM Q εθ₂ εφ₂ θ₂_ φ₂_ < 2 * δ) :
+    ‖rotR α (rotM θ₁ φ₁ P) - rotM θ₂ φ₂ Q‖ < 2 * δ := by
   have h1 := norm_rotRM_apply_sub_le (P := P) hεα hεθ₁ hεφ₁ hα hθ₁ hφ₁
   have h2 := norm_rotM_apply_sub_le (P := Q) hεθ₂ hεφ₂ hθ₂ hφ₂
   have hrearr : rotR α (rotM θ₁ φ₁ P) - rotM θ₂ φ₂ Q
@@ -230,7 +268,7 @@ theorem inCirc₂ {P Q : ℝ³}
         + ‖rotM θ₂ φ₂ Q - rotM θ₂_ φ₂_ Q‖ := by
           linarith [norm_add_le (rotR α_ (rotM θ₁_ φ₁_ P) - rotM θ₂_ φ₂_ Q)
             (rotR α (rotM θ₁ φ₁ P) - rotR α_ (rotM θ₁_ φ₁_ P))]
-    _ ≤ 2 * δ := by linarith
+    _ < 2 * δ := by linarith
 
 /-- **Abstract second-order quotient transfer** (the core of [SY25] Lemma 33):
 a cosine quotient at a displaced pose is bounded below by center data with

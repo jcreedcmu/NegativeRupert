@@ -12,6 +12,7 @@ public import Noperthedron.Local.LocallyMaximallyDistant
 public import Noperthedron.Local.Prelims
 public import Noperthedron.Local.OriginInTriangle
 public import Noperthedron.Local.Spanp
+public import Noperthedron.Global.VecXPartials
 
 @[expose] public section
 
@@ -295,6 +296,224 @@ theorem local_theorem {ι : Type} [Fintype ι] [Nonempty ι]
   rw [h_ZP, h_YP]
   -- The right-hand side is positive, so compare via absolute values
   exact neg_one_pow_mul_lt_of_sq_lt_sq σQ σP h_inner_sq (h_YP ▸ hYP_pos)
+
+/-! ## The second-order local theorem
+
+The same skeleton as `local_theorem`, with every Lipschitz `ε`-slack
+(`√2·ε`, `√5·ε`, `2ε(√2+ε)`) replaced by the order-2-exact per-axis variation
+budgets of `Noperthedron.Global.SecondOrderBounds` / `SpanProducts` /
+`VecXPartials`, over the anisotropic box `Pose.near p_ εα εθ₁ εφ₁ εθ₂ εφ₂`. -/
+
+/-- Condition A_ε from [SY25] Theorem 36, second-order: the signed axis inner
+product at the center exceeds its own variation budget. -/
+def Triangle.Aε₂ (P : Triangle) (θ_ φ_ εθ εφ : ℝ) : Prop :=
+  ∃ σ : ℕ, ∀ i : Fin 3,
+    GlobalTheorem.ΔvecX (P i) εθ εφ θ_ φ_ < (-1)^σ * ⟪vecX θ_ φ_, P i⟫
+
+noncomputable
+def Bε₂.lhs (v₁ v₂ : Euc(3)) (p : Pose ℝ) (εθ εφ : ℝ) : ℝ :=
+  (⟪p.rotM₂ v₁, p.rotM₂ (v₁ - v₂)⟫
+      - GlobalTheorem.ΔprodMM (ContinuousLinearMap.id ℝ ℝ²) v₁ (v₁ - v₂) εθ εφ p.θ₂ p.φ₂)
+  / ((‖p.rotM₂ v₁‖ + GlobalTheorem.ΔrotM v₁ εθ εφ p.θ₂ p.φ₂)
+      * (‖p.rotM₂ (v₁ - v₂)‖ + GlobalTheorem.ΔrotM (v₁ - v₂) εθ εφ p.θ₂ p.φ₂))
+
+/-- Condition B_ε from [SY25] Theorem 36, second-order.  The variation budgets
+are folded into `δ` (see `BoundDelta₂`), so the cosine threshold is plainly
+`δ/r`; the numerator of `Bε₂.lhs` is additionally required positive, which the
+abstract quotient transfer needs. -/
+def Bε₂ {ι : Type} (Qi : Fin 3 → ι)
+    (v : ι → Euc(3)) (p : Pose ℝ) (εθ εφ δ r : ℝ) : Prop :=
+  ∀ i : Fin 3, ∀ k : ι, k ≠ Qi i →
+    0 < ⟪p.rotM₂ (v (Qi i)), p.rotM₂ (v (Qi i) - v k)⟫
+        - GlobalTheorem.ΔprodMM (ContinuousLinearMap.id ℝ ℝ²) (v (Qi i)) (v (Qi i) - v k)
+            εθ εφ p.θ₂ p.φ₂
+      ∧ δ / r < Bε₂.lhs (v (Qi i)) (v k) p εθ εφ
+
+/-- The condition on δ in the second-order Local Theorem: the center shadow
+distance plus both variation budgets stays under `2δ`. -/
+def BoundDelta₂ (δ εα εθ₁ εφ₁ εθ₂ εφ₂ : ℝ) (p : Pose ℝ) (P Q : Triangle) : Prop :=
+  ∀ i : Fin 3, ‖p.rotR (p.rotM₁ (P i)) - p.rotM₂ (Q i)‖
+    + GlobalTheorem.ΔrotRM (P i) εα εθ₁ εφ₁ p.θ₁ p.φ₁
+    + GlobalTheorem.ΔrotM (Q i) εθ₂ εφ₂ p.θ₂ p.φ₂ < 2 * δ
+
+/-- The condition on r in the second-order Local Theorem. -/
+def BoundR₂ (r εθ εφ : ℝ) (p : Pose ℝ) (Q : Triangle) : Prop :=
+  ∀ i : Fin 3, r + GlobalTheorem.ΔrotM (Q i) εθ εφ p.θ₂ p.φ₂ < ‖p.rotM₂ (Q i)‖
+
+/--
+The second-order analog of `LocalTheoremPrecondition`, over the anisotropic
+box of per-axis radii `εα εθ₁ εφ₁ εθ₂ εφ₂` around `p_`.
+-/
+structure LocalTheoremPrecondition₂ {ι : Type} [Fintype ι] [Nonempty ι]
+    (poly : GoodPoly ι) (p_ : Pose ℝ) (εα εθ₁ εφ₁ εθ₂ εφ₂ : ℝ) : Type where
+  Pi : Fin 3 → ι
+  Qi : Fin 3 → ι
+  cong_tri : Triangle.Congruent (poly.vertices.v ∘ Pi) (poly.vertices.v ∘ Qi)
+  δ : ℝ
+  r : ℝ
+  hr : 0 < r
+  hr₁ : BoundR₂ r εθ₂ εφ₂ p_ (poly.vertices.v ∘ Qi)
+  hδ : BoundDelta₂ δ εα εθ₁ εφ₁ εθ₂ εφ₂ p_ (poly.vertices.v ∘ Pi) (poly.vertices.v ∘ Qi)
+  ae₁ : Triangle.Aε₂ (poly.vertices.v ∘ Pi) p_.θ₁ p_.φ₁ εθ₁ εφ₁
+  ae₂ : Triangle.Aε₂ (poly.vertices.v ∘ Qi) p_.θ₂ p_.φ₂ εθ₂ εφ₂
+  span₁ : Triangle.Spanning₂ (poly.vertices.v ∘ Pi) p_.θ₁ p_.φ₁ εθ₁ εφ₁
+  span₂ : Triangle.Spanning₂ (poly.vertices.v ∘ Qi) p_.θ₂ p_.φ₂ εθ₂ εφ₂
+  be : Bε₂ Qi poly.vertices.v p_ εθ₂ εφ₂ δ r
+
+/-- The LMD step of `local_theorem₂`: `BoundR₂` and `Bε₂` at the center give
+local maximal distance at radius `2δ` at any pose in the box. -/
+private lemma lmd_step₂ {ι : Type} [Fintype ι] [Nonempty ι]
+    (poly : GoodPoly ι) {p_ p : Pose ℝ} {εθ₂ εφ₂ δ r : ℝ}
+    (Qi : Fin 3 → ι) (i : Fin 3)
+    (hεθ₂ : 0 ≤ εθ₂) (hεφ₂ : 0 ≤ εφ₂) (hr : 0 < r)
+    (hθ₂ : |p.θ₂ - p_.θ₂| ≤ εθ₂) (hφ₂ : |p.φ₂ - p_.φ₂| ≤ εφ₂)
+    (hr₁ : BoundR₂ r εθ₂ εφ₂ p_ (poly.vertices.v ∘ Qi))
+    (be : Bε₂ Qi poly.vertices.v p_ εθ₂ εφ₂ δ r) :
+    LocallyMaximallyDistant (2 * δ) (rotM p.θ₂ p.φ₂ (poly.vertices.v (Qi i)))
+      (Finset.image (rotM p.θ₂ p.φ₂) (Finset.image poly.vertices.v Finset.univ)) := by
+  -- apply the second-order lemma 15
+  have h₃ : r < ‖rotM p.θ₂ p.φ₂ (poly.vertices.v (Qi i))‖ := by
+    have h := hr₁ i
+    simp only [Function.comp_apply, Pose.rotM₂] at h
+    exact GlobalTheorem.norm_M_apply_gt₂ hεθ₂ hεφ₂ hθ₂ hφ₂ h
+  -- apply the second-order lemma 33
+  have h₅' (k : ι) (hkQ : k ≠ Qi i) :
+      δ / r <
+        ⟪(rotM p.θ₂ p.φ₂) (poly.vertices.v (Qi i)),
+         (rotM p.θ₂ p.φ₂) (poly.vertices.v (Qi i) - poly.vertices.v k)⟫ /
+        (‖(rotM p.θ₂ p.φ₂) (poly.vertices.v (Qi i))‖ *
+         ‖(rotM p.θ₂ p.φ₂) (poly.vertices.v (Qi i) - poly.vertices.v k)‖) := by
+    obtain ⟨hpos, h₆⟩ := be i k hkQ
+    unfold Bε₂.lhs at h₆
+    simp only [Pose.rotM₂] at hpos h₆
+    set v₁ := poly.vertices.v (Qi i)
+    set v₂ := poly.vertices.v k
+    have hnum := GlobalTheorem.inner_prod_MM_sub_le (ContinuousLinearMap.id ℝ ℝ²)
+      ContinuousLinearMap.norm_id_le (v := v₁) (w := v₁ - v₂) hεθ₂ hεφ₂ hθ₂ hφ₂
+    simp only [ContinuousLinearMap.id_apply] at hnum
+    have h1' : |‖rotM p.θ₂ p.φ₂ v₁‖ - ‖rotM p_.θ₂ p_.φ₂ v₁‖|
+        ≤ GlobalTheorem.ΔrotM v₁ εθ₂ εφ₂ p_.θ₂ p_.φ₂ :=
+      le_trans (abs_norm_sub_norm_le _ _)
+        (GlobalTheorem.norm_rotM_apply_sub_le hεθ₂ hεφ₂ hθ₂ hφ₂)
+    have h2' : |‖rotM p.θ₂ p.φ₂ (v₁ - v₂)‖ - ‖rotM p_.θ₂ p_.φ₂ (v₁ - v₂)‖|
+        ≤ GlobalTheorem.ΔrotM (v₁ - v₂) εθ₂ εφ₂ p_.θ₂ p_.φ₂ :=
+      le_trans (abs_norm_sub_norm_le _ _)
+        (GlobalTheorem.norm_rotM_apply_sub_le hεθ₂ hεφ₂ hθ₂ hφ₂)
+    have hnum_pos : 0 < ⟪rotM p.θ₂ p.φ₂ v₁, rotM p.θ₂ p.φ₂ (v₁ - v₂)⟫ := by
+      have h := abs_le.mp hnum
+      linarith [h.1]
+    have hn1 : 0 < ‖rotM p.θ₂ p.φ₂ v₁‖ := hr.trans h₃
+    have hn2 : 0 < ‖rotM p.θ₂ p.φ₂ (v₁ - v₂)‖ := by
+      rcases eq_or_lt_of_le (norm_nonneg (rotM p.θ₂ p.φ₂ (v₁ - v₂))) with hz | h
+      · rw [show rotM p.θ₂ p.φ₂ (v₁ - v₂) = 0 from norm_eq_zero.mp hz.symm,
+          inner_zero_right] at hnum_pos
+        exact absurd hnum_pos (lt_irrefl 0)
+      · exact h
+    have hkey := GlobalTheorem.quotient_ge_of_bounds hnum h1' h2' hn1 hn2 hpos.le
+    exact h₆.trans_le hkey
+  -- apply lemma 32
+  refine inner_ge_implies_LMD (r := r) ?_ hr h₃ ?_
+  · exact Finset.mem_image_of_mem _
+      (Finset.mem_image.mpr ⟨Qi i, Finset.mem_univ _, rfl⟩)
+  · intro Pᵢ hPᵢ hPᵢQ
+    simp only [Finset.mem_image, Finset.mem_univ, true_and] at hPᵢ
+    obtain ⟨q, ⟨k, rfl⟩, rfl⟩ := hPᵢ
+    have hkQ : k ≠ Qi i := fun h => hPᵢQ (by rw [h])
+    rw [← map_sub]
+    linarith [h₅' k hkQ]
+
+/--
+  [SY25] Theorem 36, second-order anisotropic version.
+-/
+theorem local_theorem₂ {ι : Type} [Fintype ι] [Nonempty ι]
+    (poly : GoodPoly ι) (p_ : Pose ℝ) (εα εθ₁ εφ₁ εθ₂ εφ₂ : ℝ)
+    (hεα : 0 ≤ εα) (hεθ₁ : 0 ≤ εθ₁) (hεφ₁ : 0 ≤ εφ₁)
+    (hεθ₂ : 0 ≤ εθ₂) (hεφ₂ : 0 ≤ εφ₂)
+    (pc : LocalTheoremPrecondition₂ poly p_ εα εθ₁ εφ₁ εθ₂ εφ₂) :
+    ¬∃ p, Pose.near p_ εα εθ₁ εφ₁ εθ₂ εφ₂ p ∧ RupertPose p poly.hull := by
+  obtain ⟨Pi, Qi, cong_tri, δ, r, hr, hr₁, hδ, ae₁, ae₂, span₁, span₂, be⟩ := pc
+  set P : Triangle := poly.vertices.v ∘ Pi
+  set Q : Triangle := poly.vertices.v ∘ Qi
+  rintro ⟨p, hΨ₁, hΨ₂⟩
+  obtain ⟨hθ₁, hφ₁, hθ₂, hφ₂, hα⟩ := hΨ₁
+  obtain ⟨L, hL⟩ := cong_tri
+  obtain ⟨σP, hσP₂⟩ := ae₁
+  obtain ⟨σQ, hσQ₂⟩ := ae₂
+  let Y := vecX p.θ₁ p.φ₁
+  let K := (-1 : ℝ)^(σP + σQ) • L.toContinuousLinearMap
+  let Z := K (vecX p.θ₂ p.φ₂)
+  have hY : ‖Y‖ = 1 := by simp [Y, Bounding.vecX_norm_one]
+  have hZ : ‖Z‖ = 1 := by simp [Z, K, norm_smul, Bounding.vecX_norm_one]
+  let P_ : Triangle := fun i ↦ (-1: ℝ) ^ σP • (P i)
+  let Q_ : Triangle := fun i ↦ (-1: ℝ) ^ σQ • (Q i)
+  have hP_ (i) : ‖P_ i‖ ≤ 1 := by
+    simpa [P_, P, norm_smul, abs_neg_one_pow] using poly.vertex_radius_le_one (Pi i)
+  have hQ_ (i) : ‖Q_ i‖ ≤ 1 := by
+    simpa [Q_, Q, norm_smul, abs_neg_one_pow] using poly.vertex_radius_le_one (Qi i)
+  have hPQ_ (i) : P_ i = K (Q_ i) := by
+    simp [P_, Q_, K]
+    rw [smul_smul, hL]
+    congr 1
+    rw [← pow_add, show σQ + (σP + σQ) = σP + 2 * σQ by ring,
+        pow_add, pow_mul]
+    norm_num
+  have h₄ (i) : 0 < ⟪vecX p.θ₁ p.φ₁, P_ i⟫ := by
+    refine GlobalTheorem.XPgt0₂ (hP_ i) hεθ₁ hεφ₁ hθ₁ hφ₁ ?_
+    rw [show P_ i = (-1:ℝ)^σP • (P i) from rfl,
+      GlobalTheorem.ΔvecX_neg_one_pow_smul, real_inner_smul_right]
+    exact hσP₂ i
+  have h₅ (i) : 0 < ⟪vecX p.θ₂ p.φ₂, Q_ i⟫ := by
+    refine GlobalTheorem.XPgt0₂ (hQ_ i) hεθ₂ hεφ₂ hθ₂ hφ₂ ?_
+    rw [show Q_ i = (-1:ℝ)^σQ • (Q i) from rfl,
+      GlobalTheorem.ΔvecX_neg_one_pow_smul, real_inner_smul_right]
+    exact hσQ₂ i
+  have h₁ : Y ∈ Spanp P_ ∧ Z ∈ Spanp P_ := by
+    constructor
+    · exact vecX_spanning₂ P_ hεθ₁ hεφ₁ hθ₁ hφ₁ (spanning₂_neg σP span₁) h₄
+    · have h₆ : vecX p.θ₂ p.φ₂ ∈ Spanp Q_ :=
+        vecX_spanning₂ Q_ hεθ₂ hεφ₂ hθ₂ hφ₂ (spanning₂_neg σQ span₂) h₅
+      simp only [Spanp, Set.mem_ofPred_eq, Z] at h₆ ⊢
+      obtain ⟨c, hc₁, hc₂⟩ := h₆
+      use c, hc₁
+      simp [hc₂, map_sum, map_smul, ←hPQ_]
+  suffices h₂ : ∀ i, ⟪Z, P_ i⟫ < ⟪Y, P_ i⟫ by
+    obtain ⟨i, h₃⟩ := langles (hY.trans hZ.symm) h₁.1 h₁.2
+    rw [real_inner_comm Y (P_ i), real_inner_comm Z (P_ i)] at h₃
+    exact lt_iff_not_ge.mp (h₂ i) h₃
+  intro i
+  -- apply the second-order lemma 30
+  have hd : ‖rotR p.α (rotM p.θ₁ p.φ₁ (P i)) - rotM p.θ₂ p.φ₂ (Q i)‖ < 2 * δ := by
+    refine GlobalTheorem.inCirc₂ hεα hεθ₁ hεφ₁ hεθ₂ hεφ₂ hα hθ₁ hφ₁ hθ₂ hφ₂ ?_
+    have h := hδ i
+    simp only [Pose.rotR, Pose.rotM₁, Pose.rotM₂] at h
+    exact h
+  -- apply the second-order lemmas 33 and 32
+  let pm : Finset Euc(2) :=
+    Finset.image (rotM p.θ₂ p.φ₂) (Finset.image poly.vertices.v Finset.univ)
+  have h₈ : LocallyMaximallyDistant (2 * δ) (rotM p.θ₂ p.φ₂ (Q i)) pm :=
+    lmd_step₂ poly Qi i hεθ₂ hεφ₂ hr hθ₂ hφ₂ hr₁ be
+  have h_in_interior_outer : rotR p.α (rotM p.θ₁ p.φ₁ (P i)) ∈
+      interior (convexHull ℝ (↑pm : Set ℝ²)) :=
+    inner_vertex_mem_interior poly p (Pi i) hΨ₂
+  have h_sect : rotR p.α (rotM p.θ₁ p.φ₁ (P i)) ∈
+      sect (2 * δ) (rotM p.θ₂ p.φ₂ (Q i)) pm :=
+    ⟨mem_ball_iff_norm.mpr hd, h_in_interior_outer⟩
+  have h_norm_bound : ‖rotM p.θ₁ p.φ₁ (P i)‖ < ‖rotM p.θ₂ p.φ₂ (Q i)‖ := by
+    rw [← Bounding.rotR_preserves_norm p.α]; exact h₈ _ h_sect
+  have h_inner_sq : ⟪vecX p.θ₂ p.φ₂, Q i⟫^2 < ⟪Y, P i⟫^2 :=
+    inner_sq_lt_of_rotM_norm_lt (by rw [hL i, L.norm_map]) h_norm_bound
+  have h_ZP : ⟪Z, P_ i⟫ = (-1 : ℝ)^σQ * ⟪vecX p.θ₂ p.φ₂, Q i⟫ := by
+    simp only [Z, K, P_, FunLike.coe_smul, _root_.Pi.smul_apply,
+      LinearIsometry.coe_toContinuousLinearMap, inner_smul_left, real_inner_smul_right,
+      RCLike.conj_to_real]
+    rw [hL i, L.inner_map_map]
+    have h_exp : (-1 : ℝ)^(σP + σQ) * (-1 : ℝ)^σP = (-1 : ℝ)^σQ := by
+      rw [← pow_add, show σP + σQ + σP = 2 * σP + σQ by ring,
+          pow_add, pow_mul]; norm_num
+    rw [←mul_assoc, h_exp]
+  have h_YP : ⟪Y, P_ i⟫ = (-1 : ℝ)^σP * ⟪Y, P i⟫ := by simp only [P_, real_inner_smul_right]
+  rw [h_ZP, h_YP]
+  exact neg_one_pow_mul_lt_of_sq_lt_sq σQ σP h_inner_sq (h_YP ▸ h₄ i)
 
 end Local
 end

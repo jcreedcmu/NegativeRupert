@@ -141,7 +141,7 @@ lemma hasDerivAt_vecXφ_φ (θ φ : ℝ) : HasDerivAt (fun t => vecXφ θ t) (-(
     (show HasDerivAt (fun s => -Real.sin s) (-Real.cos φ) φ from
       (Real.hasDerivAt_sin φ).neg) using 1
   ext i
-  fin_cases i <;> simp [vecX] <;> ring
+  fin_cases i <;> simp [vecX]
 
 lemma hasDerivAt_vecXθθ_θ (θ φ : ℝ) :
     HasDerivAt (fun t => vecXθθ t φ) (-(vecXθ θ φ)) θ := by
@@ -153,7 +153,7 @@ lemma hasDerivAt_vecXθθ_θ (θ φ : ℝ) :
       by simpa [neg_mul] using ((Real.hasDerivAt_sin θ).neg.mul_const (Real.sin φ)))
     (hasDerivAt_const θ (0:ℝ)) using 1
   ext i
-  fin_cases i <;> simp [vecXθ] <;> ring
+  fin_cases i <;> simp [vecXθ]
 
 lemma hasDerivAt_vecXθθ_φ (θ φ : ℝ) :
     HasDerivAt (fun t => vecXθθ θ t) (vecXθθφ θ φ) φ := by
@@ -181,7 +181,7 @@ lemma hasDerivAt_vecXθφ_φ (θ φ : ℝ) :
       (Real.hasDerivAt_cos φ).const_mul _)
     (hasDerivAt_const φ (0:ℝ)) using 1
   ext i
-  fin_cases i <;> simp [vecXθ] <;> ring
+  fin_cases i <;> simp [vecXθ]
 
 lemma hasDerivAt_vecXθθφ_θ (θ φ : ℝ) :
     HasDerivAt (fun t => vecXθθφ t φ) (-(vecXθφ θ φ)) θ := by
@@ -193,7 +193,7 @@ lemma hasDerivAt_vecXθθφ_θ (θ φ : ℝ) :
       by simpa [neg_mul] using ((Real.hasDerivAt_sin θ).neg.mul_const (Real.cos φ)))
     (hasDerivAt_const θ (0:ℝ)) using 1
   ext i
-  fin_cases i <;> simp [vecXθφ] <;> ring
+  fin_cases i <;> simp [vecXθφ]
 
 lemma hasDerivAt_vecXθθφ_φ (θ φ : ℝ) :
     HasDerivAt (fun t => vecXθθφ θ t) (-(vecXθθ θ φ)) φ := by
@@ -205,7 +205,7 @@ lemma hasDerivAt_vecXθθφ_φ (θ φ : ℝ) :
       by simpa [neg_mul] using (Real.hasDerivAt_cos φ).const_mul (-Real.sin θ))
     (hasDerivAt_const φ (0:ℝ)) using 1
   ext i
-  fin_cases i <;> simp [vecXθθ] <;> ring
+  fin_cases i <;> simp [vecXθθ]
 
 /-! ## The grid, its step lemmas, and the ∂-closed scalar family -/
 
@@ -425,6 +425,22 @@ lemma second_partial_vecX_inner_eq (P : ℝ³) (x : E 2) (i j : Fin 2) :
 private lemma innerParamsX_0 (θ φ : ℝ) : ((!₂[θ, φ] : E 2)).ofLp 0 = θ := rfl
 private lemma innerParamsX_1 (θ φ : ℝ) : ((!₂[θ, φ] : E 2)).ofLp 1 = φ := rfl
 
+/-- The second-order variation budget of `⟪X(θ,φ), P⟫` over a per-axis box of
+radii `(εθ, εφ)` centered at `(θ_, φ_)`, for `‖P‖ ≤ 1` (the cubic remainder
+charges `1` for `‖P‖`). -/
+noncomputable def ΔvecX (P : ℝ³) (εθ εφ θ_ φ_ : ℝ) : ℝ :=
+  εθ * |⟪vecXθ θ_ φ_, P⟫| + εφ * |⟪vecXφ θ_ φ_, P⟫|
+  + (1/2) * (εθ^2 * |⟪vecXθθ θ_ φ_, P⟫| + 2*(εθ*εφ) * |⟪vecXθφ θ_ φ_, P⟫|
+      + εφ^2 * |⟪vecX θ_ φ_, P⟫|)
+  + (εθ + εφ)^3/6
+
+/-- `ΔvecX` only sees `P` through absolute inner products, so it is invariant
+under the sign flips of the local theorem's `σ`-convention. -/
+lemma ΔvecX_neg_one_pow_smul (e : ℕ) (P : ℝ³) (εθ εφ θ_ φ_ : ℝ) :
+    ΔvecX ((-1 : ℝ)^e • P) εθ εφ θ_ φ_ = ΔvecX P εθ εφ θ_ φ_ := by
+  unfold ΔvecX
+  simp [inner_smul_right, abs_mul]
+
 /-- **Second-order [SY25] Lemma 14**: the orientation condition transfers from
 the center to the whole per-axis box, charging the exact first and second
 partials of `⟪X, P⟫` at the center plus a cubic remainder (`‖P‖ ≤ 1`).
@@ -432,11 +448,9 @@ Replaces the Lipschitz bound `√2·ε` of `XPgt0` with typically much smaller
 center data. -/
 theorem XPgt0₂ {P : ℝ³} {εθ εφ θ θ_ φ φ_ : ℝ} (hP : ‖P‖ ≤ 1)
     (hεθ : 0 ≤ εθ) (hεφ : 0 ≤ εφ) (hθ : |θ - θ_| ≤ εθ) (hφ : |φ - φ_| ≤ εφ)
-    (hX : εθ * |⟪vecXθ θ_ φ_, P⟫| + εφ * |⟪vecXφ θ_ φ_, P⟫|
-        + (1/2) * (εθ^2 * |⟪vecXθθ θ_ φ_, P⟫| + 2*(εθ*εφ) * |⟪vecXθφ θ_ φ_, P⟫|
-            + εφ^2 * |⟪vecX θ_ φ_, P⟫|)
-        + (εθ + εφ)^3/6 < ⟪vecX θ_ φ_, P⟫) :
+    (hX : ΔvecX P εθ εφ θ_ φ_ < ⟪vecX θ_ φ_, P⟫) :
     0 < ⟪vecX θ φ, P⟫ := by
+  unfold ΔvecX at hX
   set f : E 2 → ℝ := fun y => ⟪vecX (y.ofLp 0) (y.ofLp 1), P⟫ with hf
   have hεv : ∀ i, 0 ≤ (![εθ, εφ] : Fin 2 → ℝ) i := by
     intro i; fin_cases i
@@ -455,15 +469,14 @@ theorem XPgt0₂ {P : ℝ³} {εθ εφ θ θ_ φ φ_ : ℝ} (hP : ‖P‖ ≤ 1
   have hsum1 : ∑ i, (![εθ, εφ] : Fin 2 → ℝ) i * |nth_partial i f !₂[θ_, φ_]|
       = εθ * |⟪vecXθ θ_ φ_, P⟫| + εφ * |⟪vecXφ θ_ φ_, P⟫| := by
     rw [Fin.sum_univ_two]
-    simp only [Matrix.cons_val_zero, Matrix.cons_val_one, Matrix.head_cons, hf,
-      first_partial_vecX_inner_e0, first_partial_vecX_inner_e1,
-      innerParamsX_0, innerParamsX_1]
+    simp only [Matrix.cons_val_zero, Matrix.cons_val_one, hf,
+      first_partial_vecX_inner_e0, first_partial_vecX_inner_e1]
   have hsum2 : ∑ i, ∑ j, (![εθ, εφ] : Fin 2 → ℝ) i * ![εθ, εφ] j *
         |nth_partial i (nth_partial j f) !₂[θ_, φ_]|
       = εθ^2 * |⟪vecXθθ θ_ φ_, P⟫| + 2*(εθ*εφ) * |⟪vecXθφ θ_ φ_, P⟫|
         + εφ^2 * |⟪vecX θ_ φ_, P⟫| := by
-    simp only [hf, second_partial_vecX_inner_eq, innerParamsX_0, innerParamsX_1]
-    simp only [Fin.sum_univ_two, Matrix.cons_val_zero, Matrix.cons_val_one, Matrix.head_cons,
+    simp only [hf, second_partial_vecX_inner_eq]
+    simp only [Fin.sum_univ_two, Matrix.cons_val_zero, Matrix.cons_val_one,
       inner_neg_left, abs_neg]
     ring
   rw [hsum1, hsum2] at key
