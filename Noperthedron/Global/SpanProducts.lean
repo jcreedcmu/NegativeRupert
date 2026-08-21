@@ -351,6 +351,21 @@ lemma ΔprodMM_neg_one_pow_smul (T : ℝ² →L[ℝ] ℝ²) (e : ℕ) (v w : ℝ
   simp only [map_smul, inner_neg_one_pow_smul_smul, norm_smul, Real.norm_eq_abs,
     abs_neg_one_pow, one_mul]
 
+/-- The product budget is nonnegative on nonnegative radii. -/
+lemma ΔprodMM_nonneg {T : ℝ² →L[ℝ] ℝ²} {v w : ℝ³} {εθ εφ θ_ φ_ : ℝ}
+    (hεθ : 0 ≤ εθ) (hεφ : 0 ≤ εφ) :
+    0 ≤ ΔprodMM T v w εθ εφ θ_ φ_ := by
+  unfold ΔprodMM
+  refine add_nonneg (add_nonneg (add_nonneg ?_ ?_) ?_) ?_
+  · exact mul_nonneg hεθ (abs_nonneg _)
+  · exact mul_nonneg hεφ (abs_nonneg _)
+  · refine mul_nonneg (by norm_num) (add_nonneg (add_nonneg ?_ ?_) ?_)
+    · exact mul_nonneg (sq_nonneg _) (abs_nonneg _)
+    · exact mul_nonneg (mul_nonneg (by norm_num) (mul_nonneg hεθ hεφ)) (abs_nonneg _)
+    · exact mul_nonneg (sq_nonneg _) (abs_nonneg _)
+  · exact div_nonneg (mul_nonneg (mul_nonneg (mul_nonneg (by norm_num) (norm_nonneg _))
+      (norm_nonneg _)) (pow_nonneg (add_nonneg hεθ hεφ) 3)) (by norm_num)
+
 /-- **Second-order variation of the product quantity** `⟪T (M v), M w⟫`.
 Powers the spanning condition (`T = rotR (π/2)`) and the LMD numerator
 (`T = id`) of the second-order local certificate. -/
