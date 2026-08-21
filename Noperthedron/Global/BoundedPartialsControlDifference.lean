@@ -149,10 +149,10 @@ lemma sum_pow_three {n : ℕ} (ε : Fin n → ℝ) :
   exact Finset.sum_comm
 
 private
-lemma interpolated_deriv3_bound {n : ℕ} (x y : E n) {f : E n → ℝ}
-    (tpb : third_partials_bounded f) {ε : Fin n → ℝ} (hε : ∀ i, 0 ≤ ε i)
+lemma interpolated_deriv3_bound {n : ℕ} (x y : E n) {f : E n → ℝ} {M : ℝ}
+    (tpb : third_partials_bounded f M) {ε : Fin n → ℝ} (hε : ∀ i, 0 ≤ ε i)
     (hdiff : (i : Fin n) → |x i - y i| ≤ ε i) (t : ℝ) :
-    |interpolated_deriv3 x y f t| ≤ (∑ i, ε i)^3 := by
+    |interpolated_deriv3 x y f t| ≤ M * (∑ i, ε i)^3 := by
   calc |interpolated_deriv3 x y f t|
   _ ≤ ∑ i, |∑ j, ∑ k, (y i - x i) * (y j - x j) * (y k - x k) *
       nth_partial i (nth_partial j (nth_partial k f)) ((1 - t) • x + t • y)| := by
@@ -169,7 +169,7 @@ lemma interpolated_deriv3_bound {n : ℕ} (x y : E n) {f : E n → ℝ}
   _ = ∑ i, ∑ j, ∑ k, |(y i - x i)| * |(y j - x j)| * |(y k - x k)| *
       |nth_partial i (nth_partial j (nth_partial k f)) ((1 - t) • x + t • y)| := by
     conv => enter [1, 2, i, 2, j, 2, k]; repeat rw [abs_mul];
-  _ ≤ ∑ i, ∑ j, ∑ k, ε i * ε j * ε k * 1 := by
+  _ ≤ ∑ i, ∑ j, ∑ k, ε i * ε j * ε k * M := by
     refine Finset.sum_le_sum ?_; intro i hi;
     refine Finset.sum_le_sum ?_; intro j hj;
     refine Finset.sum_le_sum ?_; intro k hk;
@@ -180,9 +180,9 @@ lemma interpolated_deriv3_bound {n : ℕ} (x y : E n) {f : E n → ℝ}
     rw [abs_sub_comm]; grw [hdiff j]
     rw [abs_sub_comm]; grw [hdiff k]
     unfold third_partials_bounded at tpb; grw [tpb]
-  _ = (∑ i, ε i)^3 := by
-    simp only [mul_one]
-    exact (sum_pow_three ε).symm
+  _ = M * (∑ i, ε i)^3 := by
+    simp only [← Finset.sum_mul, sum_pow_three ε]
+    ring
 
 open ContinuousLinearMap in
 theorem interpolated_has_deriv3 {n : ℕ} (x y : E n) (f : E n → ℝ) (fc : ContDiff ℝ 3 f) (t : ℝ) :
@@ -232,10 +232,10 @@ theorem differentiable_deriv_interpolated2 {n : ℕ} (x y : E n) (f : E n → �
 theorem bounded_partials_control_difference2 {n : ℕ} (f : E n → ℝ)
     (fc : ContDiff ℝ 3 f) (x y : E n)
     (ε : Fin n → ℝ) (hε : ∀ i, 0 ≤ ε i) (hdiff : (i : Fin n) → |x i - y i| ≤ ε i)
-    (tpb : third_partials_bounded f) :
+    {M : ℝ} (tpb : third_partials_bounded f M) :
     |f x - f y| ≤ ∑ i, ε i * |nth_partial i f x|
       + (1/2) * ∑ i, ∑ j, ε i * ε j * |nth_partial i (nth_partial j f) x|
-      + (∑ i, ε i)^3 / 6 := by
+      + M * (∑ i, ε i)^3 / 6 := by
   let g := interpolated x y f
   let g' := interpolated_deriv x y f
   let g'' := interpolated_deriv2 x y f
@@ -311,7 +311,7 @@ theorem bounded_partials_control_difference2 {n : ℕ} (f : E n → ℝ)
       rw [abs_sub_comm]; grw [hdiff i]
       rw [abs_sub_comm]; grw [hdiff j]
 
-  have bound3 : |g''' c| ≤ (∑ i, ε i)^3 := interpolated_deriv3_bound x y tpb hε hdiff c
+  have bound3 : |g''' c| ≤ M * (∑ i, ε i)^3 := interpolated_deriv3_bound x y tpb hε hdiff c
 
   calc |f x - f y|
   _ = |g 0 - g 1| := by
@@ -323,10 +323,10 @@ theorem bounded_partials_control_difference2 {n : ℕ} (f : E n → ℝ)
     rw [abs_div, abs_div]; norm_num
   _ ≤ ∑ i, ε i * |nth_partial i f x|
       + (∑ i, ∑ j, ε i * ε j * |nth_partial i (nth_partial j f) x|) / 2
-      + (∑ i, ε i)^3 / 6 := by grw [bound1, bound2, bound3]
+      + M * (∑ i, ε i)^3 / 6 := by grw [bound1, bound2, bound3]
   _ = ∑ i, ε i * |nth_partial i f x|
       + (1/2) * ∑ i, ∑ j, ε i * ε j * |nth_partial i (nth_partial j f) x|
-      + (∑ i, ε i)^3 / 6 := by ring
+      + M * (∑ i, ε i)^3 / 6 := by ring
 
 end GlobalTheorem
 end

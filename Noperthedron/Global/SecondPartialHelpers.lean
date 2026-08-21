@@ -162,20 +162,16 @@ lemma fderiv_inner_const {n : ℕ} (f : E n → ℝ²) (w : ℝ²) (y : E n) (d 
 
 /-- |⟪A S, w⟫ / ‖S‖| ≤ 1 when ‖A‖ ≤ 1 and ‖w‖ = 1 -/
 lemma inner_bound_helper (A : ℝ³ →L[ℝ] ℝ²) (S : ℝ³) (w : ℝ²)
-    (hw : ‖w‖ = 1) (hA : ‖A‖ ≤ 1) : |⟪A S, w⟫ / ‖S‖| ≤ 1 := by
-  by_cases hS : ‖S‖ = 0
-  · simp [hS]
-  · rw [abs_div, abs_norm]
-    refine div_le_one_of_le₀ ?_ (norm_nonneg _)
-    calc |⟪A S, w⟫|
-      _ ≤ ‖A S‖ * ‖w‖ := abs_real_inner_le_norm _ _
-      _ ≤ ‖A‖ * ‖S‖ * ‖w‖ := by
-          apply mul_le_mul_of_nonneg_right (ContinuousLinearMap.le_opNorm _ _) (norm_nonneg _)
-      _ ≤ 1 * ‖S‖ * 1 := by
-          apply mul_le_mul (mul_le_mul_of_nonneg_right hA (norm_nonneg _)) (le_of_eq hw)
-            (norm_nonneg _)
-          positivity
-      _ = ‖S‖ := by ring
+    (hw : ‖w‖ = 1) (hA : ‖A‖ ≤ 1) : |⟪A S, w⟫| ≤ ‖S‖ := by
+  calc |⟪A S, w⟫|
+    _ ≤ ‖A S‖ * ‖w‖ := abs_real_inner_le_norm _ _
+    _ ≤ ‖A‖ * ‖S‖ * ‖w‖ := by
+        apply mul_le_mul_of_nonneg_right (ContinuousLinearMap.le_opNorm _ _) (norm_nonneg _)
+    _ ≤ 1 * ‖S‖ * 1 := by
+        apply mul_le_mul (mul_le_mul_of_nonneg_right hA (norm_nonneg _)) (le_of_eq hw)
+          (norm_nonneg _)
+        positivity
+    _ = ‖S‖ := by ring
 
 /-!
 ## Coordinate extraction lemmas

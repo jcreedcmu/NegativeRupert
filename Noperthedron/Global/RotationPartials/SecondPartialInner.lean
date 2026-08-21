@@ -255,28 +255,13 @@ theorem third_partial_rotproj_inner_eq (S : ℝ³) (w : ℝ²) (x : E 3) (i j k 
 /- [SY25] Lemma 19 (inner part) -/
 theorem third_partial_inner_rotM_inner (S : ℝ³) {w : ℝ²} (w_unit : ‖w‖ = 1)
     (i j k : Fin 3) (y : ℝ³) :
-    |nth_partial i (nth_partial j (nth_partial k (rotproj_inner_unit S w))) y| ≤ 1 := by
-  have hf_smooth : ContDiff ℝ 3 (rotproj_inner S w) := by
-    change ContDiff ℝ 3 (fun x : ℝ³ => ⟪rotprojRM (x 1) (x 2) (x 0) S, w⟫)
-    simp [inner, rotprojRM, rotR, rotM, rotM_mat, Matrix.vecHead, Matrix.vecTail]
-    fun_prop
-  have hg_c2 : ContDiff ℝ 2 (nth_partial k (rotproj_inner S w)) :=
-    hf_smooth.fderiv_right (by decide : (2 : WithTop ℕ∞) + 1 ≤ 3) |>.clm_apply contDiff_const
-  have hg_diff : Differentiable ℝ (nth_partial k (rotproj_inner S w)) :=
-    hg_c2.differentiable (by decide)
-  have hgg_diff : Differentiable ℝ (nth_partial j (nth_partial k (rotproj_inner S w))) :=
-    (hg_c2.fderiv_right (by decide : (1 : WithTop ℕ∞) + 1 ≤ 2) |>.clm_apply
-      contDiff_const).differentiable (by decide)
-  have hscale : nth_partial i (nth_partial j (nth_partial k (rotproj_inner_unit S w))) y =
-      nth_partial i (nth_partial j (nth_partial k (rotproj_inner S w))) y / ‖S‖ :=
-    nth_partial_nth_partial_nth_partial_div_const i j k (rotproj_inner S w) ‖S‖ y
-      (Differentiable.rotproj_inner S w) hg_diff hgg_diff
-  rw [hscale, third_partial_rotproj_inner_eq S w y i j k]
+    |nth_partial i (nth_partial j (nth_partial k (rotproj_inner S w))) y| ≤ ‖S‖ := by
+  rw [third_partial_rotproj_inner_eq S w y i j k]
   exact inner_bound_helper _ S w w_unit (inner_third_partial_A_norm_le _ _ _ i j k)
 
 /- [SY25] Lemma 19 -/
 theorem rotation_third_partials_bounded (S : ℝ³) {w : ℝ²} (w_unit : ‖w‖ = 1) :
-    third_partials_bounded (rotproj_inner_unit S w) := fun x i j k =>
+    third_partials_bounded (rotproj_inner S w) ‖S‖ := fun x i j k =>
   third_partial_inner_rotM_inner S w_unit i j k x
 
 end GlobalTheorem

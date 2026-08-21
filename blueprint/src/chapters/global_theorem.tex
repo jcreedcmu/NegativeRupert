@@ -35,12 +35,15 @@ as required.
 \begin{lemma} \label{lem:leq1}
 \lean{GlobalTheorem.rotation_third_partials_bounded}
 \leanok
-    Let $S \in \R^3$ and $w \in \R^2$ be unit vectors and set $f(x_1,x_2,x_3) = \langle R(x_3) M(x_1,x_2)S,w \rangle$. Then for all $x_1,x_2,x_3 \in \R$ and any $i,j,k \in \{1,2,3\}$ it holds that
+    Let $S \in \R^3$, let $w \in \R^2$ be a unit vector, and set $f(x_1,x_2,x_3) = \langle R(x_3) M(x_1,x_2)S,w \rangle$. Then for all $x_1,x_2,x_3 \in \R$ and any $i,j,k \in \{1,2,3\}$ it holds that
     \[
-        \left|\frac{\dd^2 f}{\dd x_i \dd x_j}(x_1,x_2,x_3)\right|\leq 1
+        \left|\frac{\dd^2 f}{\dd x_i \dd x_j}(x_1,x_2,x_3)\right|\leq \|S\|
         \qquad\text{and}\qquad
-        \left|\frac{\dd^3 f}{\dd x_i \dd x_j \dd x_k}(x_1,x_2,x_3)\right|\leq 1.
+        \left|\frac{\dd^3 f}{\dd x_i \dd x_j \dd x_k}(x_1,x_2,x_3)\right|\leq \|S\|.
     \]
+    (\cite{polyhedron.without.rupert} normalizes $f$ by $1/\|S\|$ and bounds the
+    partials by $1$; we keep $f$ unnormalized and carry the $\|S\|$ instead,
+    which composes with the remainder bound of \cref{lem:n2} at $M = \|S\| \leq 1$.)
 \end{lemma}
 
 \begin{proof}\leanok
@@ -60,19 +63,19 @@ $M^{\theta\phi\phi}$ are genuinely new matrices.)
     $\varepsilon_1,\dots,\varepsilon_n \geq 0$, and let
     $x_1,\dots,x_n,y_1,\dots,y_n \in \R$ be such that
     $|x_i-y_i|\leq \varepsilon_i$ for all $i$.
-    If
+    If, for some $M \in \R$,
     \(
-        \left|\partial_{x_i}\partial_{x_j}\partial_{x_k}f(v)\right| \leq 1
+        \left|\partial_{x_i}\partial_{x_j}\partial_{x_k}f(v)\right| \leq M
     \)
     for all $i,j,k \in \{1,\dots,n\}$ and all $v \in \R^n$, then
     \[
     |f(x)-f(y)|\leq \sum_{i=1}^n \varepsilon_i |\partial_{x_i} f(x)|
       + \frac{1}{2} \sum_{i=1}^n \sum_{j=1}^n \varepsilon_i \varepsilon_j
           |\partial_{x_i}\partial_{x_j} f(x)|
-      + \frac{1}{6}\Big(\sum_{i=1}^n \varepsilon_i\Big)^3.
+      + \frac{M}{6}\Big(\sum_{i=1}^n \varepsilon_i\Big)^3.
     \]
-    (At $\varepsilon_1 = \dots = \varepsilon_n = \varepsilon$ this recovers the
-    isotropic remainder $\frac{n^3}{6}\varepsilon^3$.)
+    (At $M = 1$ and $\varepsilon_1 = \dots = \varepsilon_n = \varepsilon$ this
+    recovers the isotropic remainder $\frac{n^3}{6}\varepsilon^3$.)
 \end{lemma}
 
 \begin{proof}
@@ -81,7 +84,7 @@ This strengthens \cite{polyhedron.without.rupert}, Lemma 20, by one Taylor
 order and per-axis radii: expand $g(t) = f((1-t)x + ty)$ to second order with
 Lagrange remainder, bound $|g'(0)|$ by the first sum, $|g''(0)|/2$ by the
 second (the second partials are evaluated exactly at $x$, not bounded), and
-$|g'''(c)| \le (\sum_i \varepsilon_i)^3$ using the third-partial bound.
+$|g'''(c)| \le M (\sum_i \varepsilon_i)^3$ using the third-partial bound.
 \end{proof}
 
 \begin{lemma}
@@ -100,8 +103,8 @@ Specifically:
 \item \[  g^\theta(\theta,\phi) = \langle  M^\theta(\theta, \phi) P, w \rangle \]
 \item \[  g^\phi(\theta,\phi) = \langle  M^\phi(\theta, \phi) P, w \rangle \]
 \end{itemize}
-where $f(\theta,\phi,\alpha) =  \langle R(\alpha) M(\theta,\phi) S / \|S\|, w\rangle $
-and $g(\theta,\phi) =  \langle M(\theta,\phi) P / \|P\|, w\rangle $.
+where $f(\theta,\phi,\alpha) =  \langle R(\alpha) M(\theta,\phi) S, w\rangle $
+and $g(\theta,\phi) =  \langle M(\theta,\phi) P, w\rangle $.
 \end{lemma}
 
 \begin{proof}\leanok
