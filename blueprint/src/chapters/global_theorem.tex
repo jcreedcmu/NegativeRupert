@@ -47,13 +47,18 @@ as required.
 \end{lemma}
 
 \begin{proof}\leanok
-The second-partial bound is \cite{polyhedron.without.rupert}, Lemma 19.  The
-third-partial bound follows by the same argument: every third partial of $f$
-is $\langle A S, w\rangle$ for $A$ a composition of $\pm R$ or $\pm R'$ with a
-matrix from the $M$-derivative family, all of operator norm at most one.
-(Note $M^{\theta\theta\theta} = -M^\theta$ and $M^{\phi\phi\phi} = -M^\phi$,
-so only the two mixed third derivatives $M^{\theta\theta\phi}$,
-$M^{\theta\phi\phi}$ are genuinely new matrices.)
+The second-partial bound is \cite{polyhedron.without.rupert}, Lemma 19.  For
+the third partials (and, in the formalization, every higher order at once) we
+argue by closure instead of enumeration: the family of functions
+$\pm \langle (\pm R/R')(\alpha)\, (\partial_\theta^a \partial_\phi^b
+M)(\theta,\phi)\, S, w\rangle$ with $a, b \le 2$ is closed under all three
+partial derivatives --- an $\alpha$-derivative steps the head around its
+four-cycle $R \to R' \to -R \to -R'$, and a $\theta$- or $\phi$-derivative
+bumps one grid index, folding back with a sign at the edge since
+$\partial_\theta^3 = -\partial_\theta$ and
+$\partial_\phi^3 = -\partial_\phi$.  Every member is bounded by $\|S\|$
+because each factor has operator norm at most one, so iterating the closure
+bounds all iterated partials.
 \end{proof}
 
 \begin{lemma} \label{lem:n2}

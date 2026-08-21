@@ -162,6 +162,12 @@ theorem rotMθφφ_norm_le_one (θ φ : ℝ) : ‖rotMθφφ θ φ‖ ≤ 1 :=
     (by simp)
     (by linarith [mul_sin_sq_add_cos_sq (Real.cos φ ^ 2) θ, Real.cos_sq_le_one φ])
 
+theorem rotMθθφφ_norm_le_one (θ φ : ℝ) : ‖rotMθθφφ θ φ‖ ≤ 1 :=
+  opNorm_le_one_of_orthogonal_rows
+    (by ring)
+    (by simp)
+    (by linarith [mul_sin_sq_add_cos_sq (Real.cos φ ^ 2) θ, Real.cos_sq_le_one φ])
+
 /- Rotations as linear isometries -/
 
 lemma rot3_mat_mem_O3 (d : Fin 3) (θ : ℝ) :

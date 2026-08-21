@@ -140,6 +140,96 @@ lemma differentiableAt_rotR_rotMφφ (S : ℝ³) (y : E 3) :
   fin_cases i <;> (simp [rotR, rotR_mat, rotMφφ, rotMφφ_mat, Matrix.toLpLin_apply,
     Matrix.vecHead, Matrix.vecTail, dotProduct, Fin.sum_univ_three]; fun_prop)
 
+/-- DifferentiableAt for rotR ∘ rotMθθφ -/
+lemma differentiableAt_rotR_rotMθθφ (S : ℝ³) (y : E 3) :
+    DifferentiableAt ℝ (fun z : E 3 => rotR (z.ofLp 0) (rotMθθφ (z.ofLp 1) (z.ofLp 2) S)) y := by
+  rw [differentiableAt_piLp]; intro i
+  fin_cases i <;> (simp [rotR, rotR_mat, rotMθθφ, rotMθθφ_mat, Matrix.toLpLin_apply,
+    Matrix.vecHead, Matrix.vecTail, dotProduct, Fin.sum_univ_three]; fun_prop)
+
+/-- DifferentiableAt for rotR ∘ rotMθφφ -/
+lemma differentiableAt_rotR_rotMθφφ (S : ℝ³) (y : E 3) :
+    DifferentiableAt ℝ (fun z : E 3 => rotR (z.ofLp 0) (rotMθφφ (z.ofLp 1) (z.ofLp 2) S)) y := by
+  rw [differentiableAt_piLp]; intro i
+  fin_cases i <;> (simp [rotR, rotR_mat, rotMθφφ, rotMθφφ_mat, Matrix.toLpLin_apply,
+    Matrix.vecHead, Matrix.vecTail, dotProduct, Fin.sum_univ_three]; fun_prop)
+
+/-- DifferentiableAt for rotR ∘ rotMθθφφ -/
+lemma differentiableAt_rotR_rotMθθφφ (S : ℝ³) (y : E 3) :
+    DifferentiableAt ℝ (fun z : E 3 => rotR (z.ofLp 0) (rotMθθφφ (z.ofLp 1) (z.ofLp 2) S)) y := by
+  rw [differentiableAt_piLp]; intro i
+  fin_cases i <;> (simp [rotR, rotR_mat, rotMθθφφ, rotMθθφφ_mat, Matrix.toLpLin_apply,
+    Matrix.vecHead, Matrix.vecTail, dotProduct, Fin.sum_univ_three]; fun_prop)
+
+/-- DifferentiableAt for rotR' ∘ rotMθθ -/
+lemma differentiableAt_rotR'_rotMθθ (S : ℝ³) (y : E 3) :
+    DifferentiableAt ℝ (fun z : E 3 => rotR' (z.ofLp 0) (rotMθθ (z.ofLp 1) (z.ofLp 2) S)) y := by
+  rw [differentiableAt_piLp]; intro i
+  fin_cases i <;> (simp [rotR', rotR'_mat, rotMθθ, rotMθθ_mat, Matrix.toLpLin_apply,
+    Matrix.vecHead, Matrix.vecTail, dotProduct, Fin.sum_univ_three]; fun_prop)
+
+/-- DifferentiableAt for rotR' ∘ rotMθφ -/
+lemma differentiableAt_rotR'_rotMθφ (S : ℝ³) (y : E 3) :
+    DifferentiableAt ℝ (fun z : E 3 => rotR' (z.ofLp 0) (rotMθφ (z.ofLp 1) (z.ofLp 2) S)) y := by
+  rw [differentiableAt_piLp]; intro i
+  fin_cases i <;> (simp [rotR', rotR'_mat, rotMθφ, rotMθφ_mat, Matrix.toLpLin_apply,
+    Matrix.vecHead, Matrix.vecTail, dotProduct, Fin.sum_univ_three]; fun_prop)
+
+/-- DifferentiableAt for rotR' ∘ rotMφφ -/
+lemma differentiableAt_rotR'_rotMφφ (S : ℝ³) (y : E 3) :
+    DifferentiableAt ℝ (fun z : E 3 => rotR' (z.ofLp 0) (rotMφφ (z.ofLp 1) (z.ofLp 2) S)) y := by
+  rw [differentiableAt_piLp]; intro i
+  fin_cases i <;> (simp [rotR', rotR'_mat, rotMφφ, rotMφφ_mat, Matrix.toLpLin_apply,
+    Matrix.vecHead, Matrix.vecTail, dotProduct, Fin.sum_univ_three]; fun_prop)
+
+/-- DifferentiableAt for rotR' ∘ rotMθθφ -/
+lemma differentiableAt_rotR'_rotMθθφ (S : ℝ³) (y : E 3) :
+    DifferentiableAt ℝ (fun z : E 3 => rotR' (z.ofLp 0) (rotMθθφ (z.ofLp 1) (z.ofLp 2) S)) y := by
+  rw [differentiableAt_piLp]; intro i
+  fin_cases i <;> (simp [rotR', rotR'_mat, rotMθθφ, rotMθθφ_mat, Matrix.toLpLin_apply,
+    Matrix.vecHead, Matrix.vecTail, dotProduct, Fin.sum_univ_three]; fun_prop)
+
+/-- DifferentiableAt for rotR' ∘ rotMθφφ -/
+lemma differentiableAt_rotR'_rotMθφφ (S : ℝ³) (y : E 3) :
+    DifferentiableAt ℝ (fun z : E 3 => rotR' (z.ofLp 0) (rotMθφφ (z.ofLp 1) (z.ofLp 2) S)) y := by
+  rw [differentiableAt_piLp]; intro i
+  fin_cases i <;> (simp [rotR', rotR'_mat, rotMθφφ, rotMθφφ_mat, Matrix.toLpLin_apply,
+    Matrix.vecHead, Matrix.vecTail, dotProduct, Fin.sum_univ_three]; fun_prop)
+
+/-- DifferentiableAt for rotR' ∘ rotMθθφφ -/
+lemma differentiableAt_rotR'_rotMθθφφ (S : ℝ³) (y : E 3) :
+    DifferentiableAt ℝ (fun z : E 3 => rotR' (z.ofLp 0) (rotMθθφφ (z.ofLp 1) (z.ofLp 2) S)) y := by
+  rw [differentiableAt_piLp]; intro i
+  fin_cases i <;> (simp [rotR', rotR'_mat, rotMθθφφ, rotMθθφφ_mat, Matrix.toLpLin_apply,
+    Matrix.vecHead, Matrix.vecTail, dotProduct, Fin.sum_univ_three]; fun_prop)
+
+/-- DifferentiableAt for rotMθθφ (outer, E 2) -/
+lemma differentiableAt_rotMθθφ_outer (S : ℝ³) (y : E 2) :
+    DifferentiableAt ℝ (fun z : E 2 => rotMθθφ (z.ofLp 0) (z.ofLp 1) S) y := by
+  rw [differentiableAt_piLp]; intro i
+  simp only [rotMθθφ, rotMθθφ_mat, LinearMap.coe_toContinuousLinearMap', Matrix.toLpLin_apply]
+  fin_cases i
+  · simp [Matrix.mulVec, dotProduct, Fin.sum_univ_three]
+  · simp [Matrix.mulVec, dotProduct, Fin.sum_univ_three]; fun_prop
+
+/-- DifferentiableAt for rotMθφφ (outer, E 2) -/
+lemma differentiableAt_rotMθφφ_outer (S : ℝ³) (y : E 2) :
+    DifferentiableAt ℝ (fun z : E 2 => rotMθφφ (z.ofLp 0) (z.ofLp 1) S) y := by
+  rw [differentiableAt_piLp]; intro i
+  simp only [rotMθφφ, rotMθφφ_mat, LinearMap.coe_toContinuousLinearMap', Matrix.toLpLin_apply]
+  fin_cases i
+  · simp [Matrix.mulVec, dotProduct, Fin.sum_univ_three]
+  · simp [Matrix.mulVec, dotProduct, Fin.sum_univ_three]; fun_prop
+
+/-- DifferentiableAt for rotMθθφφ (outer, E 2) -/
+lemma differentiableAt_rotMθθφφ_outer (S : ℝ³) (y : E 2) :
+    DifferentiableAt ℝ (fun z : E 2 => rotMθθφφ (z.ofLp 0) (z.ofLp 1) S) y := by
+  rw [differentiableAt_piLp]; intro i
+  simp only [rotMθθφφ, rotMθθφφ_mat, LinearMap.coe_toContinuousLinearMap', Matrix.toLpLin_apply]
+  fin_cases i
+  · simp [Matrix.mulVec, dotProduct, Fin.sum_univ_three]
+  · simp [Matrix.mulVec, dotProduct, Fin.sum_univ_three]; fun_prop
+
 /-!
 ## Inner product fderiv helper
 
@@ -402,88 +492,106 @@ lemma inner_second_partial_A_norm_le (α θ φ : ℝ) (i j : Fin 3) :
   · exact comp_norm_le_one (le_of_eq (Bounding.rotR_norm_one _)) (Bounding.rotMφφ_norm_le_one _ _)
 
 /-!
-## A[i,j,k] Table for Third Partials
+## The ∂-closed rotation-derivative grid
 
-This defines the operator A₃[i,j,k](α, θ, φ) such that
-  ∂³(rotproj_inner S w)/∂x_i∂x_j∂x_k = ⟪A₃[i,j,k] S, w⟫,
-i.e. A₃[i,j,k] = ∂_i (inner_second_partial_A · · · j k), where x₀ = α, x₁ = θ, x₂ = φ.
-
-Differentiation rules: ∂α sends head rotR ↦ rotR', rotR' ↦ -rotR, -(rotR ∘ ·) ↦ -(rotR' ∘ ·);
-∂θ/∂φ act on the matrix family (Mθθθ = -Mθ and Mφφφ = -Mφ collapse, so only the two mixed
-matrices rotMθθφ, rotMθφφ are new).  Only 8 distinct compositions occur.
+`rotMFam a b = ∂θᵃ ∂φᵇ rotM` for `a, b ≤ 2`.  With `∂θ³ = -∂θ` and
+`∂φ³ = -∂φ`, one more derivative of any member lands back in the grid up to a
+sign; `famStepθ`/`famStepφ` compute the target index and the sign flip, and
+`rotMFam_hasDerivAt_θ/φ` certify each step.  This single-step closure is what
+bounds the iterated partials of `rotproj_inner`/`rotproj_outer` at *every*
+order (see `IsRotDerivFam` in `SecondPartialInner.lean`), replacing the
+hand-enumerated third-partial operator tables.
 -/
 
-/-- The operator A₃[i,j,k] for third partials of the inner rotation projection:
-the ∂ᵢ-derivative of `inner_second_partial_A · · · j k`. -/
-noncomputable def inner_third_partial_A (α θ φ : ℝ) (i j k : Fin 3) : ℝ³ →L[ℝ] ℝ² :=
-  match i, j, k with
-  -- column (j,k) = (0,0): A₂ = -(rotR ∘L rotM)
-  | 0, 0, 0 => -(rotR' α ∘L rotM θ φ)
-  | 1, 0, 0 => -(rotR α ∘L rotMθ θ φ)
-  | 2, 0, 0 => -(rotR α ∘L rotMφ θ φ)
-  -- columns (0,1) and (1,0): A₂ = rotR' ∘L rotMθ
-  | 0, 0, 1 => -(rotR α ∘L rotMθ θ φ)
-  | 1, 0, 1 => rotR' α ∘L rotMθθ θ φ
-  | 2, 0, 1 => rotR' α ∘L rotMθφ θ φ
-  | 0, 1, 0 => -(rotR α ∘L rotMθ θ φ)
-  | 1, 1, 0 => rotR' α ∘L rotMθθ θ φ
-  | 2, 1, 0 => rotR' α ∘L rotMθφ θ φ
-  -- columns (0,2) and (2,0): A₂ = rotR' ∘L rotMφ
-  | 0, 0, 2 => -(rotR α ∘L rotMφ θ φ)
-  | 1, 0, 2 => rotR' α ∘L rotMθφ θ φ
-  | 2, 0, 2 => rotR' α ∘L rotMφφ θ φ
-  | 0, 2, 0 => -(rotR α ∘L rotMφ θ φ)
-  | 1, 2, 0 => rotR' α ∘L rotMθφ θ φ
-  | 2, 2, 0 => rotR' α ∘L rotMφφ θ φ
-  -- column (1,1): A₂ = rotR ∘L rotMθθ  (∂θ collapses via Mθθθ = -Mθ)
-  | 0, 1, 1 => rotR' α ∘L rotMθθ θ φ
-  | 1, 1, 1 => -(rotR α ∘L rotMθ θ φ)
-  | 2, 1, 1 => rotR α ∘L rotMθθφ θ φ
-  -- columns (1,2) and (2,1): A₂ = rotR ∘L rotMθφ
-  | 0, 1, 2 => rotR' α ∘L rotMθφ θ φ
-  | 1, 1, 2 => rotR α ∘L rotMθθφ θ φ
-  | 2, 1, 2 => rotR α ∘L rotMθφφ θ φ
-  | 0, 2, 1 => rotR' α ∘L rotMθφ θ φ
-  | 1, 2, 1 => rotR α ∘L rotMθθφ θ φ
-  | 2, 2, 1 => rotR α ∘L rotMθφφ θ φ
-  -- column (2,2): A₂ = rotR ∘L rotMφφ  (∂φ collapses via Mφφφ = -Mφ)
-  | 0, 2, 2 => rotR' α ∘L rotMφφ θ φ
-  | 1, 2, 2 => rotR α ∘L rotMθφφ θ φ
-  | 2, 2, 2 => -(rotR α ∘L rotMφ θ φ)
+/-- The rotation-derivative grid: `rotMFam a b = ∂θᵃ ∂φᵇ rotM`. -/
+noncomputable def rotMFam : Fin 3 → Fin 3 → ℝ → ℝ → ℝ³ →L[ℝ] ℝ²
+  | 0, 0 => rotM
+  | 0, 1 => rotMφ
+  | 0, 2 => rotMφφ
+  | 1, 0 => rotMθ
+  | 1, 1 => rotMθφ
+  | 1, 2 => rotMθφφ
+  | 2, 0 => rotMθθ
+  | 2, 1 => rotMθθφ
+  | 2, 2 => rotMθθφφ
 
-/-- All A₃[i,j,k] have operator norm ≤ 1. -/
-lemma inner_third_partial_A_norm_le (α θ φ : ℝ) (i j k : Fin 3) :
-    ‖inner_third_partial_A α θ φ i j k‖ ≤ 1 := by
-  have hR := le_of_eq (Bounding.rotR_norm_one α)
-  have hR' := le_of_eq (Bounding.rotR'_norm_one α)
-  fin_cases i <;> fin_cases j <;> fin_cases k
-  · exact neg_comp_norm_le_one hR' (le_of_eq (Bounding.rotM_norm_one _ _))
-  · exact neg_comp_norm_le_one hR (Bounding.rotMθ_norm_le_one _ _)
-  · exact neg_comp_norm_le_one hR (Bounding.rotMφ_norm_le_one _ _)
-  · exact neg_comp_norm_le_one hR (Bounding.rotMθ_norm_le_one _ _)
-  · exact comp_norm_le_one hR' (Bounding.rotMθθ_norm_le_one _ _)
-  · exact comp_norm_le_one hR' (Bounding.rotMθφ_norm_le_one _ _)
-  · exact neg_comp_norm_le_one hR (Bounding.rotMφ_norm_le_one _ _)
-  · exact comp_norm_le_one hR' (Bounding.rotMθφ_norm_le_one _ _)
-  · exact comp_norm_le_one hR' (Bounding.rotMφφ_norm_le_one _ _)
-  · exact neg_comp_norm_le_one hR (Bounding.rotMθ_norm_le_one _ _)
-  · exact comp_norm_le_one hR' (Bounding.rotMθθ_norm_le_one _ _)
-  · exact comp_norm_le_one hR' (Bounding.rotMθφ_norm_le_one _ _)
-  · exact comp_norm_le_one hR' (Bounding.rotMθθ_norm_le_one _ _)
-  · exact neg_comp_norm_le_one hR (Bounding.rotMθ_norm_le_one _ _)
-  · exact comp_norm_le_one hR (Bounding.rotMθθφ_norm_le_one _ _)
-  · exact comp_norm_le_one hR' (Bounding.rotMθφ_norm_le_one _ _)
-  · exact comp_norm_le_one hR (Bounding.rotMθθφ_norm_le_one _ _)
-  · exact comp_norm_le_one hR (Bounding.rotMθφφ_norm_le_one _ _)
-  · exact neg_comp_norm_le_one hR (Bounding.rotMφ_norm_le_one _ _)
-  · exact comp_norm_le_one hR' (Bounding.rotMθφ_norm_le_one _ _)
-  · exact comp_norm_le_one hR' (Bounding.rotMφφ_norm_le_one _ _)
-  · exact comp_norm_le_one hR' (Bounding.rotMθφ_norm_le_one _ _)
-  · exact comp_norm_le_one hR (Bounding.rotMθθφ_norm_le_one _ _)
-  · exact comp_norm_le_one hR (Bounding.rotMθφφ_norm_le_one _ _)
-  · exact comp_norm_le_one hR' (Bounding.rotMφφ_norm_le_one _ _)
-  · exact comp_norm_le_one hR (Bounding.rotMθφφ_norm_le_one _ _)
-  · exact neg_comp_norm_le_one hR (Bounding.rotMφ_norm_le_one _ _)
+/-- One more derivative on a grid coordinate: bump it, folding `2 ↦ 1` with a
+sign flip (the third pure derivative is minus the first). -/
+def famStep : Fin 3 → Bool × Fin 3
+  | 0 => (false, 1)
+  | 1 => (false, 2)
+  | 2 => (true, 1)
+
+/-- θ-derivative of a grid member: the `famStep`-indexed member, negated when
+the step folds. -/
+lemma rotMFam_hasDerivAt_θ (a b : Fin 3) (θ φ : ℝ) (S : ℝ³) :
+    HasDerivAt (fun t => rotMFam a b t φ S)
+      (cond (famStep a).1 (-(rotMFam (famStep a).2 b θ φ S))
+        (rotMFam (famStep a).2 b θ φ S)) θ := by
+  fin_cases a <;> fin_cases b
+  · exact hasDerivAt_rotM_θ θ φ S
+  · exact hasDerivAt_rotMφ_θ θ φ S
+  · exact hasDerivAt_rotMφφ_θ θ φ S
+  · exact hasDerivAt_rotMθ_θ θ φ S
+  · exact hasDerivAt_rotMθφ_θ θ φ S
+  · exact hasDerivAt_rotMθφφ_θ θ φ S
+  · exact hasDerivAt_rotMθθ_θ θ φ S
+  · exact hasDerivAt_rotMθθφ_θ θ φ S
+  · exact hasDerivAt_rotMθθφφ_θ θ φ S
+
+/-- φ-derivative of a grid member. -/
+lemma rotMFam_hasDerivAt_φ (a b : Fin 3) (θ φ : ℝ) (S : ℝ³) :
+    HasDerivAt (fun t => rotMFam a b θ t S)
+      (cond (famStep b).1 (-(rotMFam a (famStep b).2 θ φ S))
+        (rotMFam a (famStep b).2 θ φ S)) φ := by
+  fin_cases a <;> fin_cases b
+  · exact hasDerivAt_rotM_φ θ φ S
+  · exact hasDerivAt_rotMφ_φ θ φ S
+  · exact hasDerivAt_rotMφφ_φ θ φ S
+  · exact hasDerivAt_rotMθ_φ θ φ S
+  · exact hasDerivAt_rotMθφ_φ θ φ S
+  · exact hasDerivAt_rotMθφφ_φ θ φ S
+  · exact hasDerivAt_rotMθθ_φ θ φ S
+  · exact hasDerivAt_rotMθθφ_φ θ φ S
+  · exact hasDerivAt_rotMθθφφ_φ θ φ S
+
+/-- Every grid member has operator norm at most one. -/
+lemma rotMFam_norm_le_one (a b : Fin 3) (θ φ : ℝ) : ‖rotMFam a b θ φ‖ ≤ 1 := by
+  fin_cases a <;> fin_cases b
+  · exact le_of_eq (Bounding.rotM_norm_one θ φ)
+  · exact Bounding.rotMφ_norm_le_one θ φ
+  · exact Bounding.rotMφφ_norm_le_one θ φ
+  · exact Bounding.rotMθ_norm_le_one θ φ
+  · exact Bounding.rotMθφ_norm_le_one θ φ
+  · exact Bounding.rotMθφφ_norm_le_one θ φ
+  · exact Bounding.rotMθθ_norm_le_one θ φ
+  · exact Bounding.rotMθθφ_norm_le_one θ φ
+  · exact Bounding.rotMθθφφ_norm_le_one θ φ
+
+/-- Joint differentiability of a signed head applied to a grid member. -/
+lemma differentiableAt_head_rotMFam (h' : Bool) (a b : Fin 3) (S : ℝ³) (y : E 3) :
+    DifferentiableAt ℝ
+      (fun z : E 3 => (cond h' rotR' rotR) (z.ofLp 0) (rotMFam a b (z.ofLp 1) (z.ofLp 2) S))
+      y := by
+  cases h' <;> fin_cases a <;> fin_cases b
+  · exact differentiableAt_rotR_rotM S y
+  · exact differentiableAt_rotR_rotMφ S y
+  · exact differentiableAt_rotR_rotMφφ S y
+  · exact differentiableAt_rotR_rotMθ S y
+  · exact differentiableAt_rotR_rotMθφ S y
+  · exact differentiableAt_rotR_rotMθφφ S y
+  · exact differentiableAt_rotR_rotMθθ S y
+  · exact differentiableAt_rotR_rotMθθφ S y
+  · exact differentiableAt_rotR_rotMθθφφ S y
+  · exact differentiableAt_rotR'_rotM S y
+  · exact differentiableAt_rotR'_rotMφ S y
+  · exact differentiableAt_rotR'_rotMφφ S y
+  · exact differentiableAt_rotR'_rotMθ S y
+  · exact differentiableAt_rotR'_rotMθφ S y
+  · exact differentiableAt_rotR'_rotMθφφ S y
+  · exact differentiableAt_rotR'_rotMθθ S y
+  · exact differentiableAt_rotR'_rotMθθφ S y
+  · exact differentiableAt_rotR'_rotMθθφφ S y
 
 end GlobalTheorem
 

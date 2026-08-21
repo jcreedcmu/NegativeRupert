@@ -271,6 +271,18 @@ noncomputable
 def rotMθφφ (θ : ℝ) (φ : ℝ) : ℝ³ →L[ℝ] ℝ² :=
   (rotMθφφ_mat θ φ).toEuclideanLin.toContinuousLinearMap
 
+-- ∂⁴rotM/∂θ²∂φ² (derivative of rotMθθφ w.r.t. φ, or of rotMθφφ w.r.t. θ).
+-- The last member of the ∂-closed derivative grid `rotMFam`: together with
+-- ∂θ³ = -∂θ and ∂φ³ = -∂φ it closes the family {∂θᵃ∂φᵇ rotM : a, b ≤ 2}
+-- under both partial derivatives (up to sign).
+noncomputable
+def rotMθθφφ_mat (θ : ℝ) (φ : ℝ) : Matrix (Fin 2) (Fin 3) ℝ :=
+  !![0, 0, 0; -cos θ * cos φ, -sin θ * cos φ, 0]
+
+noncomputable
+def rotMθθφφ (θ : ℝ) (φ : ℝ) : ℝ³ →L[ℝ] ℝ² :=
+  (rotMθθφφ_mat θ φ).toEuclideanLin.toContinuousLinearMap
+
 infixr:80 " ∘ᵃ " => AffineMap.comp
 
 -- This is R(α) M(θ, φ) in (5) in [SY25] § 2.2,

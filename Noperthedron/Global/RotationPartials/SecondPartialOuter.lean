@@ -17,8 +17,10 @@ public import Noperthedron.Global.SecondPartialHelpers
 
 This file contains:
 - `outer_second_partial_A` definition and norm bound
-- **`third_partial_inner_rotM_outer`** (8 cases)
-- **`rotation_third_partials_bounded_outer`**
+- **`IsRotDerivFamOuter`**, the ∂-closed family of signed
+  `⟪rotMFam a b (θ,φ) P, w⟫` functions
+- **`rotation_third_partials_bounded_outer`** and the any-order bound
+  `rotproj_outer_iterated_partials_bounded`, by iterating the closure
 -/
 
 open scoped RealInnerProductSpace
@@ -129,134 +131,155 @@ theorem nth_partial_nth_partial_rotproj_outer (S : ℝ³) (w : ℝ²) (i j : Fin
   funext fun y => second_partial_rotproj_outer_eq S w y i j
 
 /-!
-## Third partials (outer)
+## Third and higher partials (outer): the ∂-closed family
 
-Differentiating the `outer_second_partial_A` table once more.  Only 4 distinct
-values occur: -rotMθ, rotMθθφ, rotMθφφ, -rotMφ (using Mθθθ = -Mθ, Mφφφ = -Mφ).
+Instead of enumerating the third-partial operators, we close the family
+`± ⟪rotMFam a b (θ, φ) P, w⟫` under `nth_partial`: one derivative moves one
+grid coordinate (`rotMFam_hasDerivAt_θ/φ`), folding back with a sign at the
+edge.  Iterating gives the `≤ ‖P‖` bound at every order.
 -/
 
-private lemma fderiv_rotMθθ_outer_eq (S : ℝ³) (x : E 2) :
-    fderiv ℝ (fun y => rotMθθ (y.ofLp 0) (y.ofLp 1) S) x = rotMθθ' ⟨0, x.ofLp 0, 0, x.ofLp 1, 0⟩ S :=
-  (outerPbar x ▸ HasFDerivAt.rotMθθ_outer _ S).fderiv
+/-- `nth_partial` commutes with pointwise negation (unconditionally, since
+`fderiv` of a non-differentiable function is `0`). -/
+lemma nth_partial_neg {n : ℕ} (f : E n → ℝ) (i : Fin n) :
+    nth_partial i (fun y => -(f y)) = fun y => -(nth_partial i f y) := by
+  funext y
+  show fderiv ℝ (-f) y (EuclideanSpace.single i 1) = -(fderiv ℝ f y (EuclideanSpace.single i 1))
+  rw [fderiv_neg]
+  simp only [ContinuousLinearMap.neg_apply]
 
-private lemma fderiv_rotMθφ_outer_eq (S : ℝ³) (x : E 2) :
-    fderiv ℝ (fun y => rotMθφ (y.ofLp 0) (y.ofLp 1) S) x = rotMθφ' ⟨0, x.ofLp 0, 0, x.ofLp 1, 0⟩ S :=
-  (outerPbar x ▸ HasFDerivAt.rotMθφ_outer _ S).fderiv
+/-- Coordinate extraction in `E 2`: direction `e_i`, same coordinate (moves). -/
+private lemma coord2_same (i : Fin 2) (y : E 2) (t : ℝ) :
+    (y + t • (EuclideanSpace.single i 1 : E 2)).ofLp i = y.ofLp i + t := by simp
 
-private lemma fderiv_rotMφφ_outer_eq (S : ℝ³) (x : E 2) :
-    fderiv ℝ (fun y => rotMφφ (y.ofLp 0) (y.ofLp 1) S) x = rotMφφ' ⟨0, x.ofLp 0, 0, x.ofLp 1, 0⟩ S :=
-  (outerPbar x ▸ HasFDerivAt.rotMφφ_outer _ S).fderiv
+/-- Coordinate extraction in `E 2`: direction `e_i`, different coordinate (fixed). -/
+private lemma coord2_other {i j : Fin 2} (hij : j ≠ i) (y : E 2) (t : ℝ) :
+    (y + t • (EuclideanSpace.single i 1 : E 2)).ofLp j = y.ofLp j := by simp [hij]
 
-private lemma fderiv_rotMθθ_inner_e0 (S : ℝ³) (w : ℝ²) (x : E 2) :
-    (fderiv ℝ (fun y => ⟪rotMθθ (y.ofLp 0) (y.ofLp 1) S, w⟫) x)
-      (EuclideanSpace.single 0 1) = ⟪-(rotMθ (x.ofLp 0) (x.ofLp 1) S), w⟫ := by
-  rw [fderiv_inner_const _ w x _ (differentiableAt_rotMθθ_outer S x), fderiv_rotMθθ_outer_eq S x]
-  congr 1; ext i; simp
+/-- Joint differentiability of a grid member in the outer variables. -/
+lemma differentiableAt_rotMFam_outer (a b : Fin 3) (S : ℝ³) (y : E 2) :
+    DifferentiableAt ℝ (fun z : E 2 => rotMFam a b (z.ofLp 0) (z.ofLp 1) S) y := by
+  fin_cases a <;> fin_cases b
+  · exact (Differentiable.rotM_outer S).differentiableAt
+  · exact differentiableAt_rotMφ_outer S y
+  · exact differentiableAt_rotMφφ_outer S y
+  · exact differentiableAt_rotMθ_outer S y
+  · exact differentiableAt_rotMθφ_outer S y
+  · exact differentiableAt_rotMθφφ_outer S y
+  · exact differentiableAt_rotMθθ_outer S y
+  · exact differentiableAt_rotMθθφ_outer S y
+  · exact differentiableAt_rotMθθφφ_outer S y
 
-private lemma fderiv_rotMθθ_inner_e1 (S : ℝ³) (w : ℝ²) (x : E 2) :
-    (fderiv ℝ (fun y => ⟪rotMθθ (y.ofLp 0) (y.ofLp 1) S, w⟫) x)
-      (EuclideanSpace.single 1 1) = ⟪rotMθθφ (x.ofLp 0) (x.ofLp 1) S, w⟫ := by
-  rw [fderiv_inner_const _ w x _ (differentiableAt_rotMθθ_outer S x), fderiv_rotMθθ_outer_eq S x]
-  congr 1; ext i; simp
+/-- `nth_partial 0` (the θ-direction) of `⟪N (θ, φ) P, w⟫`, given the
+θ-derivative of the two-parameter family `N`. -/
+private lemma nth_partial_outer_e0 {P : ℝ³} {w : ℝ²} {N : ℝ → ℝ → ℝ³ →L[ℝ] ℝ²}
+    {N' : ℝ²} {y : E 2}
+    (hdiff : DifferentiableAt ℝ (fun z : E 2 => N (z.ofLp 0) (z.ofLp 1) P) y)
+    (hN : HasDerivAt (fun t => N t (y.ofLp 1) P) N' (y.ofLp 0)) :
+    nth_partial 0 (fun z : E 2 => ⟪N (z.ofLp 0) (z.ofLp 1) P, w⟫) y = ⟪N', w⟫ := by
+  show (fderiv ℝ _ y) (EuclideanSpace.single 0 1) = _
+  rw [fderiv_inner_const _ w y _ hdiff]
+  congr 1
+  refine fderiv_single_eq hdiff ?_
+  simp only [coord2_same, coord2_other (by decide : (1 : Fin 2) ≠ 0)]
+  exact hasDerivAt_comp_add _ _ _ hN
 
-private lemma fderiv_rotMθφ_inner_e0 (S : ℝ³) (w : ℝ²) (x : E 2) :
-    (fderiv ℝ (fun y => ⟪rotMθφ (y.ofLp 0) (y.ofLp 1) S, w⟫) x)
-      (EuclideanSpace.single 0 1) = ⟪rotMθθφ (x.ofLp 0) (x.ofLp 1) S, w⟫ := by
-  rw [fderiv_inner_const _ w x _ (differentiableAt_rotMθφ_outer S x), fderiv_rotMθφ_outer_eq S x]
-  congr 1; ext i; simp
+/-- `nth_partial 1` (the φ-direction) of `⟪N (θ, φ) P, w⟫`. -/
+private lemma nth_partial_outer_e1 {P : ℝ³} {w : ℝ²} {N : ℝ → ℝ → ℝ³ →L[ℝ] ℝ²}
+    {N' : ℝ²} {y : E 2}
+    (hdiff : DifferentiableAt ℝ (fun z : E 2 => N (z.ofLp 0) (z.ofLp 1) P) y)
+    (hN : HasDerivAt (fun t => N (y.ofLp 0) t P) N' (y.ofLp 1)) :
+    nth_partial 1 (fun z : E 2 => ⟪N (z.ofLp 0) (z.ofLp 1) P, w⟫) y = ⟪N', w⟫ := by
+  show (fderiv ℝ _ y) (EuclideanSpace.single 1 1) = _
+  rw [fderiv_inner_const _ w y _ hdiff]
+  congr 1
+  refine fderiv_single_eq hdiff ?_
+  simp only [coord2_same, coord2_other (by decide : (0 : Fin 2) ≠ 1)]
+  exact hasDerivAt_comp_add _ _ _ hN
 
-private lemma fderiv_rotMθφ_inner_e1 (S : ℝ³) (w : ℝ²) (x : E 2) :
-    (fderiv ℝ (fun y => ⟪rotMθφ (y.ofLp 0) (y.ofLp 1) S, w⟫) x)
-      (EuclideanSpace.single 1 1) = ⟪rotMθφφ (x.ofLp 0) (x.ofLp 1) S, w⟫ := by
-  rw [fderiv_inner_const _ w x _ (differentiableAt_rotMθφ_outer S x), fderiv_rotMθφ_outer_eq S x]
-  congr 1; ext i; simp
+/-- The ∂-closed family of outer scalar functions: `⟪∂θᵃ∂φᵇ M(θ,φ) P, w⟫` up
+to sign. -/
+inductive IsRotDerivFamOuter (P : ℝ³) (w : ℝ²) : (E 2 → ℝ) → Prop where
+  | base (a b : Fin 3) :
+      IsRotDerivFamOuter P w (fun y => ⟪rotMFam a b (y.ofLp 0) (y.ofLp 1) P, w⟫)
+  | neg {f} : IsRotDerivFamOuter P w f → IsRotDerivFamOuter P w (fun y => -(f y))
 
-private lemma fderiv_rotMφφ_inner_e0 (S : ℝ³) (w : ℝ²) (x : E 2) :
-    (fderiv ℝ (fun y => ⟪rotMφφ (y.ofLp 0) (y.ofLp 1) S, w⟫) x)
-      (EuclideanSpace.single 0 1) = ⟪rotMθφφ (x.ofLp 0) (x.ofLp 1) S, w⟫ := by
-  rw [fderiv_inner_const _ w x _ (differentiableAt_rotMφφ_outer S x), fderiv_rotMφφ_outer_eq S x]
-  congr 1; ext i; simp
+/-- The outer family is closed under partial derivatives: one `nth_partial`
+moves one grid coordinate (with a sign at the fold). -/
+lemma IsRotDerivFamOuter.nth_partial {P : ℝ³} {w : ℝ²} {f : E 2 → ℝ}
+    (hf : IsRotDerivFamOuter P w f) (i : Fin 2) :
+    IsRotDerivFamOuter P w (nth_partial i f) := by
+  induction hf with
+  | neg _ ih => rw [nth_partial_neg]; exact ih.neg
+  | base a b =>
+    fin_cases i
+    · -- θ-direction
+      show IsRotDerivFamOuter P w
+        (GlobalTheorem.nth_partial 0 (fun y : E 2 => ⟪rotMFam a b (y.ofLp 0) (y.ofLp 1) P, w⟫))
+      rcases hs : famStep a with ⟨c, a'⟩
+      cases c
+      · rw [show GlobalTheorem.nth_partial 0 (fun y : E 2 => ⟪rotMFam a b (y.ofLp 0) (y.ofLp 1) P, w⟫)
+              = fun y : E 2 => ⟪rotMFam a' b (y.ofLp 0) (y.ofLp 1) P, w⟫ from funext fun y =>
+            nth_partial_outer_e0 (differentiableAt_rotMFam_outer a b P y)
+              (by simpa [hs] using rotMFam_hasDerivAt_θ a b (y.ofLp 0) (y.ofLp 1) P)]
+        exact .base a' b
+      · rw [show GlobalTheorem.nth_partial 0 (fun y : E 2 => ⟪rotMFam a b (y.ofLp 0) (y.ofLp 1) P, w⟫)
+              = fun y : E 2 => -(⟪rotMFam a' b (y.ofLp 0) (y.ofLp 1) P, w⟫ : ℝ) from
+            funext fun y => by
+              rw [nth_partial_outer_e0 (differentiableAt_rotMFam_outer a b P y)
+                (by simpa [hs] using rotMFam_hasDerivAt_θ a b (y.ofLp 0) (y.ofLp 1) P)]
+              exact inner_neg_left _ _]
+        exact (IsRotDerivFamOuter.base a' b).neg
+    · -- φ-direction
+      show IsRotDerivFamOuter P w
+        (GlobalTheorem.nth_partial 1 (fun y : E 2 => ⟪rotMFam a b (y.ofLp 0) (y.ofLp 1) P, w⟫))
+      rcases hs : famStep b with ⟨c, b'⟩
+      cases c
+      · rw [show GlobalTheorem.nth_partial 1 (fun y : E 2 => ⟪rotMFam a b (y.ofLp 0) (y.ofLp 1) P, w⟫)
+              = fun y : E 2 => ⟪rotMFam a b' (y.ofLp 0) (y.ofLp 1) P, w⟫ from funext fun y =>
+            nth_partial_outer_e1 (differentiableAt_rotMFam_outer a b P y)
+              (by simpa [hs] using rotMFam_hasDerivAt_φ a b (y.ofLp 0) (y.ofLp 1) P)]
+        exact .base a b'
+      · rw [show GlobalTheorem.nth_partial 1 (fun y : E 2 => ⟪rotMFam a b (y.ofLp 0) (y.ofLp 1) P, w⟫)
+              = fun y : E 2 => -(⟪rotMFam a b' (y.ofLp 0) (y.ofLp 1) P, w⟫ : ℝ) from
+            funext fun y => by
+              rw [nth_partial_outer_e1 (differentiableAt_rotMFam_outer a b P y)
+                (by simpa [hs] using rotMFam_hasDerivAt_φ a b (y.ofLp 0) (y.ofLp 1) P)]
+              exact inner_neg_left _ _]
+        exact (IsRotDerivFamOuter.base a b').neg
 
-private lemma fderiv_rotMφφ_inner_e1 (S : ℝ³) (w : ℝ²) (x : E 2) :
-    (fderiv ℝ (fun y => ⟪rotMφφ (y.ofLp 0) (y.ofLp 1) S, w⟫) x)
-      (EuclideanSpace.single 1 1) = ⟪-(rotMφ (x.ofLp 0) (x.ofLp 1) S), w⟫ := by
-  rw [fderiv_inner_const _ w x _ (differentiableAt_rotMφφ_outer S x), fderiv_rotMφφ_outer_eq S x]
-  congr 1; ext i; simp
+/-- Every member of the outer family is bounded by `‖P‖` (for unit `w`). -/
+lemma IsRotDerivFamOuter.abs_le {P : ℝ³} {w : ℝ²} {f : E 2 → ℝ}
+    (hf : IsRotDerivFamOuter P w f) (hw : ‖w‖ = 1) (y : E 2) : |f y| ≤ ‖P‖ := by
+  induction hf with
+  | base a b =>
+    exact inner_bound_helper _ P w hw (rotMFam_norm_le_one a b _ _)
+  | neg _ ih => simpa using ih
 
-/-- The operator A₃[i,j,k] for third partials of the outer rotation projection:
-the ∂ᵢ-derivative of `outer_second_partial_A · · j k`. -/
-noncomputable def outer_third_partial_A (θ φ : ℝ) (i j k : Fin 2) : ℝ³ →L[ℝ] ℝ² :=
-  match i, j, k with
-  | 0, 0, 0 => -(rotMθ θ φ)
-  | 1, 0, 0 => rotMθθφ θ φ
-  | 0, 0, 1 => rotMθθφ θ φ
-  | 1, 0, 1 => rotMθφφ θ φ
-  | 0, 1, 0 => rotMθθφ θ φ
-  | 1, 1, 0 => rotMθφφ θ φ
-  | 0, 1, 1 => rotMθφφ θ φ
-  | 1, 1, 1 => -(rotMφ θ φ)
+/-- `rotproj_outer` is the `(0,0)` member of the outer family. -/
+lemma isRotDerivFamOuter_rotproj_outer (S : ℝ³) (w : ℝ²) :
+    IsRotDerivFamOuter S w (rotproj_outer S w) :=
+  IsRotDerivFamOuter.base 0 0
 
-/-- All outer A₃[i,j,k] have operator norm ≤ 1. -/
-lemma outer_third_partial_A_norm_le (θ φ : ℝ) (i j k : Fin 2) :
-    ‖outer_third_partial_A θ φ i j k‖ ≤ 1 := by
-  fin_cases i <;> fin_cases j <;> fin_cases k <;>
-    simp [outer_third_partial_A, norm_neg, Bounding.rotMθ_norm_le_one,
-      Bounding.rotMφ_norm_le_one, Bounding.rotMθθφ_norm_le_one, Bounding.rotMθφφ_norm_le_one]
+/-- The outer family membership of every iterated partial of `rotproj_outer`. -/
+lemma isRotDerivFamOuter_foldr (S : ℝ³) (w : ℝ²) (ds : List (Fin 2)) :
+    IsRotDerivFamOuter S w (ds.foldr (fun i f => nth_partial i f) (rotproj_outer S w)) := by
+  induction ds with
+  | nil => exact isRotDerivFamOuter_rotproj_outer S w
+  | cons i ds ih => exact ih.nth_partial i
 
-theorem third_partial_rotproj_outer_eq (S : ℝ³) (w : ℝ²) (x : E 2) (i j k : Fin 2) :
-    nth_partial i (nth_partial j (nth_partial k
-        (fun y : E 2 => ⟪rotM (y.ofLp 0) (y.ofLp 1) S, w⟫))) x =
-      ⟪outer_third_partial_A (x.ofLp 0) (x.ofLp 1) i j k S, w⟫ := by
-  fin_cases j <;> fin_cases k
-  · -- column (0,0): A₂ = rotMθθ
-    show nth_partial i (nth_partial 0 (nth_partial 0
-      (fun y : E 2 => ⟪rotM (y.ofLp 0) (y.ofLp 1) S, w⟫))) x =
-      ⟪outer_third_partial_A (x.ofLp 0) (x.ofLp 1) i 0 0 S, w⟫
-    rw [nth_partial_nth_partial_rotproj_outer S w 0 0]
-    show nth_partial i (fun y => ⟪rotMθθ (y.ofLp 0) (y.ofLp 1) S, w⟫) x = _
-    unfold nth_partial
-    fin_cases i <;> simp only [Fin.zero_eta, Fin.isValue, Fin.mk_one]
-    · rw [fderiv_rotMθθ_inner_e0 S w x]
-      simp only [outer_third_partial_A, neg_apply, inner_neg_left]
-    · rw [fderiv_rotMθθ_inner_e1 S w x]; rfl
-  · -- column (0,1): A₂ = rotMθφ
-    show nth_partial i (nth_partial 0 (nth_partial 1
-      (fun y : E 2 => ⟪rotM (y.ofLp 0) (y.ofLp 1) S, w⟫))) x =
-      ⟪outer_third_partial_A (x.ofLp 0) (x.ofLp 1) i 0 1 S, w⟫
-    rw [nth_partial_nth_partial_rotproj_outer S w 0 1]
-    show nth_partial i (fun y => ⟪rotMθφ (y.ofLp 0) (y.ofLp 1) S, w⟫) x = _
-    unfold nth_partial
-    fin_cases i <;> simp only [Fin.zero_eta, Fin.isValue, Fin.mk_one]
-    · rw [fderiv_rotMθφ_inner_e0 S w x]; rfl
-    · rw [fderiv_rotMθφ_inner_e1 S w x]; rfl
-  · -- column (1,0): A₂ = rotMθφ (mixed-partial symmetry)
-    show nth_partial i (nth_partial 1 (nth_partial 0
-      (fun y : E 2 => ⟪rotM (y.ofLp 0) (y.ofLp 1) S, w⟫))) x =
-      ⟪outer_third_partial_A (x.ofLp 0) (x.ofLp 1) i 1 0 S, w⟫
-    rw [nth_partial_nth_partial_rotproj_outer S w 1 0]
-    show nth_partial i (fun y => ⟪rotMθφ (y.ofLp 0) (y.ofLp 1) S, w⟫) x = _
-    unfold nth_partial
-    fin_cases i <;> simp only [Fin.zero_eta, Fin.isValue, Fin.mk_one]
-    · rw [fderiv_rotMθφ_inner_e0 S w x]; rfl
-    · rw [fderiv_rotMθφ_inner_e1 S w x]; rfl
-  · -- column (1,1): A₂ = rotMφφ
-    show nth_partial i (nth_partial 1 (nth_partial 1
-      (fun y : E 2 => ⟪rotM (y.ofLp 0) (y.ofLp 1) S, w⟫))) x =
-      ⟪outer_third_partial_A (x.ofLp 0) (x.ofLp 1) i 1 1 S, w⟫
-    rw [nth_partial_nth_partial_rotproj_outer S w 1 1]
-    show nth_partial i (fun y => ⟪rotMφφ (y.ofLp 0) (y.ofLp 1) S, w⟫) x = _
-    unfold nth_partial
-    fin_cases i <;> simp only [Fin.zero_eta, Fin.isValue, Fin.mk_one]
-    · rw [fderiv_rotMφφ_inner_e0 S w x]; rfl
-    · rw [fderiv_rotMφφ_inner_e1 S w x]
-      simp only [outer_third_partial_A, neg_apply, inner_neg_left]
+/-- Any-order bound: every iterated partial of `rotproj_outer` is bounded by
+`‖S‖` (for unit `w`). -/
+theorem rotproj_outer_iterated_partials_bounded (S : ℝ³) {w : ℝ²} (w_unit : ‖w‖ = 1)
+    (ds : List (Fin 2)) (y : E 2) :
+    |(ds.foldr (fun i f => nth_partial i f) (rotproj_outer S w)) y| ≤ ‖S‖ :=
+  (isRotDerivFamOuter_foldr S w ds).abs_le w_unit y
 
 theorem third_partial_inner_rotM_outer (S : ℝ³) {w : ℝ²} (w_unit : ‖w‖ = 1)
     (i j k : Fin 2) (y : ℝ²) :
-    |nth_partial i (nth_partial j (nth_partial k (rotproj_outer S w))) y| ≤ ‖S‖ := by
-  rw [show rotproj_outer S w = fun z : E 2 => ⟪rotM (z.ofLp 0) (z.ofLp 1) S, w⟫ from rfl,
-    third_partial_rotproj_outer_eq S w y i j k]
-  exact inner_bound_helper _ S w w_unit (outer_third_partial_A_norm_le _ _ i j k)
+    |nth_partial i (nth_partial j (nth_partial k (rotproj_outer S w))) y| ≤ ‖S‖ :=
+  ((((isRotDerivFamOuter_rotproj_outer S w).nth_partial k).nth_partial j).nth_partial i).abs_le
+    w_unit y
 
 theorem rotation_third_partials_bounded_outer (S : ℝ³) {w : ℝ²} (w_unit : ‖w‖ = 1) :
     third_partials_bounded (rotproj_outer S w) ‖S‖ := fun x i j k =>
