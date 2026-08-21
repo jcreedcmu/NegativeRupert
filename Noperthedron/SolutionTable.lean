@@ -117,10 +117,11 @@ theorem Row.valid_imp_not_rupert_ix
   obtain ⟨rowID, rowValid, _⟩ := rowsValid ⟨i, hi⟩
   have rowID' : (get i).ID = i := rowID
   have rowLt : (get i).ID < size := by omega
-  rcases rowValid with split | global | localRow
+  rcases rowValid with split | global | localRow | localRow₂
   · exact valid_split_imp_no_rupert get size rowsValid (get i) split rowLt
   · exact valid_global_imp_no_rupert (get i) global
   · exact valid_local_imp_no_rupert (get i) localRow
+  · exact valid_local₂_imp_no_rupert (get i) localRow₂
 termination_by (size - i, 3, 0)
 decreasing_by rw [rowID']; grind
 

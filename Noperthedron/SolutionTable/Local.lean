@@ -95,5 +95,40 @@ theorem valid_local_imp_no_rupert (row : Row) (hrow : row.ValidLocal) :
     (RationalApprox.LocalTheorem.rational_local exactPoly pythonPolyQ
       KappaApprox.exact_κApprox_python row.interval.centerPose ε pc)
 
+theorem valid_local₂_imp_no_rupert (row : Row) (hrow : row.ValidLocal₂) :
+    ¬ ∃ q ∈ row.interval.toReal, RupertPose q exactPolyhedron.hull := by
+  obtain ⟨s, hs₁, hs₂⟩ := hrow.exists_symmetry
+  have pc : RationalApprox.LocalTheorem.RationalLocalTheoremPrecondition₂
+      exactPoly pythonPolyQ KappaApprox.exact_κApprox_python
+      row.interval.centerPose row.εα row.εθ₁ row.εφ₁ row.εθ₂ row.εφ₂ := {
+    Pi := row.Pi
+    Qi := row.Qi
+    cong_tri := Noperthedron.TriangleSymmetry.congruent_of_apply s row.Pi row.Qi hs₁ hs₂
+    hp := hrow.center_in_fourQ
+    hεα := row.εα_nonneg
+    hεθ₁ := row.εθ₁_nonneg
+    hεφ₁ := row.εφ₁_nonneg
+    hεθ₂ := row.εθ₂_nonneg
+    hεφ₂ := row.εφ₂_nonneg
+    δ := row.δ₂
+    r := row.r
+    hr := hrow.rpos
+    approx := RationalApprox.sqrtApprox16
+    hr₁ := by have h := hrow.r_valid; rwa [pythonVertexA_eq] at h
+    hδ := by
+      have h := row.boundDelta₂_δ₂
+      rwa [pythonVertexA_eq] at h
+    ae₁ := ⟨0, by have h := hrow.X₁_inner_gt; rwa [pythonVertexA_eq] at h⟩
+    ae₂ := ⟨row.sigma_Q.val, by have h := hrow.X₂_inner_gt; rwa [pythonVertexA_eq] at h⟩
+    span₁ := by have h := hrow.P_spanning; rwa [pythonVertexA_eq] at h
+    span₂ := by have h := hrow.Q_spanning; rwa [pythonVertexA_eq] at h
+    be := by have h := hrow.Bε₂ℚ; rwa [pythonVertexA_eq] at h
+  }
+  have h := RationalApprox.LocalTheorem.rational_local₂ exactPoly pythonPolyQ
+    KappaApprox.exact_κApprox_python row.interval.centerPose
+    row.εα row.εθ₁ row.εφ₁ row.εθ₂ row.εφ₂ pc
+  rintro ⟨q, hqi, hqr⟩
+  exact h ⟨q, near_center_of_mem_toReal row hqi, hqr⟩
+
 end Noperthedron.Solution
 end

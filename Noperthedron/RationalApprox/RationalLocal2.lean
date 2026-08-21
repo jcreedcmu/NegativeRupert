@@ -233,6 +233,7 @@ def BoundR₂ℚ (r : ℚ) (p : Pose ℚ) (Q_ : Local.TriangleQ) (εθ εφ : �
     (approx : Approx) : Prop :=
   ∀ i : Fin 3, approx.lower_sqrt.norm (p.rotM₂Rℚ (Q_ i))
     > r + ΔrotMℚ approx.upper_sqrt p.θ₂ p.φ₂ (Q_ i) εθ εφ + 3 * κℚ
+deriving Decidable
 
 /-- The second-order condition on δ, rational side: center distance via
 `UpperSqrt` plus `6κℚ` for the κ-approximations, plus both rational
@@ -243,6 +244,7 @@ def BoundDelta₂ℚ (δ : ℚ) (p : Pose ℚ) (P_ Q_ : Local.TriangleQ)
     approx.upper_sqrt.norm (p.rotRℚ (p.rotM₁ℚ (P_ i)) - p.rotM₂ℚ (Q_ i)) + 6 * κℚ
       + ΔrotRMℚ approx.upper_sqrt p.θ₁ p.φ₁ (P_ i) εα εθ₁ εφ₁
       + ΔrotMℚ approx.upper_sqrt p.θ₂ p.φ₂ (Q_ i) εθ₂ εφ₂ < 2 * δ
+deriving Decidable
 
 /-- Bridge `BoundR₂ℚ` to the real `BoundR₂`. -/
 private lemma boundR₂_bridge {p_ℚ : Pose ℚ} {r εθ εφ : ℚ} {approx : Approx}
@@ -403,6 +405,7 @@ covers the real-vs-rational gap of the center inner product. -/
 def _root_.Local.TriangleQ.Aε₂ℚσ (θ φ : ℚ) (P_ : Local.TriangleQ) (εθ εφ : ℚ)
     (σ : ℕ) : Prop :=
   ∀ i : Fin 3, ΔvecXℚ θ φ (P_ i) εθ εφ + 3 * κℚ < (-1)^σ * (vecXℚ θ φ ⬝ᵥ P_ i)
+deriving Decidable
 
 /-- Condition `A_ε²ℚ` from the second-order rational local theorem. -/
 def _root_.Local.TriangleQ.Aε₂ℚ (θ φ : ℚ) (P_ : Local.TriangleQ) (εθ εφ : ℚ) : Prop :=
@@ -854,6 +857,7 @@ def _root_.Local.TriangleQ.Spanning₂ℚ (θ φ : ℚ) (P_ : Local.TriangleQ) (
   ∀ i : Fin 3,
     ΔprodMMℚ rot90ℚ (5 * κℚ) θ φ (P_ i) (P_ (i + 1)) εθ εφ 1 + 5 * κℚ
       < prodTℚ rot90ℚ (rotMℚ_mat θ φ) (rotMℚ_mat θ φ) (P_ i) (P_ (i + 1))
+deriving Decidable
 
 /-- Bridge `Spanning₂ℚ` (rational side) to `Spanning₂` (real side). -/
 lemma spanning₂_bridge {θℚ φℚ εθ εφ : ℚ} (T : Local.TriangleQ) (R : Triangle)
@@ -910,6 +914,7 @@ def _root_.Local.TriangleQ.Bε₂ℚ {ι : Type} [Fintype ι] [DecidableEq ι] (
   ∀ i : Fin 3, ∀ k : ι, k ≠ Qi i →
     0 < Bε₂ℚnum p.θ₂ p.φ₂ (v_ (Qi i)) (v_ (Qi i) - v_ k) εθ εφ
     ∧ δ / r < Bε₂ℚlhs su (v_ (Qi i)) (v_ k) p εθ εφ
+deriving Decidable
 
 namespace LocalTheorem
 
