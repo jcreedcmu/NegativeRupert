@@ -2,6 +2,7 @@ module
 
 public import Noperthedron.Checker.Local
 public import Noperthedron.RationalApprox.RationalLocal2
+public import Noperthedron.Checker.Local2Fast
 
 @[expose] public section
 

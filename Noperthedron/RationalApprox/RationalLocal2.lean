@@ -105,9 +105,10 @@ def ΔrotMℚs (su : UpperSqrt) (slack θ φ : ℚ) (P_ : Fin 3 → ℚ) (εθ �
 def ΔrotMℚ (su : UpperSqrt) (θ φ : ℚ) (P_ : Fin 3 → ℚ) (εθ εφ : ℚ) : ℚ :=
   ΔrotMℚs su (3 * κℚ) θ φ P_ εθ εφ 1
 
-/-- `ΔrotMℚ` at difference scale (`‖P‖ ≤ 2`, `‖P − P_‖ ≤ 2κ`). -/
-def ΔrotMℚ₂ (su : UpperSqrt) (θ φ : ℚ) (P_ : Fin 3 → ℚ) (εθ εφ : ℚ) : ℚ :=
-  ΔrotMℚs su (5 * κℚ) θ φ P_ εθ εφ 2
+/-- `ΔrotMℚ` at difference scale (`‖P‖ ≤ 2`, `‖P − P_‖ ≤ 2κ`); `nrm` is a
+rational upper bound for `‖P‖`, used only in the cubic remainder. -/
+def ΔrotMℚ₂ (su : UpperSqrt) (θ φ : ℚ) (P_ : Fin 3 → ℚ) (εθ εφ nrm : ℚ) : ℚ :=
+  ΔrotMℚs su (5 * κℚ) θ φ P_ εθ εφ nrm
 
 /-- Rational upper bound for the inner variation budget `ΔrotRM` at a
 κ-approximated unit vertex. -/
@@ -157,11 +158,12 @@ theorem ΔrotM_le_ℚ
   linarith
 
 /-- Domination of the real outer budget by `ΔrotMℚ₂`, difference scale. -/
-theorem ΔrotM_le_ℚ₂
+theorem ΔrotM_le_ℚ₂ {nrm : ℚ}
     (hθ : ((θℚ : ℝ)) ∈ Set.Icc (-4 : ℝ) 4) (hφ : ((φℚ : ℝ)) ∈ Set.Icc (-4 : ℝ) 4)
-    (hP : ‖P‖ ≤ 2) (hPapprox : ‖P - toR3 P_‖ ≤ 2 * κ)
+    (hP : ‖P‖ ≤ 2) (hPapprox : ‖P - toR3 P_‖ ≤ 2 * κ) (hnrm : ‖P‖ ≤ ((nrm : ℚ) : ℝ))
     (hεθ : 0 ≤ (εθ : ℝ)) (hεφ : 0 ≤ (εφ : ℝ)) :
-    GlobalTheorem.ΔrotM P εθ εφ (θℚ : ℝ) (φℚ : ℝ) ≤ ((ΔrotMℚ₂ su θℚ φℚ P_ εθ εφ : ℚ) : ℝ) := by
+    GlobalTheorem.ΔrotM P εθ εφ (θℚ : ℝ) (φℚ : ℝ)
+      ≤ ((ΔrotMℚ₂ su θℚ φℚ P_ εθ εφ nrm : ℚ) : ℝ) := by
   have hθ' := norm_apply_le_ℚ₂ su (toR2_rotMθℚ_mat_mulVec θℚ φℚ P_)
     (Mθ_difference_norm_bounded _ _ hθ hφ) (Mθℚ_norm_bounded hθ hφ) hP hPapprox
   have hφ' := norm_apply_le_ℚ₂ su (toR2_rotMφℚ_mat_mulVec θℚ φℚ P_)
@@ -178,8 +180,8 @@ theorem ΔrotM_le_ℚ₂
   have h4 := mul_le_mul_of_nonneg_left hθφ' (mul_nonneg hεθ hεφ)
   have h5 := mul_le_mul_of_nonneg_left hφφ' (sq_nonneg (εφ : ℝ))
   have hE3 : (0 : ℝ) ≤ ((εθ : ℝ) + εφ)^3 := pow_nonneg (by linarith) 3
-  have hrem : ‖P‖ * ((εθ : ℝ) + εφ)^3 / 6 ≤ 2 * ((εθ : ℝ) + εφ)^3 / 6 := by
-    have := mul_le_mul_of_nonneg_right hP hE3
+  have hrem : ‖P‖ * ((εθ : ℝ) + εφ)^3 / 6 ≤ ((nrm : ℚ) : ℝ) * ((εθ : ℝ) + εφ)^3 / 6 := by
+    have := mul_le_mul_of_nonneg_right hnrm hE3
     linarith
   unfold GlobalTheorem.ΔrotM ΔrotMℚ₂ ΔrotMℚs
   push_cast [cast_κℚ]
@@ -771,15 +773,16 @@ theorem ΔprodMM_le_ℚ (hT : ‖T‖ ≤ 1)
   linarith
 
 /-- Domination of the real product budget by `ΔprodMMℚ` at difference scale
-on the `w` slot (`‖w‖ ≤ 2`, `‖w − w_‖ ≤ 2κ`). -/
-theorem ΔprodMM_le_ℚ₂ (hT : ‖T‖ ≤ 1)
+on the `w` slot (`‖w‖ ≤ 2`, `‖w − w_‖ ≤ 2κ`); `nrm` is a rational upper
+bound for `‖w‖`, used only in the cubic remainder. -/
+theorem ΔprodMM_le_ℚ₂ {nrm : ℚ} (hT : ‖T‖ ≤ 1)
     (hTcast : ∀ u : Fin 2 → ℚ, T (toR2 u) = toR2 (Tm *ᵥ u))
     (hθ : ((θℚ : ℝ)) ∈ Set.Icc (-4 : ℝ) 4) (hφ : ((φℚ : ℝ)) ∈ Set.Icc (-4 : ℝ) 4)
     (hv : ‖v‖ ≤ 1) (hva : ‖v - toR3 v_‖ ≤ κ)
-    (hw : ‖w‖ ≤ 2) (hwa : ‖w - toR3 w_‖ ≤ 2 * κ)
+    (hw : ‖w‖ ≤ 2) (hwa : ‖w - toR3 w_‖ ≤ 2 * κ) (hnrm : ‖w‖ ≤ ((nrm : ℚ) : ℝ))
     (hεθ : 0 ≤ (εθ : ℝ)) (hεφ : 0 ≤ (εφ : ℝ)) :
     GlobalTheorem.ΔprodMM T v w εθ εφ (θℚ : ℝ) (φℚ : ℝ)
-      ≤ ((ΔprodMMℚ Tm (9 * κℚ) θℚ φℚ v_ w_ εθ εφ 2 : ℚ) : ℝ) := by
+      ≤ ((ΔprodMMℚ Tm (9 * κℚ) θℚ φℚ v_ w_ εθ εφ nrm : ℚ) : ℝ) := by
   have dM := M_difference_norm_bounded _ _ hθ hφ
   have nM := Mℚ_norm_bounded hθ hφ
   have oM : ‖rotM (θℚ : ℝ) (φℚ : ℝ)‖ ≤ 1 := le_of_eq (Bounding.rotM_norm_one _ _)
@@ -834,10 +837,12 @@ theorem ΔprodMM_le_ℚ₂ (hT : ‖T‖ ≤ 1)
   have h4 := mul_le_mul_of_nonneg_left aθφ (mul_nonneg hεθ hεφ)
   have h5 := mul_le_mul_of_nonneg_left aφφ (sq_nonneg (εφ : ℝ))
   have hE3 : (0 : ℝ) ≤ ((εθ : ℝ) + εφ)^3 := pow_nonneg (by linarith) 3
-  have hrem : 8 * ‖v‖ * ‖w‖ * ((εθ : ℝ) + εφ)^3 / 6 ≤ 8 * 2 * ((εθ : ℝ) + εφ)^3 / 6 := by
-    have hvw : ‖v‖ * ‖w‖ ≤ 2 := by
-      calc ‖v‖ * ‖w‖ ≤ 1 * 2 := mul_le_mul hv hw (norm_nonneg _) zero_le_one
-        _ = 2 := one_mul _
+  have hrem : 8 * ‖v‖ * ‖w‖ * ((εθ : ℝ) + εφ)^3 / 6
+      ≤ 8 * ((nrm : ℚ) : ℝ) * ((εθ : ℝ) + εφ)^3 / 6 := by
+    have hvw : ‖v‖ * ‖w‖ ≤ ((nrm : ℚ) : ℝ) := by
+      calc ‖v‖ * ‖w‖ ≤ 1 * ((nrm : ℚ) : ℝ) :=
+            mul_le_mul hv hnrm (norm_nonneg _) zero_le_one
+        _ = ((nrm : ℚ) : ℝ) := one_mul _
     have := mul_le_mul_of_nonneg_right hvw hE3
     linarith
   unfold GlobalTheorem.ΔprodMM ΔprodMMℚ
@@ -897,22 +902,28 @@ lemma spanning₂_bridge {θℚ φℚ εθ εφ : ℚ} (T : Local.TriangleQ) (R 
 /-- The slacked rational numerator of `Bε₂.lhs`: rational center product
 minus its `9κℚ` gap minus the (difference-scale) product budget.  Positivity
 of this quantity is part of the `Bε₂ℚ` condition. -/
-def Bε₂ℚnum (θ φ : ℚ) (v₁ dq : Fin 3 → ℚ) (εθ εφ : ℚ) : ℚ :=
+def Bε₂ℚnum (θ φ : ℚ) (v₁ dq : Fin 3 → ℚ) (εθ εφ nrm : ℚ) : ℚ :=
   (rotMℚ_mat θ φ *ᵥ v₁) ⬝ᵥ (rotMℚ_mat θ φ *ᵥ dq) - 9 * κℚ
-    - ΔprodMMℚ 1 (9 * κℚ) θ φ v₁ dq εθ εφ 2
+    - ΔprodMMℚ 1 (9 * κℚ) θ φ v₁ dq εθ εφ nrm
+
+/-- Rational upper bound for the norm of the real vertex difference behind a
+κ-approximated `dq`. -/
+def dqNrm (su : UpperSqrt) (dq : Fin 3 → ℚ) : ℚ :=
+  su.norm dq + 2 * κℚ
 
 /-- The rational left-hand side of the second-order `Bε₂` inequality. -/
 def Bε₂ℚlhs (su : UpperSqrt) (v₁ v₂ : Fin 3 → ℚ) (p : Pose ℚ) (εθ εφ : ℚ) : ℚ :=
-  Bε₂ℚnum p.θ₂ p.φ₂ v₁ (v₁ - v₂) εθ εφ
+  Bε₂ℚnum p.θ₂ p.φ₂ v₁ (v₁ - v₂) εθ εφ (dqNrm su (v₁ - v₂))
   / ((su.norm (rotMℚ_mat p.θ₂ p.φ₂ *ᵥ v₁) + 3 * κℚ + ΔrotMℚ su p.θ₂ p.φ₂ v₁ εθ εφ)
      * (su.norm (rotMℚ_mat p.θ₂ p.φ₂ *ᵥ (v₁ - v₂)) + 5 * κℚ
-        + ΔrotMℚ₂ su p.θ₂ p.φ₂ (v₁ - v₂) εθ εφ))
+        + ΔrotMℚ₂ su p.θ₂ p.φ₂ (v₁ - v₂) εθ εφ (dqNrm su (v₁ - v₂))))
 
 /-- Condition `B_ε²ℚ` from the second-order rational local theorem. -/
 def _root_.Local.TriangleQ.Bε₂ℚ {ι : Type} [Fintype ι] [DecidableEq ι] (Qi : Fin 3 → ι)
     (v_ : ι → Fin 3 → ℚ) (p : Pose ℚ) (εθ εφ δ r : ℚ) (su : UpperSqrt) : Prop :=
   ∀ i : Fin 3, ∀ k : ι, k ≠ Qi i →
     0 < Bε₂ℚnum p.θ₂ p.φ₂ (v_ (Qi i)) (v_ (Qi i) - v_ k) εθ εφ
+        (dqNrm su (v_ (Qi i) - v_ k))
     ∧ δ / r < Bε₂ℚlhs su (v_ (Qi i)) (v_ k) p εθ εφ
 deriving Decidable
 
@@ -948,6 +959,14 @@ private lemma bε₂_bridge {ι : Type} [Fintype ι] [DecidableEq ι] [Nonempty 
         = ‖(Qr - toR3 Qℚ) - (vk - toR3 vℚ)‖ := by congr 1; abel
       _ ≤ ‖Qr - toR3 Qℚ‖ + ‖vk - toR3 vℚ‖ := norm_sub_le _ _
       _ ≤ 2 * κ := by linarith
+  have hdq_nrm : ‖Qr - vk‖ ≤ ((dqNrm approx.upper_sqrt (Qℚ - vℚ) : ℚ) : ℝ) := by
+    have h1 : ‖Qr - vk‖ ≤ ‖toR3 (Qℚ - vℚ)‖ + 2 * κ := by
+      linarith [norm_le_insert' (Qr - vk) (toR3 (Qℚ - vℚ)), hdqapprox]
+    have h2 : ‖toR3 (Qℚ - vℚ)‖ ≤ ((approx.upper_sqrt.norm (Qℚ - vℚ) : ℚ) : ℝ) :=
+      UpperSqrt_norm_le approx.upper_sqrt _
+    unfold dqNrm
+    push_cast [cast_κℚ]
+    linarith
   obtain ⟨hposℚ, hlhsℚ⟩ := be i k hne_k
   -- Center product gap (T = id, difference scale): within 9κ.
   have hid1 : ‖ContinuousLinearMap.id ℝ ℝ²‖ ≤ 1 := ContinuousLinearMap.norm_id_le
@@ -965,22 +984,28 @@ private lemma bε₂_bridge {ι : Type} [Fintype ι] [DecidableEq ι] [Nonempty 
   -- Product budget domination (T = id, difference scale).
   have hΔprod : GlobalTheorem.ΔprodMM (ContinuousLinearMap.id ℝ ℝ²) Qr (Qr - vk)
       εθ εφ ↑p_ℚ.θ₂ ↑p_ℚ.φ₂
-      ≤ ((ΔprodMMℚ 1 (9 * κℚ) p_ℚ.θ₂ p_ℚ.φ₂ Qℚ (Qℚ - vℚ) εθ εφ 2 : ℚ) : ℝ) :=
-    ΔprodMM_le_ℚ₂ hid1 id_toR2 hθ₂b hφ₂b hQnorm hQapprox hdqnorm hdqapprox hεθ hεφ
+      ≤ ((ΔprodMMℚ 1 (9 * κℚ) p_ℚ.θ₂ p_ℚ.φ₂ Qℚ (Qℚ - vℚ) εθ εφ
+          (dqNrm approx.upper_sqrt (Qℚ - vℚ)) : ℚ) : ℝ) :=
+    ΔprodMM_le_ℚ₂ hid1 id_toR2 hθ₂b hφ₂b hQnorm hQapprox hdqnorm hdqapprox hdq_nrm
+      hεθ hεφ
   have hΔprod_nn : 0 ≤ GlobalTheorem.ΔprodMM (ContinuousLinearMap.id ℝ ℝ²) Qr (Qr - vk)
       εθ εφ ↑p_ℚ.θ₂ ↑p_ℚ.φ₂ := GlobalTheorem.ΔprodMM_nonneg hεθ hεφ
   -- The slacked rational numerator, cast.
-  have hnumℚpos : (0 : ℝ) < ((Bε₂ℚnum p_ℚ.θ₂ p_ℚ.φ₂ Qℚ (Qℚ - vℚ) εθ εφ : ℚ) : ℝ) := by
+  have hnumℚpos : (0 : ℝ) < ((Bε₂ℚnum p_ℚ.θ₂ p_ℚ.φ₂ Qℚ (Qℚ - vℚ) εθ εφ
+      (dqNrm approx.upper_sqrt (Qℚ - vℚ)) : ℚ) : ℝ) := by
     exact_mod_cast hposℚ
-  have hnumcast : ((Bε₂ℚnum p_ℚ.θ₂ p_ℚ.φ₂ Qℚ (Qℚ - vℚ) εθ εφ : ℚ) : ℝ)
+  have hnumcast : ((Bε₂ℚnum p_ℚ.θ₂ p_ℚ.φ₂ Qℚ (Qℚ - vℚ) εθ εφ
+      (dqNrm approx.upper_sqrt (Qℚ - vℚ)) : ℚ) : ℝ)
       = (((rotMℚ_mat p_ℚ.θ₂ p_ℚ.φ₂ *ᵥ Qℚ) ⬝ᵥ (rotMℚ_mat p_ℚ.θ₂ p_ℚ.φ₂ *ᵥ (Qℚ - vℚ)) : ℚ) : ℝ)
-        - 9 * κ - ((ΔprodMMℚ 1 (9 * κℚ) p_ℚ.θ₂ p_ℚ.φ₂ Qℚ (Qℚ - vℚ) εθ εφ 2 : ℚ) : ℝ) := by
+        - 9 * κ - ((ΔprodMMℚ 1 (9 * κℚ) p_ℚ.θ₂ p_ℚ.φ₂ Qℚ (Qℚ - vℚ) εθ εφ
+          (dqNrm approx.upper_sqrt (Qℚ - vℚ)) : ℚ) : ℝ) := by
     unfold Bε₂ℚnum
     push_cast [cast_κℚ]
     ring
   -- Real numerator dominates the cast rational numerator.
   rw [abs_le] at hcenter
-  have hRN : ((Bε₂ℚnum p_ℚ.θ₂ p_ℚ.φ₂ Qℚ (Qℚ - vℚ) εθ εφ : ℚ) : ℝ)
+  have hRN : ((Bε₂ℚnum p_ℚ.θ₂ p_ℚ.φ₂ Qℚ (Qℚ - vℚ) εθ εφ
+      (dqNrm approx.upper_sqrt (Qℚ - vℚ)) : ℚ) : ℝ)
       ≤ ⟪rotM ↑p_ℚ.θ₂ ↑p_ℚ.φ₂ Qr, rotM ↑p_ℚ.θ₂ ↑p_ℚ.φ₂ (Qr - vk)⟫
         - GlobalTheorem.ΔprodMM (ContinuousLinearMap.id ℝ ℝ²) Qr (Qr - vk)
           εθ εφ ↑p_ℚ.θ₂ ↑p_ℚ.φ₂ := by
@@ -1025,8 +1050,9 @@ private lemma bε₂_bridge {ι : Type} [Fintype ι] [DecidableEq ι] [Nonempty 
       ((ΔrotMℚ approx.upper_sqrt p_ℚ.θ₂ p_ℚ.φ₂ Qℚ εθ εφ : ℚ) : ℝ) :=
     ΔrotM_le_ℚ approx.upper_sqrt hθ₂b hφ₂b hQnorm hQapprox hεθ hεφ
   have hΔ2 : GlobalTheorem.ΔrotM (Qr - vk) εθ εφ ↑p_ℚ.θ₂ ↑p_ℚ.φ₂ ≤
-      ((ΔrotMℚ₂ approx.upper_sqrt p_ℚ.θ₂ p_ℚ.φ₂ (Qℚ - vℚ) εθ εφ : ℚ) : ℝ) :=
-    ΔrotM_le_ℚ₂ approx.upper_sqrt hθ₂b hφ₂b hdqnorm hdqapprox hεθ hεφ
+      ((ΔrotMℚ₂ approx.upper_sqrt p_ℚ.θ₂ p_ℚ.φ₂ (Qℚ - vℚ) εθ εφ
+        (dqNrm approx.upper_sqrt (Qℚ - vℚ)) : ℚ) : ℝ) :=
+    ΔrotM_le_ℚ₂ approx.upper_sqrt hθ₂b hφ₂b hdqnorm hdqapprox hdq_nrm hεθ hεφ
   have hΔ1_nn : 0 ≤ GlobalTheorem.ΔrotM Qr εθ εφ ↑p_ℚ.θ₂ ↑p_ℚ.φ₂ :=
     GlobalTheorem.ΔrotM_nonneg hεθ hεφ
   have hΔ2_nn : 0 ≤ GlobalTheorem.ΔrotM (Qr - vk) εθ εφ ↑p_ℚ.θ₂ ↑p_ℚ.φ₂ :=
@@ -1037,11 +1063,13 @@ private lemma bε₂_bridge {ι : Type} [Fintype ι] [DecidableEq ι] [Nonempty 
   have hd2_pos : 0 < ‖rotM ↑p_ℚ.θ₂ ↑p_ℚ.φ₂ (Qr - vk)‖
       + GlobalTheorem.ΔrotM (Qr - vk) εθ εφ ↑p_ℚ.θ₂ ↑p_ℚ.φ₂ := by linarith
   -- Chain the divisions.
-  set N : ℝ := ((Bε₂ℚnum p_ℚ.θ₂ p_ℚ.φ₂ Qℚ (Qℚ - vℚ) εθ εφ : ℚ) : ℝ) with hNdef
+  set N : ℝ := ((Bε₂ℚnum p_ℚ.θ₂ p_ℚ.φ₂ Qℚ (Qℚ - vℚ) εθ εφ
+      (dqNrm approx.upper_sqrt (Qℚ - vℚ)) : ℚ) : ℝ) with hNdef
   set D1 : ℝ := ((approx.upper_sqrt.norm (rotMℚ_mat p_ℚ.θ₂ p_ℚ.φ₂ *ᵥ Qℚ) : ℚ) : ℝ)
       + 3 * κ + ((ΔrotMℚ approx.upper_sqrt p_ℚ.θ₂ p_ℚ.φ₂ Qℚ εθ εφ : ℚ) : ℝ) with hD1def
   set D2 : ℝ := ((approx.upper_sqrt.norm (rotMℚ_mat p_ℚ.θ₂ p_ℚ.φ₂ *ᵥ (Qℚ - vℚ)) : ℚ) : ℝ)
-      + 5 * κ + ((ΔrotMℚ₂ approx.upper_sqrt p_ℚ.θ₂ p_ℚ.φ₂ (Qℚ - vℚ) εθ εφ : ℚ) : ℝ)
+      + 5 * κ + ((ΔrotMℚ₂ approx.upper_sqrt p_ℚ.θ₂ p_ℚ.φ₂ (Qℚ - vℚ) εθ εφ
+        (dqNrm approx.upper_sqrt (Qℚ - vℚ)) : ℚ) : ℝ)
     with hD2def
   have hlhsℚr : ((δ : ℚ) : ℝ) / r < N / (D1 * D2) := by
     have hcast := (Rat.cast_lt (K := ℝ)).mpr hlhsℚ
