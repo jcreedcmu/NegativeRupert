@@ -55,6 +55,11 @@ def sqrtNum26 (S : ℤ) : ℤ :=
 def sqrtNum52 (S : ℤ) : ℤ :=
   if S ≤ 0 then 0 else (Nat.sqrt (-(-S / 10 ^ 20)).toNat + 1 : ℕ)
 
+/-- Integer form of the *lower* square root `sqrtℚLow13` on inputs `S/10²⁶`:
+the inner `⌊(S/10²⁶)·10²⁶⌋ = S` is exact, and `S ≤ 0` lands on `Nat.sqrt 0`
+without a branch. Output scale `10¹³`. -/
+def sqrtNumLow26 (S : ℤ) : ℤ := (Nat.sqrt S.toNat : ℕ)
+
 /-! ### Compiled-path table reads
 
 A curried-literal lookup costs the compiled code ~30 µs (`Fin.cons`
@@ -302,6 +307,24 @@ private lemma sqrtℚUp16_intCast_div52 (S : ℤ) :
     push_cast
     ring
 
+/-- `sqrtℚLow13` on a scale-`10²⁶` integer fraction is `sqrtNumLow26` (at
+scale `10¹³`). -/
+private lemma sqrtℚLow13_intCast_div26 (S : ℤ) :
+    RationalApprox.sqrtℚLow13 ((S : ℚ) / 10 ^ 26) = (sqrtNumLow26 S : ℚ) / 10 ^ 13 := by
+  unfold RationalApprox.sqrtℚLow13 sqrtNumLow26
+  rcases le_or_gt S 0 with hS | hS
+  · rw [if_pos (div_nonpos_iff.mpr (Or.inr ⟨by exact_mod_cast hS, by positivity⟩)),
+      Int.toNat_of_nonpos hS]
+    simp
+  · have hSQ : (0:ℚ) < (S : ℚ) := by exact_mod_cast hS
+    rw [if_neg (not_le.mpr (by positivity))]
+    have hfloor : ⌊(S : ℚ) / 10 ^ 26 * 10 ^ 26⌋ = S := by
+      rw [div_mul_cancel₀ _ (by norm_num : ((10:ℚ) ^ 26) ≠ 0)]
+      exact Int.floor_intCast _
+    rw [hfloor]
+    push_cast
+    ring
+
 end Bridges
 
 /-! ## The per-pair equivalence -/
@@ -461,47 +484,64 @@ end PairIff
 
 open Local.TriangleQ.Bεℚ (matEntries)
 
+/-! The entry and vertex bridges between the ℚ pipeline's atoms and the
+integer numerators, shared by `checkN_eq_check` and the `BoundRPy` check
+below. -/
+
+private lemma matEntries_m₀₀ (p : Pose ℚ) : (matEntries p).m₀₀
+    = ((-RationalApprox.sinNum13 p.θ₂ * 10 ^ 13 : ℤ) : ℚ) / 10 ^ 26 := by
+  show -RationalApprox.sinℚ p.θ₂ = _
+  rw [← RationalApprox.sinNum13_div_eq p.θ₂]
+  push_cast
+  ring
+
+private lemma matEntries_m₀₁ (p : Pose ℚ) : (matEntries p).m₀₁
+    = ((RationalApprox.cosNum13 p.θ₂ * 10 ^ 13 : ℤ) : ℚ) / 10 ^ 26 := by
+  show RationalApprox.cosℚ p.θ₂ = _
+  rw [← RationalApprox.cosNum13_div_eq p.θ₂]
+  push_cast
+  ring
+
+private lemma matEntries_m₀₂ (p : Pose ℚ) : (matEntries p).m₀₂ = 0 := rfl
+
+private lemma matEntries_m₁₀ (p : Pose ℚ) : (matEntries p).m₁₀
+    = ((-(RationalApprox.cosNum13 p.θ₂ * RationalApprox.cosNum13 p.φ₂) : ℤ) : ℚ) / 10 ^ 26 := by
+  show -RationalApprox.cosℚ p.θ₂ * RationalApprox.cosℚ p.φ₂ = _
+  rw [← RationalApprox.cosNum13_div_eq p.θ₂, ← RationalApprox.cosNum13_div_eq p.φ₂]
+  push_cast
+  ring
+
+private lemma matEntries_m₁₁ (p : Pose ℚ) : (matEntries p).m₁₁
+    = ((-(RationalApprox.sinNum13 p.θ₂ * RationalApprox.cosNum13 p.φ₂) : ℤ) : ℚ) / 10 ^ 26 := by
+  show -RationalApprox.sinℚ p.θ₂ * RationalApprox.cosℚ p.φ₂ = _
+  rw [← RationalApprox.sinNum13_div_eq p.θ₂, ← RationalApprox.cosNum13_div_eq p.φ₂]
+  push_cast
+  ring
+
+private lemma matEntries_m₁₂ (p : Pose ℚ) : (matEntries p).m₁₂
+    = ((RationalApprox.sinNum13 p.φ₂ * 10 ^ 13 : ℤ) : ℚ) / 10 ^ 26 := by
+  show RationalApprox.sinℚ p.φ₂ = _
+  rw [← RationalApprox.sinNum13_div_eq p.φ₂]
+  push_cast
+  ring
+
+private lemma pythonVertexA_intCast (a : VertexIndex) (c : Fin 3) :
+    pythonVertexA a c = (pythonVertexNumCurried a.ℓ a.i a.k c : ℚ) / 10 ^ 16 := by
+  rw [pythonVertexA_eq]
+  exact pythonVertexNumCurried_eq a.ℓ a.i a.k c
+
 /-- The integer core computes exactly the ℚ check (in the positive-radius
 regime, which is the only one `Row.ValidLocal` evaluates it in). -/
 theorem checkN_eq_check (Qi : Fin 3 → VertexIndex) (p : Pose ℚ) {ε δ r : ℚ}
     (hε : 0 < ε) (hr : 0 < r) :
     checkN Qi p ε δ r = check Qi p ε δ r := by
-  have hm00 : (matEntries p).m₀₀
-      = ((-RationalApprox.sinNum13 p.θ₂ * 10 ^ 13 : ℤ) : ℚ) / 10 ^ 26 := by
-    show -RationalApprox.sinℚ p.θ₂ = _
-    rw [← RationalApprox.sinNum13_div_eq p.θ₂]
-    push_cast
-    ring
-  have hm01 : (matEntries p).m₀₁
-      = ((RationalApprox.cosNum13 p.θ₂ * 10 ^ 13 : ℤ) : ℚ) / 10 ^ 26 := by
-    show RationalApprox.cosℚ p.θ₂ = _
-    rw [← RationalApprox.cosNum13_div_eq p.θ₂]
-    push_cast
-    ring
-  have hm02 : (matEntries p).m₀₂ = 0 := rfl
-  have hm10 : (matEntries p).m₁₀
-      = ((-(RationalApprox.cosNum13 p.θ₂ * RationalApprox.cosNum13 p.φ₂) : ℤ) : ℚ) / 10 ^ 26 := by
-    show -RationalApprox.cosℚ p.θ₂ * RationalApprox.cosℚ p.φ₂ = _
-    rw [← RationalApprox.cosNum13_div_eq p.θ₂, ← RationalApprox.cosNum13_div_eq p.φ₂]
-    push_cast
-    ring
-  have hm11 : (matEntries p).m₁₁
-      = ((-(RationalApprox.sinNum13 p.θ₂ * RationalApprox.cosNum13 p.φ₂) : ℤ) : ℚ) / 10 ^ 26 := by
-    show -RationalApprox.sinℚ p.θ₂ * RationalApprox.cosℚ p.φ₂ = _
-    rw [← RationalApprox.sinNum13_div_eq p.θ₂, ← RationalApprox.cosNum13_div_eq p.φ₂]
-    push_cast
-    ring
-  have hm12 : (matEntries p).m₁₂
-      = ((RationalApprox.sinNum13 p.φ₂ * 10 ^ 13 : ℤ) : ℚ) / 10 ^ 26 := by
-    show RationalApprox.sinℚ p.φ₂ = _
-    rw [← RationalApprox.sinNum13_div_eq p.φ₂]
-    push_cast
-    ring
-  have hv : ∀ (a : VertexIndex) (c : Fin 3),
-      pythonVertexA a c = (pythonVertexNumCurried a.ℓ a.i a.k c : ℚ) / 10 ^ 16 := by
-    intro a c
-    rw [pythonVertexA_eq]
-    exact pythonVertexNumCurried_eq a.ℓ a.i a.k c
+  have hm00 := matEntries_m₀₀ p
+  have hm01 := matEntries_m₀₁ p
+  have hm02 := matEntries_m₀₂ p
+  have hm10 := matEntries_m₁₀ p
+  have hm11 := matEntries_m₁₁ p
+  have hm12 := matEntries_m₁₂ p
+  have hv := pythonVertexA_intCast
   rw [Bool.eq_iff_iff]
   unfold checkN check
   simp only [List.all_eq_true, List.mem_finRange, forall_const, decide_eq_true_eq]
@@ -516,6 +556,142 @@ theorem checkN_eq_check (Qi : Fin 3 → VertexIndex) (p : Pose ℚ) {ε δ r : �
     (hv (Qi i) 0) (hv (Qi i) 1) (hv (Qi i) 2)
     (hv k 0) (hv k 1) (hv k 2)
     rfl hε hr
+
+/-! ## Integer rendering of the `r`-condition (`BoundRℚ`)
+
+`checkNR` recomputes `BoundRℚ.check` with the same scale conventions as
+`checkN`: matrix entries at `10²⁶`, vertex coordinates at `10¹⁶`, the
+`round13`ed row dots at `10¹³` via integer division by `10²⁹`, and the
+fixed-point lower square root as a bare `Nat.sqrt` at scale `10¹³`
+(`sqrtNumLow26`). The comparison against `r + √2⁺·ε + 3κℚ` is
+cross-multiplied by the (always positive) denominator product
+`100·r.den·ε.den·10¹³`, so no sign hypotheses are needed. -/
+
+/-- Integer rendering of `BoundRℚ.check` (the `r_valid` conjunct of
+`Row.ValidLocal`). -/
+def checkNR (Qi : Fin 3 → VertexIndex) (p : Pose ℚ) (ε r : ℚ) : Bool :=
+  -- trig numerators (scale 10¹³) and matrix entries (scale 10²⁶), as in `checkN`
+  let stN : ℤ := sinNum13 p.θ₂
+  let ctN : ℤ := cosNum13 p.θ₂
+  let spN : ℤ := sinNum13 p.φ₂
+  let cpN : ℤ := cosNum13 p.φ₂
+  let E00 := -stN * 10 ^ 13
+  let E01 := ctN * 10 ^ 13
+  let E10 := -(ctN * cpN)
+  let E11 := -(stN * cpN)
+  let E12 := spN * 10 ^ 13
+  -- `r + √2⁺·ε + 3κℚ < s/10¹³` cross-multiplied by `100·rd·εd·10¹³ > 0`
+  let lhsN := (100 * r.num * (ε.den : ℤ) + 142 * ε.num * (r.den : ℤ)) * 10 ^ 13
+      + 300 * (r.den : ℤ) * (ε.den : ℤ) * 10 ^ 3
+  let c := 100 * (r.den : ℤ) * (ε.den : ℤ)
+  (List.finRange 3).all fun i =>
+    let a := Qi i
+    let w0 := pythonVertexNumCurried a.ℓ a.i a.k 0
+    let w1 := pythonVertexNumCurried a.ℓ a.i a.k 1
+    let w2 := pythonVertexNumCurried a.ℓ a.i a.k 2
+    let q0 := (E00 * w0 + E01 * w1) / 10 ^ 29                -- scale 10¹³
+    let q1 := (E10 * w0 + E11 * w1 + E12 * w2) / 10 ^ 29
+    decide (lhsN < c * sqrtNumLow26 (q0 * q0 + q1 * q1))
+
+/-- One `i` of `checkNR` decides exactly the corresponding test of
+`BoundRℚ.check`, given the atom correspondences. Unlike `pair_test_iff`, no
+positivity hypotheses on `ε`, `r` are needed: the cross-multiplier is a
+product of denominators. -/
+private lemma r_test_iff (E00 E01 E10 E11 E12 w0 w1 w2 : ℤ)
+    {m00 m01 m02 m10 m11 m12 wq0 wq1 wq2 : ℚ} (ε r : ℚ)
+    (hm00 : m00 = (E00 : ℚ) / 10 ^ 26) (hm01 : m01 = (E01 : ℚ) / 10 ^ 26)
+    (hm02 : m02 = 0)
+    (hm10 : m10 = (E10 : ℚ) / 10 ^ 26) (hm11 : m11 = (E11 : ℚ) / 10 ^ 26)
+    (hm12 : m12 = (E12 : ℚ) / 10 ^ 26)
+    (hw0 : wq0 = (w0 : ℚ) / 10 ^ 16) (hw1 : wq1 = (w1 : ℚ) / 10 ^ 16)
+    (hw2 : wq2 = (w2 : ℚ) / 10 ^ 16) :
+    ((100 * r.num * (ε.den : ℤ) + 142 * ε.num * (r.den : ℤ)) * 10 ^ 13
+        + 300 * (r.den : ℤ) * (ε.den : ℤ) * 10 ^ 3
+      < 100 * (r.den : ℤ) * (ε.den : ℤ) * sqrtNumLow26
+          ((E00 * w0 + E01 * w1) / 10 ^ 29 * ((E00 * w0 + E01 * w1) / 10 ^ 29)
+            + (E10 * w0 + E11 * w1 + E12 * w2) / 10 ^ 29
+              * ((E10 * w0 + E11 * w1 + E12 * w2) / 10 ^ 29)))
+    ↔ r + RationalApprox.sqrtApprox16.upper_sqrt_two * ε + 3 * RationalApprox.κℚ
+        < RationalApprox.sqrtApprox16.lower_sqrt.f
+            (RationalApprox.round13 (m00 * wq0 + m01 * wq1 + m02 * wq2)
+              * RationalApprox.round13 (m00 * wq0 + m01 * wq1 + m02 * wq2)
+              + RationalApprox.round13 (m10 * wq0 + m11 * wq1 + m12 * wq2)
+                * RationalApprox.round13 (m10 * wq0 + m11 * wq1 + m12 * wq2)) := by
+  have hf : RationalApprox.sqrtApprox16.lower_sqrt.f = RationalApprox.sqrtℚLow13 := rfl
+  have h2c : RationalApprox.sqrtApprox16.upper_sqrt_two = 71 / 50 := by
+    norm_num [RationalApprox.sqrtApprox16]
+  have hκc : RationalApprox.κℚ = 1 / 10 ^ 10 := rfl
+  rw [hm00, hm01, hm02, hm10, hm11, hm12, hw0, hw1, hw2]
+  rw [show (E00 : ℚ) / 10 ^ 26 * ((w0 : ℚ) / 10 ^ 16) + (E01 : ℚ) / 10 ^ 26 * ((w1 : ℚ) / 10 ^ 16)
+        + 0 * ((w2 : ℚ) / 10 ^ 16) = ((E00 * w0 + E01 * w1 : ℤ) : ℚ) / 10 ^ 42 from by
+      push_cast; ring]
+  rw [show (E10 : ℚ) / 10 ^ 26 * ((w0 : ℚ) / 10 ^ 16) + (E11 : ℚ) / 10 ^ 26 * ((w1 : ℚ) / 10 ^ 16)
+        + (E12 : ℚ) / 10 ^ 26 * ((w2 : ℚ) / 10 ^ 16)
+        = ((E10 * w0 + E11 * w1 + E12 * w2 : ℤ) : ℚ) / 10 ^ 42 from by
+      push_cast; ring]
+  simp only [round13_intCast_div42]
+  rw [show ((((E00 * w0 + E01 * w1) / 10 ^ 29 : ℤ) : ℚ) / 10 ^ 13) *
+        ((((E00 * w0 + E01 * w1) / 10 ^ 29 : ℤ) : ℚ) / 10 ^ 13) +
+        ((((E10 * w0 + E11 * w1 + E12 * w2) / 10 ^ 29 : ℤ) : ℚ) / 10 ^ 13) *
+        ((((E10 * w0 + E11 * w1 + E12 * w2) / 10 ^ 29 : ℤ) : ℚ) / 10 ^ 13)
+        = (((E00 * w0 + E01 * w1) / 10 ^ 29 * ((E00 * w0 + E01 * w1) / 10 ^ 29) +
+            (E10 * w0 + E11 * w1 + E12 * w2) / 10 ^ 29 *
+              ((E10 * w0 + E11 * w1 + E12 * w2) / 10 ^ 29) : ℤ) : ℚ)
+          / 10 ^ 26 from by push_cast; ring]
+  rw [hf]
+  simp only [sqrtℚLow13_intCast_div26]
+  rw [h2c, hκc]
+  set en := ε.num with hen
+  set ed : ℤ := (ε.den : ℤ) with hed
+  set rn := r.num with hrn
+  set rd : ℤ := (r.den : ℤ) with hrd
+  set S := sqrtNumLow26
+      ((E00 * w0 + E01 * w1) / 10 ^ 29 * ((E00 * w0 + E01 * w1) / 10 ^ 29)
+        + (E10 * w0 + E11 * w1 + E12 * w2) / 10 ^ 29
+          * ((E10 * w0 + E11 * w1 + E12 * w2) / 10 ^ 29)) with hS
+  have hed_pos : (0:ℤ) < ed := by rw [hed]; exact_mod_cast ε.pos
+  have hrd_pos : (0:ℤ) < rd := by rw [hrd]; exact_mod_cast r.pos
+  have hedQ : (0:ℚ) < (ed : ℚ) := by exact_mod_cast hed_pos
+  have hrdQ : (0:ℚ) < (rd : ℚ) := by exact_mod_cast hrd_pos
+  have hεq : ε = (en : ℚ) / (ed : ℚ) := by
+    rw [hen, hed]; push_cast; exact (Rat.num_div_den ε).symm
+  have hrq : r = (rn : ℚ) / (rd : ℚ) := by
+    rw [hrn, hrd]; push_cast; exact (Rat.num_div_den r).symm
+  rw [hεq, hrq]
+  constructor <;> intro h <;> qify at h ⊢ <;> field_simp at h ⊢ <;> linarith
+
+/-- The integer core computes exactly the ℚ `r`-condition check. -/
+theorem checkNR_eq_check (Qi : Fin 3 → VertexIndex) (p : Pose ℚ) (ε r : ℚ) :
+    checkNR Qi p ε r
+      = RationalApprox.LocalTheorem.BoundRℚ.check r ε p (pythonVertexA ∘ Qi)
+          RationalApprox.sqrtApprox16 := by
+  have hm00 := matEntries_m₀₀ p
+  have hm01 := matEntries_m₀₁ p
+  have hm02 := matEntries_m₀₂ p
+  have hm10 := matEntries_m₁₀ p
+  have hm11 := matEntries_m₁₁ p
+  have hm12 := matEntries_m₁₂ p
+  rw [Bool.eq_iff_iff]
+  unfold checkNR RationalApprox.LocalTheorem.BoundRℚ.check
+  simp only [List.all_eq_true, List.mem_finRange, forall_const, decide_eq_true_eq,
+    Function.comp_apply]
+  refine forall_congr' fun i => ?_
+  exact r_test_iff _ _ _ _ _ _ _ _ ε r
+    hm00 hm01 hm02 hm10 hm11 hm12
+    (pythonVertexA_intCast (Qi i) 0) (pythonVertexA_intCast (Qi i) 1)
+    (pythonVertexA_intCast (Qi i) 2)
+
+/-- `BoundRℚ` (the `r_valid` conjunct of `Row.ValidLocal`) decided through
+the integer core. Out-prioritizes the ℚ route
+`BoundRℚ.instDecidablePyV` (`Checker/Local.lean`); picked up by the
+re-derived `Row.ValidLocal` instance in `Checker/LocalFastNat.lean`. -/
+instance (priority := 10600) instDecidableBoundRPy (r ε : ℚ) (p : Pose ℚ)
+    (idx : Fin 3 → VertexIndex) :
+    Decidable (RationalApprox.LocalTheorem.BoundRℚ r ε p (pythonVertexA ∘ idx)
+      RationalApprox.sqrtApprox16) :=
+  decidable_of_iff (checkNR idx p ε r = true)
+    (by rw [checkNR_eq_check]
+        exact RationalApprox.LocalTheorem.BoundRℚ.check_iff r ε p _ _)
 
 end Noperthedron.Solution.BεℚPy
 

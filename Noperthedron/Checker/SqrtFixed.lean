@@ -18,12 +18,15 @@ denominators arbitrary), this is both *more accurate* (error < 2·10⁻¹⁶
 relative to the input scale) and *fixed-point*, which is what lets the
 checkers' hot loops run on integer numerators with statically known scales:
 every upper-sqrt output is an integer multiple of `10⁻¹⁶`, and for inputs
-that are themselves multiples of `10⁻³²` the ceiling is exact.
+that are themselves multiples of `10⁻³²` the ceiling is exact. The lower
+square root `sqrtℚLow13` (in `Checker/ApproxSqrt.lean`) has the same
+fixed-point shape at scale `10⁻¹³`.
 
-`sqrtApprox16` packages it as an `Approx` together with the lower square
-root `sqrtℚLow` from `Checker/ApproxSqrt.lean`. Since upper square roots
-only ever appear in check-hardening positions, any upper bound is sound
-here, and a tighter one only makes it easier for certificate rows to pass.
+`sqrtApprox16` packages it as an `Approx` together with the fixed-point
+lower square root `sqrtℚLow13` from `Checker/ApproxSqrt.lean`. Since upper
+square roots only ever appear in check-hardening positions, any upper bound
+is sound here, and a tighter one only makes it easier for certificate rows
+to pass.
 -/
 
 namespace RationalApprox
