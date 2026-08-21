@@ -12,6 +12,7 @@ public import Noperthedron.RationalApprox.RationalLocal
 public import Noperthedron.SolutionTable.Defs
 public import Noperthedron.Vertices.Exact
 public import Noperthedron.Vertices.Python
+public import Noperthedron.Vertices.PythonInt
 public import Noperthedron.Vertices.Symmetry
 public import Noperthedron.Vertices.Trig
 -- Mirror the imports at the meta phase so the test `#eval`s below can
@@ -27,6 +28,7 @@ public meta import Noperthedron.RationalApprox.RationalLocal
 public meta import Noperthedron.SolutionTable.Defs
 public meta import Noperthedron.Vertices.Exact
 public meta import Noperthedron.Vertices.Python
+public meta import Noperthedron.Vertices.PythonInt
 public meta import Noperthedron.Vertices.Symmetry
 public meta import Noperthedron.Vertices.Trig
 
@@ -185,6 +187,164 @@ lemma boundDelta_at_eq (p : Pose ℚ) (P Q : Fin 3 → ℚ) :
         Matrix.toLin'_apply, Matrix.mulVec, dotProduct, Fin.sum_univ_three,
         Fin.sum_univ_two, Matrix.cons_val_zero, Matrix.cons_val_one]
 
+/-! ### Integer core
+
+The norm² is assembled exactly at scale `10¹¹⁰` (difference vector at `10⁵⁵`)
+and the upper square root becomes one integer ceiling division plus
+`Nat.sqrt` (`sqrtNum110`, output scale `10¹⁶`), so the whole per-`i` value is
+`(sqrtNum110 … + 6·10⁶) / (2·10¹⁶)`.  The ℚ helpers above stay as the
+proof-side bridge to `BoundDeltaℚi`. -/
+
+/-- Integer form of `sqrtℚUp16` on inputs `S/10¹¹⁰`: the inner ceiling
+`⌈S/10⁷⁸⌉` is `-((-S)/10⁷⁸)` (floor division). Output scale `10¹⁶`. -/
+def sqrtNum110 (S : ℤ) : ℤ :=
+  if S ≤ 0 then 0 else (Nat.sqrt (-(-S / 10 ^ 78)).toNat + 1 : ℕ)
+
+private lemma sqrtℚUp16_intCast_div110 (S : ℤ) :
+    RationalApprox.sqrtℚUp16 ((S : ℚ) / 10 ^ 110) = (sqrtNum110 S : ℚ) / 10 ^ 16 := by
+  unfold RationalApprox.sqrtℚUp16 sqrtNum110
+  rcases le_or_gt S 0 with hS | hS
+  · rw [if_pos (div_nonpos_iff.mpr (Or.inr ⟨by exact_mod_cast hS, by positivity⟩)),
+        if_pos hS]
+    simp
+  · have hSQ : (0:ℚ) < (S : ℚ) := by exact_mod_cast hS
+    rw [if_neg (not_le.mpr (by positivity)), if_neg (not_le.mpr hS)]
+    have hceil : ⌈(S : ℚ) / 10 ^ 110 * 10 ^ 32⌉ = -(-S / 10 ^ 78) := by
+      rw [show (S : ℚ) / 10 ^ 110 * 10 ^ 32 = -(((-S : ℤ) : ℚ) / ((10 ^ 78 : ℕ) : ℚ)) from by
+        push_cast; ring]
+      rw [Int.ceil_neg, Rat.floor_intCast_div_natCast]
+      norm_num
+    rw [hceil]
+    push_cast
+    ring
+
+/-- The ten trig numerators (scale `10¹³`) of a rational pose. -/
+structure PoseTrigN where
+  (st1 ct1 sp1 cp1 sa ca st2 ct2 sp2 cp2 : ℤ)
+
+@[inline] def PoseTrigN.ofPose (p : Pose ℚ) : PoseTrigN where
+  st1 := RationalApprox.sinNum13 p.θ₁
+  ct1 := RationalApprox.cosNum13 p.θ₁
+  sp1 := RationalApprox.sinNum13 p.φ₁
+  cp1 := RationalApprox.cosNum13 p.φ₁
+  sa := RationalApprox.sinNum13 p.α
+  ca := RationalApprox.cosNum13 p.α
+  st2 := RationalApprox.sinNum13 p.θ₂
+  ct2 := RationalApprox.cosNum13 p.θ₂
+  sp2 := RationalApprox.sinNum13 p.φ₂
+  cp2 := RationalApprox.cosNum13 p.φ₂
+
+/-- Integer core of `boundDelta_at` (up to the final `(·+6·10⁶)/(2·10¹⁶)`):
+`M₁`-rows lifted to scale `10²⁶`, dots at `10⁴²`, the `R`-rotated and
+`M₂`-lifted difference at `10⁵⁵`, norm² at `10¹¹⁰`. -/
+@[inline] def boundDeltaN (t : PoseTrigN) (P0 P1 P2 Q0 Q1 Q2 : ℤ) : ℤ :=
+  let m1p0 := -t.st1 * 10 ^ 13 * P0 + t.ct1 * 10 ^ 13 * P1
+  let m1p1 := -(t.ct1 * t.cp1) * P0 + -(t.st1 * t.cp1) * P1 + t.sp1 * 10 ^ 13 * P2
+  let rm1p0 := t.ca * m1p0 + -t.sa * m1p1
+  let rm1p1 := t.sa * m1p0 + t.ca * m1p1
+  let m2q0 := (-t.st2 * 10 ^ 13 * Q0 + t.ct2 * 10 ^ 13 * Q1) * 10 ^ 13
+  let m2q1 := (-(t.ct2 * t.cp2) * Q0 + -(t.st2 * t.cp2) * Q1 + t.sp2 * 10 ^ 13 * Q2) * 10 ^ 13
+  let d0 := rm1p0 - m2q0
+  let d1 := rm1p1 - m2q1
+  sqrtNum110 (d0 * d0 + d1 * d1)
+
+/-- Closing step for `boundDeltaN_div_eq`: once the sqrt argument is known to
+be a scale-`10¹¹⁰` integer fraction, the whole per-`i` value is
+`(sqrtNum110 · + 6·10⁶)/(2·10¹⁶)`.  Stated over an abstract argument so that
+`refine` can unify `N` and `x` from the goal without restating them. -/
+private lemma sqrtNum110_step (N : ℤ) (x : ℚ) (hx : x = (N : ℚ) / 10 ^ 110) :
+    ((sqrtNum110 N + 6 * 10 ^ 6 : ℤ) : ℚ) / (2 * 10 ^ 16)
+      = RationalApprox.sqrtℚUp16 x / 2 + 3 * (1 / 10 ^ 10) := by
+  rw [hx, sqrtℚUp16_intCast_div110]
+  push_cast
+  ring
+
+lemma boundDeltaN_div_eq (p : Pose ℚ) (a b : VertexIndex) :
+    ((boundDeltaN (PoseTrigN.ofPose p)
+        (pythonVertexNumCurried a.ℓ a.i a.k 0) (pythonVertexNumCurried a.ℓ a.i a.k 1)
+        (pythonVertexNumCurried a.ℓ a.i a.k 2) (pythonVertexNumCurried b.ℓ b.i b.k 0)
+        (pythonVertexNumCurried b.ℓ b.i b.k 1) (pythonVertexNumCurried b.ℓ b.i b.k 2)
+        + 6 * 10 ^ 6 : ℤ) : ℚ) / (2 * 10 ^ 16)
+      = boundDelta_at (PoseTrigQ.ofPose p) (pythonVertex a) (pythonVertex b) := by
+  set st1 := RationalApprox.sinNum13 p.θ₁ with hst1
+  set ct1 := RationalApprox.cosNum13 p.θ₁ with hct1
+  set sp1 := RationalApprox.sinNum13 p.φ₁ with hsp1
+  set cp1 := RationalApprox.cosNum13 p.φ₁ with hcp1
+  set sa := RationalApprox.sinNum13 p.α with hsa
+  set ca := RationalApprox.cosNum13 p.α with hca
+  set st2 := RationalApprox.sinNum13 p.θ₂ with hst2
+  set ct2 := RationalApprox.cosNum13 p.θ₂ with hct2
+  set sp2 := RationalApprox.sinNum13 p.φ₂ with hsp2
+  set cp2 := RationalApprox.cosNum13 p.φ₂ with hcp2
+  set P0 := pythonVertexNumCurried a.ℓ a.i a.k 0 with hP0
+  set P1 := pythonVertexNumCurried a.ℓ a.i a.k 1 with hP1
+  set P2 := pythonVertexNumCurried a.ℓ a.i a.k 2 with hP2
+  set Q0 := pythonVertexNumCurried b.ℓ b.i b.k 0 with hQ0
+  set Q1 := pythonVertexNumCurried b.ℓ b.i b.k 1 with hQ1
+  set Q2 := pythonVertexNumCurried b.ℓ b.i b.k 2 with hQ2
+  show ((sqrtNum110
+      ((ca * (-st1 * 10 ^ 13 * P0 + ct1 * 10 ^ 13 * P1)
+          + -sa * (-(ct1 * cp1) * P0 + -(st1 * cp1) * P1 + sp1 * 10 ^ 13 * P2)
+          - (-st2 * 10 ^ 13 * Q0 + ct2 * 10 ^ 13 * Q1) * 10 ^ 13)
+        * (ca * (-st1 * 10 ^ 13 * P0 + ct1 * 10 ^ 13 * P1)
+          + -sa * (-(ct1 * cp1) * P0 + -(st1 * cp1) * P1 + sp1 * 10 ^ 13 * P2)
+          - (-st2 * 10 ^ 13 * Q0 + ct2 * 10 ^ 13 * Q1) * 10 ^ 13)
+        + (sa * (-st1 * 10 ^ 13 * P0 + ct1 * 10 ^ 13 * P1)
+            + ca * (-(ct1 * cp1) * P0 + -(st1 * cp1) * P1 + sp1 * 10 ^ 13 * P2)
+            - (-(ct2 * cp2) * Q0 + -(st2 * cp2) * Q1 + sp2 * 10 ^ 13 * Q2) * 10 ^ 13)
+          * (sa * (-st1 * 10 ^ 13 * P0 + ct1 * 10 ^ 13 * P1)
+            + ca * (-(ct1 * cp1) * P0 + -(st1 * cp1) * P1 + sp1 * 10 ^ 13 * P2)
+            - (-(ct2 * cp2) * Q0 + -(st2 * cp2) * Q1 + sp2 * 10 ^ 13 * Q2) * 10 ^ 13))
+      + 6 * 10 ^ 6 : ℤ) : ℚ) / (2 * 10 ^ 16)
+    = RationalApprox.sqrtApprox16.upper_sqrt.f
+        (((ca : ℚ) / 10 ^ 13 * (-((st1 : ℚ) / 10 ^ 13) * pythonVertex a 0
+              + (ct1 : ℚ) / 10 ^ 13 * pythonVertex a 1)
+            + -((sa : ℚ) / 10 ^ 13) *
+              (-((ct1 : ℚ) / 10 ^ 13) * ((cp1 : ℚ) / 10 ^ 13) * pythonVertex a 0
+                + -((st1 : ℚ) / 10 ^ 13) * ((cp1 : ℚ) / 10 ^ 13) * pythonVertex a 1
+                + (sp1 : ℚ) / 10 ^ 13 * pythonVertex a 2)
+            - (-((st2 : ℚ) / 10 ^ 13) * pythonVertex b 0
+                + (ct2 : ℚ) / 10 ^ 13 * pythonVertex b 1))
+          * ((ca : ℚ) / 10 ^ 13 * (-((st1 : ℚ) / 10 ^ 13) * pythonVertex a 0
+              + (ct1 : ℚ) / 10 ^ 13 * pythonVertex a 1)
+            + -((sa : ℚ) / 10 ^ 13) *
+              (-((ct1 : ℚ) / 10 ^ 13) * ((cp1 : ℚ) / 10 ^ 13) * pythonVertex a 0
+                + -((st1 : ℚ) / 10 ^ 13) * ((cp1 : ℚ) / 10 ^ 13) * pythonVertex a 1
+                + (sp1 : ℚ) / 10 ^ 13 * pythonVertex a 2)
+            - (-((st2 : ℚ) / 10 ^ 13) * pythonVertex b 0
+                + (ct2 : ℚ) / 10 ^ 13 * pythonVertex b 1))
+          + ((sa : ℚ) / 10 ^ 13 * (-((st1 : ℚ) / 10 ^ 13) * pythonVertex a 0
+              + (ct1 : ℚ) / 10 ^ 13 * pythonVertex a 1)
+            + (ca : ℚ) / 10 ^ 13 *
+              (-((ct1 : ℚ) / 10 ^ 13) * ((cp1 : ℚ) / 10 ^ 13) * pythonVertex a 0
+                + -((st1 : ℚ) / 10 ^ 13) * ((cp1 : ℚ) / 10 ^ 13) * pythonVertex a 1
+                + (sp1 : ℚ) / 10 ^ 13 * pythonVertex a 2)
+            - (-((ct2 : ℚ) / 10 ^ 13) * ((cp2 : ℚ) / 10 ^ 13) * pythonVertex b 0
+                + -((st2 : ℚ) / 10 ^ 13) * ((cp2 : ℚ) / 10 ^ 13) * pythonVertex b 1
+                + (sp2 : ℚ) / 10 ^ 13 * pythonVertex b 2))
+          * ((sa : ℚ) / 10 ^ 13 * (-((st1 : ℚ) / 10 ^ 13) * pythonVertex a 0
+              + (ct1 : ℚ) / 10 ^ 13 * pythonVertex a 1)
+            + (ca : ℚ) / 10 ^ 13 *
+              (-((ct1 : ℚ) / 10 ^ 13) * ((cp1 : ℚ) / 10 ^ 13) * pythonVertex a 0
+                + -((st1 : ℚ) / 10 ^ 13) * ((cp1 : ℚ) / 10 ^ 13) * pythonVertex a 1
+                + (sp1 : ℚ) / 10 ^ 13 * pythonVertex a 2)
+            - (-((ct2 : ℚ) / 10 ^ 13) * ((cp2 : ℚ) / 10 ^ 13) * pythonVertex b 0
+                + -((st2 : ℚ) / 10 ^ 13) * ((cp2 : ℚ) / 10 ^ 13) * pythonVertex b 1
+                + (sp2 : ℚ) / 10 ^ 13 * pythonVertex b 2))) / 2
+      + 3 * RationalApprox.κℚ
+  have hva0 : pythonVertex a 0 = (P0 : ℚ) / 10 ^ 16 := pythonVertexNumCurried_eq a.ℓ a.i a.k 0
+  have hva1 : pythonVertex a 1 = (P1 : ℚ) / 10 ^ 16 := pythonVertexNumCurried_eq a.ℓ a.i a.k 1
+  have hva2 : pythonVertex a 2 = (P2 : ℚ) / 10 ^ 16 := pythonVertexNumCurried_eq a.ℓ a.i a.k 2
+  have hvb0 : pythonVertex b 0 = (Q0 : ℚ) / 10 ^ 16 := pythonVertexNumCurried_eq b.ℓ b.i b.k 0
+  have hvb1 : pythonVertex b 1 = (Q1 : ℚ) / 10 ^ 16 := pythonVertexNumCurried_eq b.ℓ b.i b.k 1
+  have hvb2 : pythonVertex b 2 = (Q2 : ℚ) / 10 ^ 16 := pythonVertexNumCurried_eq b.ℓ b.i b.k 2
+  rw [hva0, hva1, hva2, hvb0, hvb1, hvb2,
+    show RationalApprox.sqrtApprox16.upper_sqrt.f = RationalApprox.sqrtℚUp16 from rfl,
+    show RationalApprox.κℚ = 1 / 10 ^ 10 from rfl]
+  refine sqrtNum110_step _ _ ?_
+  push_cast
+  ring
+
 end Row.δ
 
 /-- The δ bound for a row: `max_i ‖R·M₁·P_i − M₂·Q_i‖ / 2 + 3κ`.
@@ -192,9 +352,15 @@ Equivalent to `Finset.max' (Finset.image BoundDeltaℚi univ) _` (see
 `Row.δ_eq_max'_BoundDeltaℚi`), but the trig partial sums are hoisted once
 per pose for a ~6× runtime speedup. -/
 def Row.δ (row : Row) : ℚ :=
-  let t := Row.δ.PoseTrigQ.ofPose row.interval.centerPose
+  let t := Row.δ.PoseTrigN.ofPose row.interval.centerPose
   let f : Fin 3 → ℚ := fun i =>
-    Row.δ.boundDelta_at t (pythonVertex (row.Pi i)) (pythonVertex (row.Qi i))
+    let a := row.Pi i
+    let b := row.Qi i
+    ((Row.δ.boundDeltaN t
+        (pythonVertexNumCurried a.ℓ a.i a.k 0) (pythonVertexNumCurried a.ℓ a.i a.k 1)
+        (pythonVertexNumCurried a.ℓ a.i a.k 2) (pythonVertexNumCurried b.ℓ b.i b.k 0)
+        (pythonVertexNumCurried b.ℓ b.i b.k 1) (pythonVertexNumCurried b.ℓ b.i b.k 2)
+        + 6 * 10 ^ 6 : ℤ) : ℚ) / (2 * 10 ^ 16)
   Finset.max' (Finset.image f Finset.univ)
     (Finset.image_nonempty.mpr ⟨0, Finset.mem_univ 0⟩)
 
@@ -204,16 +370,25 @@ theorem Row.δ_eq_max'_BoundDeltaℚi (row : Row) :
         (pythonVertex ∘ row.Pi) (pythonVertex ∘ row.Qi) sqrtApprox16) Finset.univ)
       (Finset.image_nonempty.mpr ⟨0, Finset.mem_univ 0⟩) := by
   show (Finset.image
-        (fun i => Row.δ.boundDelta_at (Row.δ.PoseTrigQ.ofPose row.interval.centerPose)
-          (pythonVertex (row.Pi i)) (pythonVertex (row.Qi i))) Finset.univ).max' _ =
+        (fun i => ((Row.δ.boundDeltaN
+            (Row.δ.PoseTrigN.ofPose row.interval.centerPose)
+            (pythonVertexNumCurried (row.Pi i).ℓ (row.Pi i).i (row.Pi i).k 0)
+            (pythonVertexNumCurried (row.Pi i).ℓ (row.Pi i).i (row.Pi i).k 1)
+            (pythonVertexNumCurried (row.Pi i).ℓ (row.Pi i).i (row.Pi i).k 2)
+            (pythonVertexNumCurried (row.Qi i).ℓ (row.Qi i).i (row.Qi i).k 0)
+            (pythonVertexNumCurried (row.Qi i).ℓ (row.Qi i).i (row.Qi i).k 1)
+            (pythonVertexNumCurried (row.Qi i).ℓ (row.Qi i).i (row.Qi i).k 2)
+            + 6 * 10 ^ 6 : ℤ) : ℚ) / (2 * 10 ^ 16)) Finset.univ).max' _ =
       (Finset.image
         (RationalApprox.LocalTheorem.BoundDeltaℚi row.interval.centerPose
           (pythonVertex ∘ row.Pi) (pythonVertex ∘ row.Qi) sqrtApprox16) Finset.univ).max' _
   congr 1
   apply Finset.image_congr
   intro i _
-  unfold RationalApprox.LocalTheorem.BoundDeltaℚi
-  exact Row.δ.boundDelta_at_eq _ _ _
+  dsimp only
+  rw [Row.δ.boundDeltaN_div_eq row.interval.centerPose (row.Pi i) (row.Qi i),
+    Row.δ.boundDelta_at_eq]
+  rfl
 
 /-! ### Precomputed pairwise vertex-difference norms for `Bεℚ`
 

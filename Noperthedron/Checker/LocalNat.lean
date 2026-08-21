@@ -695,4 +695,225 @@ instance (priority := 10600) instDecidableBoundRPy (r ε : ℚ) (p : Pose ℚ)
 
 end Noperthedron.Solution.BεℚPy
 
+namespace Noperthedron.Solution
+
+open Noperthedron RationalApprox
+
+/-! ## Integer rendering of the `Aεℚσ` conjunct (for `X = vecXℚ θ φ`)
+
+`Aεℚσ` is an exact ℚ inequality (no rounding), so the integer form is a pure
+cross-multiplication: the `vecXℚ` components are `10²⁶`-scale numerators
+(products of two `10¹³` trig numerators), vertices are `10¹⁶`-scale, and the
+comparison against `√2⁺·ε + 3κℚ` is multiplied through by the positive
+denominator product `50·ε.den·10⁴²`. -/
+
+namespace AεℚPy
+
+/-- Integer rendering of `Aεℚσ.check` at `X = vecXℚ θ φ`. -/
+def checkN (θ φ : ℚ) (idx : Fin 3 → VertexIndex) (ε : ℚ) (σ : ℕ) : Bool :=
+  let stN : ℤ := sinNum13 θ
+  let ctN : ℤ := cosNum13 θ
+  let spN : ℤ := sinNum13 φ
+  let cpN : ℤ := cosNum13 φ
+  let sg : ℤ := (-1) ^ σ
+  let x0 := sg * (ctN * spN)                    -- scale 10²⁶
+  let x1 := sg * (stN * spN)
+  let x2 := sg * (cpN * 10 ^ 13)
+  let εn : ℤ := ε.num
+  let εd : ℤ := ε.den
+  let rhsN := 71 * εn * 10 ^ 42 + 150 * εd * 10 ^ 32
+  (List.finRange 3).all fun i =>
+    let a := idx i
+    let w0 := pythonVertexNumCurried a.ℓ a.i a.k 0
+    let w1 := pythonVertexNumCurried a.ℓ a.i a.k 1
+    let w2 := pythonVertexNumCurried a.ℓ a.i a.k 2
+    decide (rhsN < 50 * εd * (x0 * w0 + x1 * w1 + x2 * w2))
+
+/-- One `i` of `checkN` decides the corresponding test of `Aεℚσ.check`. -/
+private lemma a_test_iff (X0 X1 X2 w0 w1 w2 : ℤ)
+    {xq0 xq1 xq2 wq0 wq1 wq2 : ℚ} (ε : ℚ)
+    (hx0 : xq0 = (X0 : ℚ) / 10 ^ 26) (hx1 : xq1 = (X1 : ℚ) / 10 ^ 26)
+    (hx2 : xq2 = (X2 : ℚ) / 10 ^ 26)
+    (hw0 : wq0 = (w0 : ℚ) / 10 ^ 16) (hw1 : wq1 = (w1 : ℚ) / 10 ^ 16)
+    (hw2 : wq2 = (w2 : ℚ) / 10 ^ 16) :
+    (71 * ε.num * 10 ^ 42 + 150 * (ε.den : ℤ) * 10 ^ 32
+      < 50 * (ε.den : ℤ) * (X0 * w0 + X1 * w1 + X2 * w2))
+    ↔ RationalApprox.sqrtApprox16.upper_sqrt_two * ε + 3 * RationalApprox.κℚ
+        < xq0 * wq0 + xq1 * wq1 + xq2 * wq2 := by
+  have h2c : RationalApprox.sqrtApprox16.upper_sqrt_two = 71 / 50 := by
+    norm_num [RationalApprox.sqrtApprox16]
+  have hκc : RationalApprox.κℚ = 1 / 10 ^ 10 := rfl
+  rw [hx0, hx1, hx2, hw0, hw1, hw2, h2c, hκc]
+  rw [show (X0 : ℚ) / 10 ^ 26 * ((w0 : ℚ) / 10 ^ 16) + (X1 : ℚ) / 10 ^ 26 * ((w1 : ℚ) / 10 ^ 16)
+        + (X2 : ℚ) / 10 ^ 26 * ((w2 : ℚ) / 10 ^ 16)
+        = ((X0 * w0 + X1 * w1 + X2 * w2 : ℤ) : ℚ) / 10 ^ 42 from by push_cast; ring]
+  set en := ε.num with hen
+  set ed : ℤ := (ε.den : ℤ) with hed
+  have hed_pos : (0:ℤ) < ed := by rw [hed]; exact_mod_cast ε.pos
+  have hedQ : (0:ℚ) < (ed : ℚ) := by exact_mod_cast hed_pos
+  have hεq : ε = (en : ℚ) / (ed : ℚ) := by
+    rw [hen, hed]; push_cast; exact (Rat.num_div_den ε).symm
+  rw [hεq]
+  constructor <;> intro h <;> qify at h ⊢ <;> field_simp at h ⊢ <;> linarith
+
+/-- The integer core computes exactly the ℚ `Aεℚσ` check at `X = vecXℚ θ φ`. -/
+theorem checkN_eq_check (θ φ : ℚ) (idx : Fin 3 → VertexIndex) (ε : ℚ) (σ : ℕ) :
+    checkN θ φ idx ε σ
+      = Local.TriangleQ.Aεℚσ.check (vecXℚ θ φ) (pythonVertexA ∘ idx) ε σ
+          RationalApprox.sqrtApprox16 := by
+  have hx0 : ((-1:ℚ)) ^ σ * vecXℚ θ φ 0
+      = (((-1) ^ σ * (cosNum13 θ * sinNum13 φ) : ℤ) : ℚ) / 10 ^ 26 := by
+    show ((-1:ℚ)) ^ σ * (cosℚ θ * sinℚ φ) = _
+    rw [← cosNum13_div_eq θ, ← sinNum13_div_eq φ]
+    push_cast
+    ring
+  have hx1 : ((-1:ℚ)) ^ σ * vecXℚ θ φ 1
+      = (((-1) ^ σ * (sinNum13 θ * sinNum13 φ) : ℤ) : ℚ) / 10 ^ 26 := by
+    show ((-1:ℚ)) ^ σ * (sinℚ θ * sinℚ φ) = _
+    rw [← sinNum13_div_eq θ, ← sinNum13_div_eq φ]
+    push_cast
+    ring
+  have hx2 : ((-1:ℚ)) ^ σ * vecXℚ θ φ 2
+      = (((-1) ^ σ * (cosNum13 φ * 10 ^ 13) : ℤ) : ℚ) / 10 ^ 26 := by
+    show ((-1:ℚ)) ^ σ * cosℚ φ = _
+    rw [← cosNum13_div_eq φ]
+    push_cast
+    ring
+  rw [Bool.eq_iff_iff]
+  unfold checkN Local.TriangleQ.Aεℚσ.check
+  simp only [List.all_eq_true, List.mem_finRange, forall_const, decide_eq_true_eq,
+    Function.comp_apply]
+  refine forall_congr' fun i => ?_
+  exact a_test_iff _ _ _ _ _ _ ε hx0 hx1 hx2
+    (BεℚPy.pythonVertexA_intCast (idx i) 0) (BεℚPy.pythonVertexA_intCast (idx i) 1)
+    (BεℚPy.pythonVertexA_intCast (idx i) 2)
+
+/-- `Aεℚσ` at `X = vecXℚ θ φ` decided through the integer core.
+Out-prioritizes `Aεℚσ.instDecidablePyV` (`Checker/Local.lean`); picked up by
+the re-derived `Row.ValidLocal` instance in `Checker/LocalFastNat.lean`. -/
+instance (priority := 10600) instDecidableAPyN (θ φ : ℚ) (idx : Fin 3 → VertexIndex)
+    (ε : ℚ) (σ : ℕ) :
+    Decidable (Local.TriangleQ.Aεℚσ (vecXℚ θ φ) (pythonVertexA ∘ idx) ε σ
+      RationalApprox.sqrtApprox16) :=
+  decidable_of_iff (checkN θ φ idx ε σ = true)
+    (by rw [checkN_eq_check]
+        exact Local.TriangleQ.Aεℚσ.check_iff _ _ _ _ _)
+
+end AεℚPy
+
+/-! ## Integer rendering of the `Spanningℚ` conjunct
+
+Also an exact ℚ inequality.  Both factors of each spanning product are
+`10⁴²`-scale dots (matrix rows at `10²⁶` × vertices at `10¹⁶`), so the
+products sit at `10⁸⁴`; the comparison against `2ε(√2⁺+ε) + 6κℚ` is
+multiplied through by `50·ε.den²·10⁸⁴`. -/
+
+namespace SpanningPy
+
+/-- Integer rendering of `Spanningℚ.check`. -/
+def checkN (θ φ ε : ℚ) (idx : Fin 3 → VertexIndex) : Bool :=
+  let stN : ℤ := sinNum13 θ
+  let ctN : ℤ := cosNum13 θ
+  let spN : ℤ := sinNum13 φ
+  let cpN : ℤ := cosNum13 φ
+  let E00 := -stN * 10 ^ 13                     -- rows at scale 10²⁶
+  let E01 := ctN * 10 ^ 13
+  let E10 := -(ctN * cpN)
+  let E11 := -(stN * cpN)
+  let E12 := spN * 10 ^ 13
+  let εn : ℤ := ε.num
+  let εd : ℤ := ε.den
+  let lhsN := 2 * εn * (71 * εd + 50 * εn) * 10 ^ 84 + 300 * εd ^ 2 * 10 ^ 74
+  (List.finRange 3).all fun i =>
+    let a := idx i
+    let b := idx (i + 1)
+    let v0 := pythonVertexNumCurried a.ℓ a.i a.k 0
+    let v1 := pythonVertexNumCurried a.ℓ a.i a.k 1
+    let v2 := pythonVertexNumCurried a.ℓ a.i a.k 2
+    let w0 := pythonVertexNumCurried b.ℓ b.i b.k 0
+    let w1 := pythonVertexNumCurried b.ℓ b.i b.k 1
+    let w2 := pythonVertexNumCurried b.ℓ b.i b.k 2
+    let r0v := E00 * v0 + E01 * v1               -- scale 10⁴²
+    let r1v := E10 * v0 + E11 * v1 + E12 * v2
+    let r0w := E00 * w0 + E01 * w1
+    let r1w := E10 * w0 + E11 * w1 + E12 * w2
+    decide (lhsN < 50 * εd ^ 2 * (-r1v * r0w + r0v * r1w))
+
+/-- One `i` of `checkN` decides the corresponding test of `Spanningℚ.check`. -/
+private lemma s_test_iff (stN ctN spN cpN v0 v1 v2 w0 w1 w2 : ℤ)
+    {stq ctq spq cpq vq0 vq1 vq2 wq0 wq1 wq2 : ℚ} (ε : ℚ)
+    (hst : stq = (stN : ℚ) / 10 ^ 13) (hct : ctq = (ctN : ℚ) / 10 ^ 13)
+    (hsp : spq = (spN : ℚ) / 10 ^ 13) (hcp : cpq = (cpN : ℚ) / 10 ^ 13)
+    (hv0 : vq0 = (v0 : ℚ) / 10 ^ 16) (hv1 : vq1 = (v1 : ℚ) / 10 ^ 16)
+    (hv2 : vq2 = (v2 : ℚ) / 10 ^ 16)
+    (hw0 : wq0 = (w0 : ℚ) / 10 ^ 16) (hw1 : wq1 = (w1 : ℚ) / 10 ^ 16)
+    (hw2 : wq2 = (w2 : ℚ) / 10 ^ 16) :
+    (2 * ε.num * (71 * (ε.den : ℤ) + 50 * ε.num) * 10 ^ 84
+        + 300 * (ε.den : ℤ) ^ 2 * 10 ^ 74
+      < 50 * (ε.den : ℤ) ^ 2 *
+          (-(-(ctN * cpN) * v0 + -(stN * cpN) * v1 + spN * 10 ^ 13 * v2)
+              * (-stN * 10 ^ 13 * w0 + ctN * 10 ^ 13 * w1)
+            + (-stN * 10 ^ 13 * v0 + ctN * 10 ^ 13 * v1)
+              * (-(ctN * cpN) * w0 + -(stN * cpN) * w1 + spN * 10 ^ 13 * w2)))
+    ↔ 2 * ε * (sqrt_twoℚ + ε) + 6 * RationalApprox.κℚ
+        < -(-ctq * cpq * vq0 + -stq * cpq * vq1 + spq * vq2) * (-stq * wq0 + ctq * wq1)
+          + (-stq * vq0 + ctq * vq1) * (-ctq * cpq * wq0 + -stq * cpq * wq1 + spq * wq2) := by
+  have h2c : sqrt_twoℚ = 71 / 50 := by norm_num [sqrt_twoℚ]
+  have hκc : RationalApprox.κℚ = 1 / 10 ^ 10 := rfl
+  rw [hst, hct, hsp, hcp, hv0, hv1, hv2, hw0, hw1, hw2, h2c, hκc]
+  rw [show -(-((ctN : ℚ) / 10 ^ 13) * ((cpN : ℚ) / 10 ^ 13) * ((v0 : ℚ) / 10 ^ 16)
+          + -((stN : ℚ) / 10 ^ 13) * ((cpN : ℚ) / 10 ^ 13) * ((v1 : ℚ) / 10 ^ 16)
+          + (spN : ℚ) / 10 ^ 13 * ((v2 : ℚ) / 10 ^ 16))
+          * (-((stN : ℚ) / 10 ^ 13) * ((w0 : ℚ) / 10 ^ 16)
+            + (ctN : ℚ) / 10 ^ 13 * ((w1 : ℚ) / 10 ^ 16))
+        + (-((stN : ℚ) / 10 ^ 13) * ((v0 : ℚ) / 10 ^ 16)
+            + (ctN : ℚ) / 10 ^ 13 * ((v1 : ℚ) / 10 ^ 16))
+          * (-((ctN : ℚ) / 10 ^ 13) * ((cpN : ℚ) / 10 ^ 13) * ((w0 : ℚ) / 10 ^ 16)
+            + -((stN : ℚ) / 10 ^ 13) * ((cpN : ℚ) / 10 ^ 13) * ((w1 : ℚ) / 10 ^ 16)
+            + (spN : ℚ) / 10 ^ 13 * ((w2 : ℚ) / 10 ^ 16))
+        = ((-(-(ctN * cpN) * v0 + -(stN * cpN) * v1 + spN * 10 ^ 13 * v2)
+              * (-stN * 10 ^ 13 * w0 + ctN * 10 ^ 13 * w1)
+            + (-stN * 10 ^ 13 * v0 + ctN * 10 ^ 13 * v1)
+              * (-(ctN * cpN) * w0 + -(stN * cpN) * w1 + spN * 10 ^ 13 * w2) : ℤ) : ℚ)
+          / 10 ^ 84 from by push_cast; ring]
+  set en := ε.num with hen
+  set ed : ℤ := (ε.den : ℤ) with hed
+  have hed_pos : (0:ℤ) < ed := by rw [hed]; exact_mod_cast ε.pos
+  have hedQ : (0:ℚ) < (ed : ℚ) := by exact_mod_cast hed_pos
+  have hεq : ε = (en : ℚ) / (ed : ℚ) := by
+    rw [hen, hed]; push_cast; exact (Rat.num_div_den ε).symm
+  rw [hεq]
+  constructor <;> intro h <;> qify at h ⊢ <;> field_simp at h ⊢ <;> linarith
+
+/-- The integer core computes exactly the ℚ spanning check. -/
+theorem checkN_eq_check (θ φ ε : ℚ) (idx : Fin 3 → VertexIndex) :
+    checkN θ φ ε idx = Spanningℚ.check θ φ ε (pythonVertexA ∘ idx) := by
+  have hst := (sinNum13_div_eq θ).symm
+  have hct := (cosNum13_div_eq θ).symm
+  have hsp := (sinNum13_div_eq φ).symm
+  have hcp := (cosNum13_div_eq φ).symm
+  rw [Bool.eq_iff_iff]
+  unfold checkN Spanningℚ.check
+  simp only [List.all_eq_true, List.mem_finRange, forall_const, decide_eq_true_eq,
+    Function.comp_apply]
+  refine forall_congr' fun i => ?_
+  exact s_test_iff _ _ _ _ _ _ _ _ _ _ ε hst hct hsp hcp
+    (BεℚPy.pythonVertexA_intCast (idx i) 0) (BεℚPy.pythonVertexA_intCast (idx i) 1)
+    (BεℚPy.pythonVertexA_intCast (idx i) 2)
+    (BεℚPy.pythonVertexA_intCast (idx (i + 1)) 0)
+    (BεℚPy.pythonVertexA_intCast (idx (i + 1)) 1)
+    (BεℚPy.pythonVertexA_intCast (idx (i + 1)) 2)
+
+/-- `Spanningℚ` decided through the integer core. Out-prioritizes
+`Spanningℚ.instDecidablePyV` (`Checker/Local.lean`). -/
+instance (priority := 10600) instDecidableSPyN (θ φ ε : ℚ) (idx : Fin 3 → VertexIndex) :
+    Decidable (Spanningℚ θ φ ε (pythonVertexA ∘ idx)) :=
+  decidable_of_iff (checkN θ φ ε idx = true)
+    (by rw [checkN_eq_check]
+        exact Spanningℚ.check_iff _ _ _ _)
+
+end SpanningPy
+
+end Noperthedron.Solution
+
 end
