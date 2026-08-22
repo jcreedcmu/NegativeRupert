@@ -6,7 +6,6 @@ public import Noperthedron.Checker.Global
 public import Noperthedron.Checker.LocalNat
 public import Noperthedron.Checker.LocalFastNat
 public import Noperthedron.Checker.Local2
-public import Noperthedron.Checker.Local2Nat
 
 @[expose] public section
 

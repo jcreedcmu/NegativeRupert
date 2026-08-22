@@ -3,6 +3,12 @@ module
 public import Lean
 public import Noperthedron.SolutionTable.Basic
 public import Noperthedron.SolutionTable.Parse
+-- Kernel-speed instances: `Load` is consumed only by the kernel pipeline
+-- (the generated `KernelCaseAnalysis/Gen` files and `Smoke`), so `leafOk`
+-- and everything downstream decide through the `Local2Nat` integer core.
+-- The native pipeline imports `Assemble`/`Parse` directly and must NOT
+-- acquire this import (see `KernelInstances.lean`).
+public import Noperthedron.SolutionTable.KernelInstances
 -- The `Load` namespace runs at the meta phase (Expr builders + `elab`
 -- commands) and consumes these modules' types/functions there.
 public meta import Lean
