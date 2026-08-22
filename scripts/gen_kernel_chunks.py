@@ -13,7 +13,7 @@ Phases (pass as argv[1]):
 """
 import sys, os
 
-N = 2051521
+N = 1119311
 C = 512
 ROWS_PER_LOAD = 8192
 NCHUNKS = (N + C - 1) // C          # 4007
@@ -36,12 +36,12 @@ public meta import Noperthedron.SolutionTable.Load
 @[expose] public section
 
 /-! GENERATED (scripts/gen_kernel_chunks.py): rows [{a}, {b}) of the solution
-tree as literal 512-row chunks. Requires `solution_tree_v6.csv` at the repo
+tree as literal 512-row chunks. Requires `solution_tree_v7.csv` at the repo
 root. -/
 
 namespace Noperthedron.Solution
 
-load_csv_chunks_curried "solution_tree_v6.csv" from {a} to {b} chunkSize {C}
+load_csv_chunks_curried "solution_tree_v7.csv" from {a} to {b} chunkSize {C}
 
 end Noperthedron.Solution
 
@@ -79,7 +79,7 @@ def read_node_types():
     """Row cost classes: 1 = global, 2 = local, 3 = small split
     (nrChildren < 15), 4 = full split (nrChildren >= 15)."""
     types = []
-    with open('solution_tree_v6.csv') as f:
+    with open('solution_tree_v7.csv') as f:
         next(f)
         for line in f:
             parts = line.split(',', 3)
@@ -90,17 +90,16 @@ def read_node_types():
     assert len(types) == N, len(types)
     return types
 
-# per-row kernel memory (MB) and time (s) model, recalibrated 2026-07-10
-# after the all-Nat fast checkers (Checker/GlobalNat, Checker/LocalFastNat),
-# the packed vertex/pair-norm tables, and the curried O(log) getter
-# (rowGetterC):
-# globals ~32 ms (1-row RangeOk probes at 8018..8025), locals ~139 ms
-# (2-row leafOk probe at 1008268 + getter), small splits ~15 ms and
-# 30-child splits ~88 ms (RangeOk probes rows 25..65 / 1..5 through an
-# imported mini dispatch). Times carry ~20% margin; memory kept at the
-# conservative pre-fast-path values (the fast paths build smaller caches).
-COST_MB = {1: 25, 2: 175, 3: 21, 4: 130}
-COST_S  = {1: 0.038, 2: 0.17, 3: 0.018, 4: 0.10}
+# per-row kernel memory (MB) and time (s) model, recalibrated 2026-08-22 for
+# the v7 table: globals/splits keep the 2026-07-10 numbers (unchanged
+# checkers); locals are budgeted at the SECOND-ORDER cost (Row.ValidLocal₂
+# via the Local2Nat Newton tier: ~3.6 s beFastN + ~0.35 s δ₂ + first-order
+# fast-fail, measured at rows 245/905802; peak RSS 4.7 GB ≈ 2 GB above the
+# ~2.6 GB floor). The 670 first-order local rows (of 17,938) are
+# over-budgeted by this — negligible. COST_MB[2] > MB_BUDGET makes every
+# local row its own decide-range, which also caps the per-decide envelope.
+COST_MB = {1: 25, 2: 2000, 3: 21, 4: 130}
+COST_S  = {1: 0.038, 2: 4.3, 3: 0.018, 4: 0.10}
 # MB_BUDGET sets per-decide range length (range rows ~= MB_BUDGET/COST_MB),
 # and kernel time per row RISES with range length: the whnf cache accumulated
 # across a decide grows the live heap and hurts locality. Measured 2026-07-17
