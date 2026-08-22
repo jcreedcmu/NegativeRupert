@@ -392,7 +392,7 @@ def apps6 (g : Fam2) : List App6 :=
 def apps6Get (t : List App6) (a : VertexIndex) : App6 :=
   t[45 * a.ℓ.val + 15 * a.i.val + a.k.val]!
 
-private lemma apps6Get_apps6 (g : Fam2) (a : VertexIndex) :
+lemma apps6Get_apps6 (g : Fam2) (a : VertexIndex) :
     apps6Get (apps6 g) a = app6 g (pythonVertexA a) := by
   obtain ⟨ka, ℓa, ia⟩ := a
   have h1 := ℓa.isLt
