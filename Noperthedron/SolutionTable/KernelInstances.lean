@@ -9,14 +9,17 @@ public import Noperthedron.Checker.Local2Nat
 # Kernel-speed `Decidable` instances for the row-validity chain
 
 The `Local2Nat` integer core makes `decide +kernel` of a second-order local
-row ~15× faster (64.5s → ~4.3s), but pulling it into the *native* checker's
-call graph is a disaster of a different kind: `native_decide` compiles its
-whole call graph in-process on every invocation, and the `Local2Nat`
-literal tables (34k-case `sqrtDvCurriedN` etc.) push that fixed cost to
-~10 minutes.  `SolutionTable/Basic` therefore deliberately does **not**
-import `Local2Nat` — the shared/native instance chain stays on the compiled
-ℚ checkers — and this module re-derives the validity chain with the
-`Local2Nat` instances in scope, at a priority that beats the `Basic` /
+row ~15× faster (64.5s → ~4.3s), but it is hostile to the *native* checker:
+`native_decide` evaluates under the Lean interpreter (see `Lean.reduceBool`),
+where only `@[extern]`/builtin primitives run at native speed.  The ℚ
+checkers spend their time inside GMP-backed `Rat` primitives and interpret
+tolerably, while the integer core is interpreter-bound glue — Newton loops,
+per-pair folds, and the 34k-case `sqrtDvCurriedN` match (indexed dispatch
+when AOT-compiled, structural evaluation when interpreted) — costing
+~10 minutes per run.  `SolutionTable/Basic` therefore deliberately does
+**not** import `Local2Nat` — the shared/native instance chain stays on the
+compiled ℚ checkers — and this module re-derives the validity chain with
+the `Local2Nat` instances in scope, at a priority that beats the `Basic` /
 `Assemble` instances.
 
 Import this module (it is reached via `SolutionTable/Load`) only from the
@@ -48,8 +51,8 @@ instance (priority := 10600) (get : ℕ → Row) (size a b : ℕ) :
 /-!
 ## The parallel check chain, re-elaborated with these instances
 
-`constructValidTable` is compiled ahead of time, so the call-graph size
-that rules `Local2Nat` out of `native_decide` costs it nothing — and the
+`constructValidTable` is compiled ahead of time, so the interpreter costs
+that rule `Local2Nat` out of `native_decide` don't apply to it — and the
 integer core is ~5× faster per second-order local row than the compiled ℚ
 route (7.4ms vs 38ms).  These are verbatim copies of the `Assemble`
 definitions, elaborated here so the baked `decide`s route through the

@@ -2,8 +2,8 @@ import Noperthedron.SolutionTable.Assemble
 import Noperthedron.SolutionTable.Parse
 -- Kernel-speed instances (Local2Nat integer core) and the `…K` rendering of
 -- the parallel check: this exe is compiled ahead of time, so unlike
--- `native_decide` it pays nothing for the large call graph and gets the
--- ~5×-faster second-order local checks.
+-- `native_decide` (which runs under the Lean interpreter) it executes the
+-- integer core at full native speed — ~5× faster second-order local checks.
 import Noperthedron.SolutionTable.KernelInstances
 
 /-!
