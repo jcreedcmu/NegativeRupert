@@ -180,6 +180,53 @@ def appO (rc : RCO) (j : ℕ) : A6O :=
     f1 := Nat.add (Nat.add (Nat.add (Nat.mul rc.cf1_0 w0) (Nat.mul rc.cf1_1 w1))
       (Nat.mul rc.cf1_2 w2)) rc.Kf1 - Nat.mul BcO s3 }
 
+/-- `BFO²` and `2·BFO`, prefolded. -/
+def BF2O : ℕ := Nat.mul BFO BFO
+def BFO2x : ℕ := Nat.mul 2 BFO
+
+/-- Branchless offset square: `(d̂ − BFO)²` for `d̂` within range. -/
+def sqdO (dh : ℕ) : ℕ := Nat.add (Nat.mul dh dh) BF2O - Nat.mul BFO2x dh
+
+/-- Offset square of a pos/neg split value. -/
+def sqsO (pp nn : ℕ) : ℕ := Nat.mul (Nat.add pp nn) (Nat.add pp nn)
+
+/-- Two-term dot accumulator (one side of the sign split). -/
+def dotPO (q0 q1 d0 d1 x : ℕ) : ℕ :=
+  Nat.add (Nat.add (Nat.mul q0 d0) (Nat.mul q1 d1)) x
+
+/-- Two-term abs atom: `|q₀·d₀ + q₁·d₁| + slack` over offset/split data. -/
+def atomA2 (qP0 qN0 qP1 qN1 d0 d1 xP xN slack : ℕ) : ℕ :=
+  let p := Nat.add (Nat.add (Nat.mul qP0 d0) (Nat.mul qP1 d1)) xN
+  let n := Nat.add (Nat.add (Nat.mul qN0 d0) (Nat.mul qN1 d1)) xP
+  Nat.add (if n ≤ p then p - n else n - p) slack
+
+/-- Three-term abs atom. -/
+def atomA3 (qP0 qN0 qP1 qN1 qP2 qN2 d0 d1 d2 xP xN slack : ℕ) : ℕ :=
+  let p := Nat.add (Nat.add (Nat.add (Nat.mul qP0 d0) (Nat.mul qP1 d1))
+    (Nat.mul qP2 d2)) xN
+  let n := Nat.add (Nat.add (Nat.add (Nat.mul qN0 d0) (Nat.mul qN1 d1))
+    (Nat.mul qN2 d2)) xP
+  Nat.add (if n ≤ p then p - n else n - p) slack
+
+/-- Four-term abs atom. -/
+def atomA4 (qP0 qN0 qP1 qN1 qP2 qN2 qP3 qN3 d0 d1 d2 d3 xP xN slack : ℕ) : ℕ :=
+  let p := Nat.add (Nat.add (Nat.add (Nat.add (Nat.mul qP0 d0) (Nat.mul qP1 d1))
+    (Nat.mul qP2 d2)) (Nat.mul qP3 d3)) xN
+  let n := Nat.add (Nat.add (Nat.add (Nat.add (Nat.mul qN0 d0) (Nat.mul qN1 d1))
+    (Nat.mul qN2 d2)) (Nat.mul qN3 d3)) xP
+  Nat.add (if n ≤ p then p - n else n - p) slack
+
+/-- Six-term abs atom. -/
+def atomA6 (qP0 qN0 qP1 qN1 qP2 qN2 qP3 qN3 qP4 qN4 qP5 qN5
+    d0 d1 d2 d3 d4 d5 xP xN slack : ℕ) : ℕ :=
+  let p := Nat.add (Nat.add (Nat.add (Nat.add (Nat.add (Nat.add
+    (Nat.mul qP0 d0) (Nat.mul qP1 d1)) (Nat.mul qP2 d2)) (Nat.mul qP3 d3))
+    (Nat.mul qP4 d4)) (Nat.mul qP5 d5)) xN
+  let n := Nat.add (Nat.add (Nat.add (Nat.add (Nat.add (Nat.add
+    (Nat.mul qN0 d0) (Nat.mul qN1 d1)) (Nat.mul qN2 d2)) (Nat.mul qN3 d3))
+    (Nat.mul qN4 d4)) (Nat.mul qN5 d5)) xP
+  Nat.add (if n ≤ p then p - n else n - p) slack
+
 /-- Per-corner data: the `Qi i` fields pos/neg split, `q̂ + BFO` for the
 one-`Nat.sub` `dq`, the per-atom offset-correction constants, `D1N`, and
 the pre-shifted pair-norm row. -/
@@ -200,15 +247,14 @@ def qcO (rc : RCO) (jq : ℕ) : QCO :=
   let d1P := q.d1 - BFO; let d1N := BFO - q.d1
   let e1P := q.e1 - BFO; let e1N := BFO - q.e1
   let f1P := q.f1 - BFO; let f1N := BFO - q.f1
-  let sq := fun (pp nn : ℕ) => Nat.mul (Nat.add pp nn) (Nat.add pp nn)
   let D1N := Nat.add
-    (Nat.mul rc.W (Nat.add (nUpO84 (Nat.add (sq a0P a0N) (sq a1P a1N))) E6x3))
+    (Nat.mul rc.W (Nat.add (nUpO84 (Nat.add (sqsO a0P a0N) (sqsO a1P a1N))) E6x3))
     (budO rc.k1 rc.k2 rc.k3 rc.k4 rc.k5 rc.k6
-      (Nat.add (nUpO84 (Nat.add (sq b0P b0N) (sq b1P b1N))) E6x3)
-      (Nat.add (nUpO84 (sq c1P c1N)) E6x3)
-      (Nat.add (nUpO84 (Nat.add (sq d0P d0N) (sq d1P d1N))) E6x3)
-      (Nat.add (nUpO84 (sq e1P e1N)) E6x3)
-      (Nat.add (nUpO84 (sq f1P f1N)) E6x3) E16)
+      (Nat.add (nUpO84 (Nat.add (sqsO b0P b0N) (sqsO b1P b1N))) E6x3)
+      (Nat.add (nUpO84 (sqsO c1P c1N)) E6x3)
+      (Nat.add (nUpO84 (Nat.add (sqsO d0P d0N) (sqsO d1P d1N))) E6x3)
+      (Nat.add (nUpO84 (sqsO e1P e1N)) E6x3)
+      (Nat.add (nUpO84 (sqsO f1P f1N)) E6x3) E16)
   { a0P := a0P, a0N := a0N, a1P := a1P, a1N := a1N,
     b0P := b0P, b0N := b0N, b1P := b1P, b1N := b1N,
     c1P := c1P, c1N := c1N, d0P := d0P, d0N := d0N,
@@ -233,63 +279,46 @@ def qcO (rc : RCO) (jq : ℕ) : QCO :=
     D1N := D1N,
     qrow := Nat.land (Nat.shiftRight sqrtDvBig (Nat.mul 5130 jq)) M5130 }
 
-/-- The all-`Nat` pair test at flat index `j`. -/
-def pairO (rc : RCO) (qc : QCO) (j : ℕ) : Bool :=
-  let v := appO rc j
-  let da0 := qc.pa0 - v.a0; let da1 := qc.pa1 - v.a1
-  let db0 := qc.pb0 - v.b0; let db1 := qc.pb1 - v.b1
-  let dc1 := qc.pc1 - v.c1
-  let dd0 := qc.pd0 - v.d0; let dd1 := qc.pd1 - v.d1
-  let de1 := qc.pe1 - v.e1
-  let df1 := qc.pf1 - v.f1
-  let nrmN := Nat.add (Nat.land (Nat.shiftRight qc.qrow (Nat.mul 57 j)) M57) E6x2
-  let mdA := Nat.add (Nat.add (Nat.mul qc.a0P da0) (Nat.mul qc.a1P da1)) qc.xmN
-  let mdB := Nat.add (Nat.add (Nat.mul qc.a0N da0) (Nat.mul qc.a1N da1)) qc.xmP
-  let p1 := Nat.add (Nat.add (Nat.add (Nat.add (Nat.mul qc.b0P da0)
-    (Nat.mul qc.b1P da1)) (Nat.mul qc.a0P db0)) (Nat.mul qc.a1P db1)) qc.x1N
-  let n1 := Nat.add (Nat.add (Nat.add (Nat.add (Nat.mul qc.b0N da0)
-    (Nat.mul qc.b1N da1)) (Nat.mul qc.a0N db0)) (Nat.mul qc.a1N db1)) qc.x1P
-  let t1 := Nat.add (if n1 ≤ p1 then p1 - n1 else n1 - p1) E74x18
-  let p2 := Nat.add (Nat.add (Nat.mul qc.c1P da1) (Nat.mul qc.a1P dc1)) qc.x2N
-  let n2 := Nat.add (Nat.add (Nat.mul qc.c1N da1) (Nat.mul qc.a1N dc1)) qc.x2P
-  let t2 := Nat.add (if n2 ≤ p2 then p2 - n2 else n2 - p2) E74x18
-  let p3 := Nat.add (Nat.add (Nat.add (Nat.add (Nat.add (Nat.add
-    (Nat.mul qc.d0P da0) (Nat.mul qc.d1P da1)) (Nat.mul (Nat.mul 2 qc.b0P) db0))
-    (Nat.mul (Nat.mul 2 qc.b1P) db1)) (Nat.mul qc.a0P dd0))
-    (Nat.mul qc.a1P dd1)) qc.x3N
-  let n3 := Nat.add (Nat.add (Nat.add (Nat.add (Nat.add (Nat.add
-    (Nat.mul qc.d0N da0) (Nat.mul qc.d1N da1)) (Nat.mul (Nat.mul 2 qc.b0N) db0))
-    (Nat.mul (Nat.mul 2 qc.b1N) db1)) (Nat.mul qc.a0N dd0))
-    (Nat.mul qc.a1N dd1)) qc.x3P
-  let t3 := Nat.add (if n3 ≤ p3 then p3 - n3 else n3 - p3) E74x36
-  let p4 := Nat.add (Nat.add (Nat.add (Nat.add (Nat.mul qc.e1P da1)
-    (Nat.mul qc.b1P dc1)) (Nat.mul qc.c1P db1)) (Nat.mul qc.a1P de1)) qc.x4N
-  let n4 := Nat.add (Nat.add (Nat.add (Nat.add (Nat.mul qc.e1N da1)
-    (Nat.mul qc.b1N dc1)) (Nat.mul qc.c1N db1)) (Nat.mul qc.a1N de1)) qc.x4P
-  let t4 := Nat.add (if n4 ≤ p4 then p4 - n4 else n4 - p4) E74x36
-  let p5 := Nat.add (Nat.add (Nat.add (Nat.mul qc.f1P da1)
-    (Nat.mul (Nat.mul 2 qc.c1P) dc1)) (Nat.mul qc.a1P df1)) qc.x5N
-  let n5 := Nat.add (Nat.add (Nat.add (Nat.mul qc.f1N da1)
-    (Nat.mul (Nat.mul 2 qc.c1N) dc1)) (Nat.mul qc.a1N df1)) qc.x5P
-  let t5 := Nat.add (if n5 ≤ p5 then p5 - n5 else n5 - p5) E74x36
+/-- The pair test over the per-pair offset differences and the norm read
+(kept as plain arguments so the soundness proof works over variables). -/
+def pairCore (rc : RCO) (qc : QCO)
+    (da0 da1 db0 db1 dc1 dd0 dd1 de1 df1 nrmN : ℕ) : Bool :=
+  let mdA := dotPO qc.a0P qc.a1P da0 da1 qc.xmN
+  let mdB := dotPO qc.a0N qc.a1N da0 da1 qc.xmP
+  let t1 := atomA4 qc.b0P qc.b0N qc.b1P qc.b1N qc.a0P qc.a0N qc.a1P qc.a1N
+    da0 da1 db0 db1 qc.x1P qc.x1N E74x18
+  let t2 := atomA2 qc.c1P qc.c1N qc.a1P qc.a1N da1 dc1 qc.x2P qc.x2N E74x18
+  let t3 := atomA6 qc.d0P qc.d0N qc.d1P qc.d1N (Nat.mul 2 qc.b0P) (Nat.mul 2 qc.b0N)
+    (Nat.mul 2 qc.b1P) (Nat.mul 2 qc.b1N) qc.a0P qc.a0N qc.a1P qc.a1N
+    da0 da1 db0 db1 dd0 dd1 qc.x3P qc.x3N E74x36
+  let t4 := atomA4 qc.e1P qc.e1N qc.b1P qc.b1N qc.c1P qc.c1N qc.a1P qc.a1N
+    da1 dc1 db1 de1 qc.x4P qc.x4N E74x36
+  let t5 := atomA3 qc.f1P qc.f1N (Nat.mul 2 qc.c1P) (Nat.mul 2 qc.c1N)
+    qc.a1P qc.a1N da1 dc1 df1 qc.x5P qc.x5N E74x36
   let bud := budO rc.k1 rc.k2 rc.k3 rc.k4 rc.k5 rc.k6 t1 t2 t3 t4 t5
     (Nat.mul E68x8 nrmN)
-  let BF2 := Nat.mul BFO BFO
-  let sqd := fun (dh : ℕ) =>
-    Nat.add (Nat.mul dh dh) BF2 - Nat.mul (Nat.mul 2 BFO) dh
   let D2N := Nat.add
-    (Nat.mul rc.W (Nat.add (nUpO84 (Nat.add (sqd da0) (sqd da1))) E6x5))
+    (Nat.mul rc.W (Nat.add (nUpO84 (Nat.add (sqdO da0) (sqdO da1))) E6x5))
     (budO rc.k1 rc.k2 rc.k3 rc.k4 rc.k5 rc.k6
-      (Nat.add (nUpO84 (Nat.add (sqd db0) (sqd db1))) E6x5)
-      (Nat.add (nUpO84 (sqd dc1)) E6x5)
-      (Nat.add (nUpO84 (Nat.add (sqd dd0) (sqd dd1))) E6x5)
-      (Nat.add (nUpO84 (sqd de1)) E6x5)
-      (Nat.add (nUpO84 (sqd df1)) E6x5) nrmN)
+      (Nat.add (nUpO84 (Nat.add (sqdO db0) (sqdO db1))) E6x5)
+      (Nat.add (nUpO84 (sqdO dc1)) E6x5)
+      (Nat.add (nUpO84 (Nat.add (sqdO dd0) (sqdO dd1))) E6x5)
+      (Nat.add (nUpO84 (sqdO de1)) E6x5)
+      (Nat.add (nUpO84 (sqdO df1)) E6x5) nrmN)
   let A := Nat.mul rc.W mdA
   let B := Nat.add (Nat.add (Nat.mul rc.W mdB) (Nat.mul rc.W E74x9)) bud
   decide (B < A) &&
     decide (Nat.add (Nat.mul rc.cmpL (Nat.mul qc.D1N D2N)) (Nat.mul B rc.cmpRc)
       < Nat.mul A rc.cmpRc)
+
+/-- The all-`Nat` pair test at flat index `j`. -/
+def pairO (rc : RCO) (qc : QCO) (j : ℕ) : Bool :=
+  let v := appO rc j
+  pairCore rc qc
+    (qc.pa0 - v.a0) (qc.pa1 - v.a1) (qc.pb0 - v.b0) (qc.pb1 - v.b1)
+    (qc.pc1 - v.c1) (qc.pd0 - v.d0) (qc.pd1 - v.d1) (qc.pe1 - v.e1)
+    (qc.pf1 - v.f1)
+    (Nat.add (Nat.land (Nat.shiftRight qc.qrow (Nat.mul 57 j)) M57) E6x2)
 
 /-- Countdown pair loop over flat indices, skipping the corner itself. -/
 def pairLoopO (rc : RCO) (qc : QCO) (qskip : ℕ) : ℕ → Bool
@@ -635,8 +664,869 @@ private lemma appO_bridge {stN ctN sfN cfN : ℤ}
       (field3_bridge (hp _ _ hct hcf) (hp _ _ hst hcf) (hn (h13 _ hsf))
         hw0 hw1 hw2 hW0 hW1 hW2).2
 
+/-- Pos/neg split of an offset value: difference, sum-as-abs. -/
+private lemma split_facts {qh : ℕ} {z : ℤ} (h : (qh : ℤ) = z + BFO) :
+    ((qh - BFO : ℕ) : ℤ) - ((BFO - qh : ℕ) : ℤ) = z ∧
+    ((qh - BFO : ℕ) : ℤ) + ((BFO - qh : ℕ) : ℤ) = |z| := by
+  rw [Int.abs_eq_natAbs]
+  omega
+
+/-- Offset difference: `(q̂ + BFO) ∸ v̂` carries `zq − zv` at offset `BFO`
+when both values are within `FBI`. -/
+private lemma dsub_cast {qh vh : ℕ} {zq zv : ℤ}
+    (hq : (qh : ℤ) = zq + BFO) (hv : (vh : ℤ) = zv + BFO)
+    (hbq : |zq| ≤ FBI) (hbv : |zv| ≤ FBI) :
+    ((Nat.add qh BFO - vh : ℕ) : ℤ) = (zq - zv) + BFO := by
+  have h1 := abs_le.mp hbq
+  have h2 := abs_le.mp hbv
+  have hB : (BFO : ℤ) = 10 ^ 46 := by norm_num [BFO]
+  have hF : FBI = 3 * 10 ^ 28 * 2 ^ 56 := rfl
+  simp only [natAdd_eq]
+  omega
+
+/-- Branchless square cast. -/
+private lemma sqdO_cast {dh : ℕ} {y : ℤ} (h : (dh : ℤ) = y + BFO)
+    {V : ℤ} (hval : y * y = V) :
+    ((sqdO dh : ℕ) : ℤ) = V := by
+  subst hval
+  unfold sqdO BF2O BFO2x
+  refine natSub_cast ?_ (mul_self_nonneg y)
+  simp only [natAdd_eq, natMul_eq]
+  push_cast [h]
+  ring
+
+/-- Split square cast. -/
+private lemma sqsO_cast {pp nn : ℕ} {z : ℤ}
+    (_hd : (pp : ℤ) - nn = z) (hs : (pp : ℤ) + nn = |z|) :
+    ((sqsO pp nn : ℕ) : ℤ) = z * z := by
+  unfold sqsO
+  simp only [natAdd_eq, natMul_eq]
+  push_cast
+  rw [show ((pp : ℤ) + nn) = |z| from hs]
+  rw [← abs_mul, abs_mul_self]
+
+/-- Two-term atom cast. -/
+private lemma atomA2_cast {qP0 qN0 qP1 qN1 d0 d1 xP xN slack : ℕ}
+    {q0 q1 y0 y1 sl : ℤ}
+    (hq0 : (qP0 : ℤ) - qN0 = q0) (hq1 : (qP1 : ℤ) - qN1 = q1)
+    (hd0 : (d0 : ℤ) = y0 + BFO) (hd1 : (d1 : ℤ) = y1 + BFO)
+    (hxP : (xP : ℤ) = BFO * (qP0 + qP1)) (hxN : (xN : ℤ) = BFO * (qN0 + qN1))
+    (hsl : (slack : ℤ) = sl) {V : ℤ} (hval : q0 * y0 + q1 * y1 = V) :
+    ((atomA2 qP0 qN0 qP1 qN1 d0 d1 xP xN slack : ℕ) : ℤ) = |V| + sl := by
+  subst hval
+  unfold atomA2
+  simp only [natAdd_eq, natMul_eq, Nat.cast_add, absSub_cast]
+  rw [hsl]
+  refine congrArg (fun t => |t| + sl) ?_
+  push_cast
+  rw [hd0, hd1, hxP, hxN]
+  linear_combination (y0 : ℤ) * hq0 + (y1 : ℤ) * hq1
+
+/-- Three-term atom cast. -/
+private lemma atomA3_cast {qP0 qN0 qP1 qN1 qP2 qN2 d0 d1 d2 xP xN slack : ℕ}
+    {q0 q1 q2 y0 y1 y2 sl : ℤ}
+    (hq0 : (qP0 : ℤ) - qN0 = q0) (hq1 : (qP1 : ℤ) - qN1 = q1)
+    (hq2 : (qP2 : ℤ) - qN2 = q2)
+    (hd0 : (d0 : ℤ) = y0 + BFO) (hd1 : (d1 : ℤ) = y1 + BFO)
+    (hd2 : (d2 : ℤ) = y2 + BFO)
+    (hxP : (xP : ℤ) = BFO * (qP0 + qP1 + qP2))
+    (hxN : (xN : ℤ) = BFO * (qN0 + qN1 + qN2))
+    (hsl : (slack : ℤ) = sl) {V : ℤ}
+    (hval : q0 * y0 + q1 * y1 + q2 * y2 = V) :
+    ((atomA3 qP0 qN0 qP1 qN1 qP2 qN2 d0 d1 d2 xP xN slack : ℕ) : ℤ) = |V| + sl := by
+  subst hval
+  unfold atomA3
+  simp only [natAdd_eq, natMul_eq, Nat.cast_add, absSub_cast]
+  rw [hsl]
+  refine congrArg (fun t => |t| + sl) ?_
+  push_cast
+  rw [hd0, hd1, hd2, hxP, hxN]
+  linear_combination (y0 : ℤ) * hq0 + (y1 : ℤ) * hq1 + (y2 : ℤ) * hq2
+
+/-- Four-term atom cast. -/
+private lemma atomA4_cast {qP0 qN0 qP1 qN1 qP2 qN2 qP3 qN3 d0 d1 d2 d3 xP xN slack : ℕ}
+    {q0 q1 q2 q3 y0 y1 y2 y3 sl : ℤ}
+    (hq0 : (qP0 : ℤ) - qN0 = q0) (hq1 : (qP1 : ℤ) - qN1 = q1)
+    (hq2 : (qP2 : ℤ) - qN2 = q2) (hq3 : (qP3 : ℤ) - qN3 = q3)
+    (hd0 : (d0 : ℤ) = y0 + BFO) (hd1 : (d1 : ℤ) = y1 + BFO)
+    (hd2 : (d2 : ℤ) = y2 + BFO) (hd3 : (d3 : ℤ) = y3 + BFO)
+    (hxP : (xP : ℤ) = BFO * (qP0 + qP1 + qP2 + qP3))
+    (hxN : (xN : ℤ) = BFO * (qN0 + qN1 + qN2 + qN3))
+    (hsl : (slack : ℤ) = sl) {V : ℤ}
+    (hval : q0 * y0 + q1 * y1 + q2 * y2 + q3 * y3 = V) :
+    ((atomA4 qP0 qN0 qP1 qN1 qP2 qN2 qP3 qN3 d0 d1 d2 d3 xP xN slack : ℕ) : ℤ)
+      = |V| + sl := by
+  subst hval
+  unfold atomA4
+  simp only [natAdd_eq, natMul_eq, Nat.cast_add, absSub_cast]
+  rw [hsl]
+  refine congrArg (fun t => |t| + sl) ?_
+  push_cast
+  rw [hd0, hd1, hd2, hd3, hxP, hxN]
+  linear_combination (y0 : ℤ) * hq0 + (y1 : ℤ) * hq1 + (y2 : ℤ) * hq2
+    + (y3 : ℤ) * hq3
+
+/-- Six-term atom cast. -/
+private lemma atomA6_cast
+    {qP0 qN0 qP1 qN1 qP2 qN2 qP3 qN3 qP4 qN4 qP5 qN5
+     d0 d1 d2 d3 d4 d5 xP xN slack : ℕ}
+    {q0 q1 q2 q3 q4 q5 y0 y1 y2 y3 y4 y5 sl : ℤ}
+    (hq0 : (qP0 : ℤ) - qN0 = q0) (hq1 : (qP1 : ℤ) - qN1 = q1)
+    (hq2 : (qP2 : ℤ) - qN2 = q2) (hq3 : (qP3 : ℤ) - qN3 = q3)
+    (hq4 : (qP4 : ℤ) - qN4 = q4) (hq5 : (qP5 : ℤ) - qN5 = q5)
+    (hd0 : (d0 : ℤ) = y0 + BFO) (hd1 : (d1 : ℤ) = y1 + BFO)
+    (hd2 : (d2 : ℤ) = y2 + BFO) (hd3 : (d3 : ℤ) = y3 + BFO)
+    (hd4 : (d4 : ℤ) = y4 + BFO) (hd5 : (d5 : ℤ) = y5 + BFO)
+    (hxP : (xP : ℤ) = BFO * (qP0 + qP1 + qP2 + qP3 + qP4 + qP5))
+    (hxN : (xN : ℤ) = BFO * (qN0 + qN1 + qN2 + qN3 + qN4 + qN5))
+    (hsl : (slack : ℤ) = sl) {V : ℤ}
+    (hval : q0 * y0 + q1 * y1 + q2 * y2 + q3 * y3 + q4 * y4 + q5 * y5 = V) :
+    ((atomA6 qP0 qN0 qP1 qN1 qP2 qN2 qP3 qN3 qP4 qN4 qP5 qN5
+        d0 d1 d2 d3 d4 d5 xP xN slack : ℕ) : ℤ) = |V| + sl := by
+  subst hval
+  unfold atomA6
+  simp only [natAdd_eq, natMul_eq, Nat.cast_add, absSub_cast]
+  rw [hsl]
+  refine congrArg (fun t => |t| + sl) ?_
+  push_cast
+  rw [hd0, hd1, hd2, hd3, hd4, hd5, hxP, hxN]
+  linear_combination (y0 : ℤ) * hq0 + (y1 : ℤ) * hq1 + (y2 : ℤ) * hq2
+    + (y3 : ℤ) * hq3 + (y4 : ℤ) * hq4 + (y5 : ℤ) * hq5
+
+/-- The windowed Newton bound dominates `sqrtNum84` through the `ℕ` cast. -/
+private lemma nUpO84_dom {S : ℕ} {Sz : ℤ} (h : (S : ℤ) = Sz) :
+    sqrtNum84 Sz ≤ (nUpO84 S : ℤ) := by
+  rcases lt_or_eq_of_le (show (0 : ℤ) ≤ Sz from by omega) with hpos | hzero
+  · have := sqrtNum84_le_nUpOZ84 Sz
+    unfold nUpOZ84 at this
+    rw [if_neg (by omega)] at this
+    rwa [show Sz.toNat = S from by omega] at this
+  · rw [show sqrtNum84 Sz = 0 from by unfold sqrtNum84; rw [if_pos (by omega)]]
+    positivity
+
+/-- Sign-split main dot: the difference of the two `dotPO` sides. -/
+private lemma dotPO_sub_cast {qP0 qN0 qP1 qN1 d0 d1 xP xN : ℕ} {q0 q1 y0 y1 : ℤ}
+    (hq0 : (qP0 : ℤ) - qN0 = q0) (hq1 : (qP1 : ℤ) - qN1 = q1)
+    (hd0 : (d0 : ℤ) = y0 + BFO) (hd1 : (d1 : ℤ) = y1 + BFO)
+    (hxP : (xP : ℤ) = BFO * (qP0 + qP1)) (hxN : (xN : ℤ) = BFO * (qN0 + qN1))
+    {V : ℤ} (hval : q0 * y0 + q1 * y1 = V) :
+    ((dotPO qP0 qP1 d0 d1 xN : ℕ) : ℤ) - ((dotPO qN0 qN1 d0 d1 xP : ℕ) : ℤ)
+      = V := by
+  subst hval
+  unfold dotPO
+  simp only [natAdd_eq, natMul_eq]
+  push_cast
+  rw [hd0, hd1, hxP, hxN]
+  linear_combination (y0 : ℤ) * hq0 + (y1 : ℤ) * hq1
+
+/-- `budO` casts to `budN` given exact coefficient casts. -/
+private lemma budO_cast {k1 k2 k3 k4 k5 k6 a1 a2 a3 a4 a5 rem : ℕ}
+    {en ed fn fd : ℤ}
+    (h1 : (k1 : ℤ) = 6 * en * ed ^ 2 * fd ^ 3)
+    (h2 : (k2 : ℤ) = 6 * fn * fd ^ 2 * ed ^ 3)
+    (h3 : (k3 : ℤ) = 3 * en ^ 2 * ed * fd ^ 3)
+    (h4 : (k4 : ℤ) = 6 * en * fn * ed ^ 2 * fd ^ 2)
+    (h5 : (k5 : ℤ) = 3 * fn ^ 2 * fd * ed ^ 3)
+    (h6 : (k6 : ℤ) = (en * fd + fn * ed) ^ 3) :
+    ((budO k1 k2 k3 k4 k5 k6 a1 a2 a3 a4 a5 rem : ℕ) : ℤ)
+      = budN (a1 : ℤ) (a2 : ℤ) (a3 : ℤ) (a4 : ℤ) (a5 : ℤ) (rem : ℤ) en ed fn fd := by
+  unfold budO budN
+  simp only [natAdd_eq, natMul_eq]
+  push_cast
+  rw [h1, h2, h3, h4, h5, h6]
+
+/-- The `mkRCO` numeric constants cast exactly in the guarded regime. -/
+private lemma mkRCO_casts {stN ctN sfN cfN : ℤ} {εθ εφ δ r : ℚ}
+    (hεθ : 0 ≤ εθ.num) (hεφ : 0 ≤ εφ.num) (hδ : 0 ≤ δ.num) (hr : 0 < r.num) :
+    let rc := mkRCO stN ctN sfN cfN εθ εφ δ r
+    let en := εθ.num
+    let ed : ℤ := εθ.den
+    let fn := εφ.num
+    let fd : ℤ := εφ.den
+    ((rc.k1 : ℤ) = 6 * en * ed ^ 2 * fd ^ 3) ∧
+    ((rc.k2 : ℤ) = 6 * fn * fd ^ 2 * ed ^ 3) ∧
+    ((rc.k3 : ℤ) = 3 * en ^ 2 * ed * fd ^ 3) ∧
+    ((rc.k4 : ℤ) = 6 * en * fn * ed ^ 2 * fd ^ 2) ∧
+    ((rc.k5 : ℤ) = 3 * fn ^ 2 * fd * ed ^ 3) ∧
+    ((rc.k6 : ℤ) = (en * fd + fn * ed) ^ 3) ∧
+    ((rc.W : ℤ) = 6 * (ed * fd) ^ 3) ∧
+    ((rc.cmpL : ℤ) = δ.num * r.den * 10 ^ 52) ∧
+    ((rc.cmpRc : ℤ) = 6 * (ed * fd) ^ 3 * (δ.den * r.num)) := by
+  have hed : (0 : ℤ) ≤ (εθ.den : ℤ) := Int.natCast_nonneg _
+  have hfd : (0 : ℤ) ≤ (εφ.den : ℤ) := Int.natCast_nonneg _
+  have hδd : (0 : ℤ) ≤ (δ.den : ℤ) := Int.natCast_nonneg _
+  have hrd : (0 : ℤ) ≤ (r.den : ℤ) := Int.natCast_nonneg _
+  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩ <;>
+    simp only [mkRCO] <;> rw [Int.toNat_of_nonneg] <;> first | rfl | positivity
+
+set_option maxHeartbeats 3200000 in
+/-- The crux, over plain variables: a true `pairCore` implies the
+`beCheckN` (exact-`sqrtNum84`) pair conjunction, given the bridge facts
+for every input. -/
+private lemma pairCore_sound {εθ εφ δ r : ℚ} {rc : RCO} {qc : QCO}
+    {da0 da1 db0 db1 dc1 dd0 dd1 de1 df1 nrmN : ℕ}
+    {zq zv : App6N} {nrmZ : ℤ}
+    (hεθ : 0 ≤ εθ.num) (hεφ : 0 ≤ εφ.num) (hδ : 0 ≤ δ.num) (hr : 0 < r.num)
+    (k1e : (rc.k1 : ℤ) = 6 * εθ.num * (εθ.den : ℤ) ^ 2 * (εφ.den : ℤ) ^ 3)
+    (k2e : (rc.k2 : ℤ) = 6 * εφ.num * (εφ.den : ℤ) ^ 2 * (εθ.den : ℤ) ^ 3)
+    (k3e : (rc.k3 : ℤ) = 3 * εθ.num ^ 2 * (εθ.den : ℤ) * (εφ.den : ℤ) ^ 3)
+    (k4e : (rc.k4 : ℤ) = 6 * εθ.num * εφ.num * (εθ.den : ℤ) ^ 2 * (εφ.den : ℤ) ^ 2)
+    (k5e : (rc.k5 : ℤ) = 3 * εφ.num ^ 2 * (εφ.den : ℤ) * (εθ.den : ℤ) ^ 3)
+    (k6e : (rc.k6 : ℤ) = (εθ.num * (εφ.den : ℤ) + εφ.num * (εθ.den : ℤ)) ^ 3)
+    (We : (rc.W : ℤ) = 6 * ((εθ.den : ℤ) * εφ.den) ^ 3)
+    (cLe : (rc.cmpL : ℤ) = δ.num * r.den * 10 ^ 52)
+    (cRe : (rc.cmpRc : ℤ) = 6 * ((εθ.den : ℤ) * εφ.den) ^ 3 * ((δ.den : ℤ) * r.num))
+    (sa0d : (qc.a0P : ℤ) - qc.a0N = zq.a0) (sa1d : (qc.a1P : ℤ) - qc.a1N = zq.a1)
+    (sb0d : (qc.b0P : ℤ) - qc.b0N = zq.b0) (sb1d : (qc.b1P : ℤ) - qc.b1N = zq.b1)
+    (sc1d : (qc.c1P : ℤ) - qc.c1N = zq.c1)
+    (sd0d : (qc.d0P : ℤ) - qc.d0N = zq.d0) (sd1d : (qc.d1P : ℤ) - qc.d1N = zq.d1)
+    (se1d : (qc.e1P : ℤ) - qc.e1N = zq.e1) (sf1d : (qc.f1P : ℤ) - qc.f1N = zq.f1)
+    (xmP : (qc.xmP : ℤ) = BFO * (qc.a0P + qc.a1P))
+    (xmN : (qc.xmN : ℤ) = BFO * (qc.a0N + qc.a1N))
+    (x1P : (qc.x1P : ℤ) = BFO * (qc.b0P + qc.b1P + qc.a0P + qc.a1P))
+    (x1N : (qc.x1N : ℤ) = BFO * (qc.b0N + qc.b1N + qc.a0N + qc.a1N))
+    (x2P : (qc.x2P : ℤ) = BFO * (qc.c1P + qc.a1P))
+    (x2N : (qc.x2N : ℤ) = BFO * (qc.c1N + qc.a1N))
+    (x3P : (qc.x3P : ℤ)
+      = BFO * (qc.d0P + qc.d1P + 2 * qc.b0P + 2 * qc.b1P + qc.a0P + qc.a1P))
+    (x3N : (qc.x3N : ℤ)
+      = BFO * (qc.d0N + qc.d1N + 2 * qc.b0N + 2 * qc.b1N + qc.a0N + qc.a1N))
+    (x4P : (qc.x4P : ℤ) = BFO * (qc.e1P + qc.b1P + qc.c1P + qc.a1P))
+    (x4N : (qc.x4N : ℤ) = BFO * (qc.e1N + qc.b1N + qc.c1N + qc.a1N))
+    (x5P : (qc.x5P : ℤ) = BFO * (qc.f1P + 2 * qc.c1P + qc.a1P))
+    (x5N : (qc.x5N : ℤ) = BFO * (qc.f1N + 2 * qc.c1N + qc.a1N))
+    (hda0 : (da0 : ℤ) = (zq.sub zv).a0 + BFO) (hda1 : (da1 : ℤ) = (zq.sub zv).a1 + BFO)
+    (hdb0 : (db0 : ℤ) = (zq.sub zv).b0 + BFO) (hdb1 : (db1 : ℤ) = (zq.sub zv).b1 + BFO)
+    (hdc1 : (dc1 : ℤ) = (zq.sub zv).c1 + BFO)
+    (hdd0 : (dd0 : ℤ) = (zq.sub zv).d0 + BFO) (hdd1 : (dd1 : ℤ) = (zq.sub zv).d1 + BFO)
+    (hde1 : (de1 : ℤ) = (zq.sub zv).e1 + BFO)
+    (hdf1 : (df1 : ℤ) = (zq.sub zv).f1 + BFO)
+    (hnrm : (nrmN : ℤ) = nrmZ)
+    (hzc0 : zq.c0 = 0) (hze0 : zq.e0 = 0) (hzf0 : zq.f0 = 0)
+    (hvc0 : zv.c0 = 0) (hve0 : zv.e0 = 0) (hvf0 : zv.f0 = 0)
+    (hD1 : 6 * ((εθ.den : ℤ) * εφ.den) ^ 3
+        * (sqrtNum84 (zq.a0 * zq.a0 + zq.a1 * zq.a1) + 3 * 10 ^ 6)
+      + budN (sqrtNum84 (zq.b0 * zq.b0 + zq.b1 * zq.b1) + 3 * 10 ^ 6)
+          (sqrtNum84 (zq.c0 * zq.c0 + zq.c1 * zq.c1) + 3 * 10 ^ 6)
+          (sqrtNum84 (zq.d0 * zq.d0 + zq.d1 * zq.d1) + 3 * 10 ^ 6)
+          (sqrtNum84 (zq.e0 * zq.e0 + zq.e1 * zq.e1) + 3 * 10 ^ 6)
+          (sqrtNum84 (zq.f0 * zq.f0 + zq.f1 * zq.f1) + 3 * 10 ^ 6) (10 ^ 16)
+          εθ.num (εθ.den : ℤ) εφ.num (εφ.den : ℤ) ≤ (qc.D1N : ℤ))
+    (h : pairCore rc qc da0 da1 db0 db1 dc1 dd0 dd1 de1 df1 nrmN = true) :
+    0 < 6 * ((εθ.den : ℤ) * εφ.den) ^ 3 * (zq.a0 * (zq.sub zv).a0 + zq.a1 * (zq.sub zv).a1)
+        - 6 * ((εθ.den : ℤ) * εφ.den) ^ 3 * (9 * 10 ^ 74)
+        - budN (|(zq.b0 * (zq.sub zv).a0 + zq.b1 * (zq.sub zv).a1)
+              + (zq.a0 * (zq.sub zv).b0 + zq.a1 * (zq.sub zv).b1)| + 18 * 10 ^ 74)
+            (|(zq.c0 * (zq.sub zv).a0 + zq.c1 * (zq.sub zv).a1)
+              + (zq.a0 * (zq.sub zv).c0 + zq.a1 * (zq.sub zv).c1)| + 18 * 10 ^ 74)
+            (|(zq.d0 * (zq.sub zv).a0 + zq.d1 * (zq.sub zv).a1)
+              + 2 * (zq.b0 * (zq.sub zv).b0 + zq.b1 * (zq.sub zv).b1)
+              + (zq.a0 * (zq.sub zv).d0 + zq.a1 * (zq.sub zv).d1)| + 36 * 10 ^ 74)
+            (|(zq.e0 * (zq.sub zv).a0 + zq.e1 * (zq.sub zv).a1)
+              + (zq.b0 * (zq.sub zv).c0 + zq.b1 * (zq.sub zv).c1)
+              + (zq.c0 * (zq.sub zv).b0 + zq.c1 * (zq.sub zv).b1)
+              + (zq.a0 * (zq.sub zv).e0 + zq.a1 * (zq.sub zv).e1)| + 36 * 10 ^ 74)
+            (|(zq.f0 * (zq.sub zv).a0 + zq.f1 * (zq.sub zv).a1)
+              + 2 * (zq.c0 * (zq.sub zv).c0 + zq.c1 * (zq.sub zv).c1)
+              + (zq.a0 * (zq.sub zv).f0 + zq.a1 * (zq.sub zv).f1)| + 36 * 10 ^ 74)
+            (8 * nrmZ * 10 ^ 68) εθ.num (εθ.den : ℤ) εφ.num (εφ.den : ℤ) ∧
+      δ.num * (r.den : ℤ)
+          * (10 ^ 52 * ((6 * ((εθ.den : ℤ) * εφ.den) ^ 3
+              * (sqrtNum84 (zq.a0 * zq.a0 + zq.a1 * zq.a1) + 3 * 10 ^ 6)
+            + budN (sqrtNum84 (zq.b0 * zq.b0 + zq.b1 * zq.b1) + 3 * 10 ^ 6)
+                (sqrtNum84 (zq.c0 * zq.c0 + zq.c1 * zq.c1) + 3 * 10 ^ 6)
+                (sqrtNum84 (zq.d0 * zq.d0 + zq.d1 * zq.d1) + 3 * 10 ^ 6)
+                (sqrtNum84 (zq.e0 * zq.e0 + zq.e1 * zq.e1) + 3 * 10 ^ 6)
+                (sqrtNum84 (zq.f0 * zq.f0 + zq.f1 * zq.f1) + 3 * 10 ^ 6) (10 ^ 16)
+                εθ.num (εθ.den : ℤ) εφ.num (εφ.den : ℤ))
+            * (6 * ((εθ.den : ℤ) * εφ.den) ^ 3
+              * (sqrtNum84 ((zq.sub zv).a0 * (zq.sub zv).a0
+                  + (zq.sub zv).a1 * (zq.sub zv).a1) + 5 * 10 ^ 6)
+            + budN (sqrtNum84 ((zq.sub zv).b0 * (zq.sub zv).b0
+                  + (zq.sub zv).b1 * (zq.sub zv).b1) + 5 * 10 ^ 6)
+                (sqrtNum84 ((zq.sub zv).c0 * (zq.sub zv).c0
+                  + (zq.sub zv).c1 * (zq.sub zv).c1) + 5 * 10 ^ 6)
+                (sqrtNum84 ((zq.sub zv).d0 * (zq.sub zv).d0
+                  + (zq.sub zv).d1 * (zq.sub zv).d1) + 5 * 10 ^ 6)
+                (sqrtNum84 ((zq.sub zv).e0 * (zq.sub zv).e0
+                  + (zq.sub zv).e1 * (zq.sub zv).e1) + 5 * 10 ^ 6)
+                (sqrtNum84 ((zq.sub zv).f0 * (zq.sub zv).f0
+                  + (zq.sub zv).f1 * (zq.sub zv).f1) + 5 * 10 ^ 6) nrmZ
+                εθ.num (εθ.den : ℤ) εφ.num (εφ.den : ℤ))))
+        < (6 * ((εθ.den : ℤ) * εφ.den) ^ 3 * (zq.a0 * (zq.sub zv).a0 + zq.a1 * (zq.sub zv).a1)
+            - 6 * ((εθ.den : ℤ) * εφ.den) ^ 3 * (9 * 10 ^ 74)
+            - budN (|(zq.b0 * (zq.sub zv).a0 + zq.b1 * (zq.sub zv).a1)
+                  + (zq.a0 * (zq.sub zv).b0 + zq.a1 * (zq.sub zv).b1)| + 18 * 10 ^ 74)
+                (|(zq.c0 * (zq.sub zv).a0 + zq.c1 * (zq.sub zv).a1)
+                  + (zq.a0 * (zq.sub zv).c0 + zq.a1 * (zq.sub zv).c1)| + 18 * 10 ^ 74)
+                (|(zq.d0 * (zq.sub zv).a0 + zq.d1 * (zq.sub zv).a1)
+                  + 2 * (zq.b0 * (zq.sub zv).b0 + zq.b1 * (zq.sub zv).b1)
+                  + (zq.a0 * (zq.sub zv).d0 + zq.a1 * (zq.sub zv).d1)| + 36 * 10 ^ 74)
+                (|(zq.e0 * (zq.sub zv).a0 + zq.e1 * (zq.sub zv).a1)
+                  + (zq.b0 * (zq.sub zv).c0 + zq.b1 * (zq.sub zv).c1)
+                  + (zq.c0 * (zq.sub zv).b0 + zq.c1 * (zq.sub zv).b1)
+                  + (zq.a0 * (zq.sub zv).e0 + zq.a1 * (zq.sub zv).e1)| + 36 * 10 ^ 74)
+                (|(zq.f0 * (zq.sub zv).a0 + zq.f1 * (zq.sub zv).a1)
+                  + 2 * (zq.c0 * (zq.sub zv).c0 + zq.c1 * (zq.sub zv).c1)
+                  + (zq.a0 * (zq.sub zv).f0 + zq.a1 * (zq.sub zv).f1)| + 36 * 10 ^ 74)
+                (8 * nrmZ * 10 ^ 68) εθ.num (εθ.den : ℤ) εφ.num (εφ.den : ℤ))
+          * (6 * ((εθ.den : ℤ) * εφ.den) ^ 3) * ((δ.den : ℤ) * r.num) := by
+  have hWnn : (0 : ℤ) ≤ 6 * ((εθ.den : ℤ) * εφ.den) ^ 3 := by positivity
+  have hed : (0 : ℤ) ≤ (εθ.den : ℤ) := Int.natCast_nonneg _
+  have hfd : (0 : ℤ) ≤ (εφ.den : ℤ) := Int.natCast_nonneg _
+  have e18 : ((E74x18 : ℕ) : ℤ) = 18 * 10 ^ 74 := by norm_num [E74x18, Nat.pow_eq]
+  have e36 : ((E74x36 : ℕ) : ℤ) = 36 * 10 ^ 74 := by norm_num [E74x36, Nat.pow_eq]
+  have e9 : ((E74x9 : ℕ) : ℤ) = 9 * 10 ^ 74 := by norm_num [E74x9, Nat.pow_eq]
+  have e68 : ((E68x8 : ℕ) : ℤ) = 8 * 10 ^ 68 := by norm_num [E68x8, Nat.pow_eq]
+  have e65 : ((E6x5 : ℕ) : ℤ) = 5 * 10 ^ 6 := by norm_num [E6x5, Nat.pow_eq]
+  unfold pairCore at h
+  simp only [Bool.and_eq_true, decide_eq_true_eq] at h
+  obtain ⟨h1, h2⟩ := h
+  -- doubled splits
+  have sb0d2 : ((Nat.mul 2 qc.b0P : ℕ) : ℤ) - (Nat.mul 2 qc.b0N : ℕ) = 2 * zq.b0 := by
+    simp only [natMul_eq]; push_cast; linarith
+  have sb1d2 : ((Nat.mul 2 qc.b1P : ℕ) : ℤ) - (Nat.mul 2 qc.b1N : ℕ) = 2 * zq.b1 := by
+    simp only [natMul_eq]; push_cast; linarith
+  have sc1d2 : ((Nat.mul 2 qc.c1P : ℕ) : ℤ) - (Nat.mul 2 qc.c1N : ℕ) = 2 * zq.c1 := by
+    simp only [natMul_eq]; push_cast; linarith
+  -- doubled x-constants (with the Nat.mul 2 arguments)
+  have x3P' : (qc.x3P : ℤ)
+      = BFO * (qc.d0P + qc.d1P + (Nat.mul 2 qc.b0P : ℕ) + (Nat.mul 2 qc.b1P : ℕ)
+        + qc.a0P + qc.a1P) := by
+    rw [x3P]; simp only [natMul_eq]; push_cast; ring
+  have x3N' : (qc.x3N : ℤ)
+      = BFO * (qc.d0N + qc.d1N + (Nat.mul 2 qc.b0N : ℕ) + (Nat.mul 2 qc.b1N : ℕ)
+        + qc.a0N + qc.a1N) := by
+    rw [x3N]; simp only [natMul_eq]; push_cast; ring
+  have x5P' : (qc.x5P : ℤ)
+      = BFO * (qc.f1P + (Nat.mul 2 qc.c1P : ℕ) + qc.a1P) := by
+    rw [x5P]; simp only [natMul_eq]; push_cast; ring
+  have x5N' : (qc.x5N : ℤ)
+      = BFO * (qc.f1N + (Nat.mul 2 qc.c1N : ℕ) + qc.a1N) := by
+    rw [x5N]; simp only [natMul_eq]; push_cast; ring
+  -- main dot and abs atoms
+  have hmd := dotPO_sub_cast sa0d sa1d hda0 hda1 xmP xmN
+    (V := zq.a0 * (zq.sub zv).a0 + zq.a1 * (zq.sub zv).a1) rfl
+  have t1e := atomA4_cast sb0d sb1d sa0d sa1d hda0 hda1 hdb0 hdb1 x1P x1N e18
+    (V := (zq.b0 * (zq.sub zv).a0 + zq.b1 * (zq.sub zv).a1)
+      + (zq.a0 * (zq.sub zv).b0 + zq.a1 * (zq.sub zv).b1)) (by ring)
+  have t2e := atomA2_cast sc1d sa1d hda1 hdc1 x2P x2N e18
+    (V := (zq.c0 * (zq.sub zv).a0 + zq.c1 * (zq.sub zv).a1)
+      + (zq.a0 * (zq.sub zv).c0 + zq.a1 * (zq.sub zv).c1))
+    (by rw [hzc0, show (zq.sub zv).c0 = zq.c0 - zv.c0 from rfl, hzc0, hvc0]; ring)
+  have t3e := atomA6_cast sd0d sd1d sb0d2 sb1d2 sa0d sa1d
+    hda0 hda1 hdb0 hdb1 hdd0 hdd1 x3P' x3N' e36
+    (V := (zq.d0 * (zq.sub zv).a0 + zq.d1 * (zq.sub zv).a1)
+      + 2 * (zq.b0 * (zq.sub zv).b0 + zq.b1 * (zq.sub zv).b1)
+      + (zq.a0 * (zq.sub zv).d0 + zq.a1 * (zq.sub zv).d1)) (by ring)
+  have t4e := atomA4_cast se1d sb1d sc1d sa1d hda1 hdc1 hdb1 hde1 x4P x4N e36
+    (V := (zq.e0 * (zq.sub zv).a0 + zq.e1 * (zq.sub zv).a1)
+      + (zq.b0 * (zq.sub zv).c0 + zq.b1 * (zq.sub zv).c1)
+      + (zq.c0 * (zq.sub zv).b0 + zq.c1 * (zq.sub zv).b1)
+      + (zq.a0 * (zq.sub zv).e0 + zq.a1 * (zq.sub zv).e1))
+    (by rw [show (zq.sub zv).c0 = zq.c0 - zv.c0 from rfl,
+          show (zq.sub zv).e0 = zq.e0 - zv.e0 from rfl, hzc0, hvc0, hze0, hve0]; ring)
+  have t5e := atomA3_cast sf1d sc1d2 sa1d hda1 hdc1 hdf1 x5P' x5N' e36
+    (V := (zq.f0 * (zq.sub zv).a0 + zq.f1 * (zq.sub zv).a1)
+      + 2 * (zq.c0 * (zq.sub zv).c0 + zq.c1 * (zq.sub zv).c1)
+      + (zq.a0 * (zq.sub zv).f0 + zq.a1 * (zq.sub zv).f1))
+    (by rw [show (zq.sub zv).c0 = zq.c0 - zv.c0 from rfl,
+          show (zq.sub zv).f0 = zq.f0 - zv.f0 from rfl, hzc0, hvc0, hzf0, hvf0]; ring)
+  -- the budget cast
+  have hrem : ((Nat.mul E68x8 nrmN : ℕ) : ℤ) = 8 * nrmZ * 10 ^ 68 := by
+    simp only [natMul_eq]; push_cast; rw [e68, hnrm]; ring
+  have hbud : ((budO rc.k1 rc.k2 rc.k3 rc.k4 rc.k5 rc.k6
+      (atomA4 qc.b0P qc.b0N qc.b1P qc.b1N qc.a0P qc.a0N qc.a1P qc.a1N
+        da0 da1 db0 db1 qc.x1P qc.x1N E74x18)
+      (atomA2 qc.c1P qc.c1N qc.a1P qc.a1N da1 dc1 qc.x2P qc.x2N E74x18)
+      (atomA6 qc.d0P qc.d0N qc.d1P qc.d1N (Nat.mul 2 qc.b0P) (Nat.mul 2 qc.b0N)
+        (Nat.mul 2 qc.b1P) (Nat.mul 2 qc.b1N) qc.a0P qc.a0N qc.a1P qc.a1N
+        da0 da1 db0 db1 dd0 dd1 qc.x3P qc.x3N E74x36)
+      (atomA4 qc.e1P qc.e1N qc.b1P qc.b1N qc.c1P qc.c1N qc.a1P qc.a1N
+        da1 dc1 db1 de1 qc.x4P qc.x4N E74x36)
+      (atomA3 qc.f1P qc.f1N (Nat.mul 2 qc.c1P) (Nat.mul 2 qc.c1N)
+        qc.a1P qc.a1N da1 dc1 df1 qc.x5P qc.x5N E74x36)
+      (Nat.mul E68x8 nrmN) : ℕ) : ℤ)
+      = budN (|(zq.b0 * (zq.sub zv).a0 + zq.b1 * (zq.sub zv).a1)
+            + (zq.a0 * (zq.sub zv).b0 + zq.a1 * (zq.sub zv).b1)| + 18 * 10 ^ 74)
+          (|(zq.c0 * (zq.sub zv).a0 + zq.c1 * (zq.sub zv).a1)
+            + (zq.a0 * (zq.sub zv).c0 + zq.a1 * (zq.sub zv).c1)| + 18 * 10 ^ 74)
+          (|(zq.d0 * (zq.sub zv).a0 + zq.d1 * (zq.sub zv).a1)
+            + 2 * (zq.b0 * (zq.sub zv).b0 + zq.b1 * (zq.sub zv).b1)
+            + (zq.a0 * (zq.sub zv).d0 + zq.a1 * (zq.sub zv).d1)| + 36 * 10 ^ 74)
+          (|(zq.e0 * (zq.sub zv).a0 + zq.e1 * (zq.sub zv).a1)
+            + (zq.b0 * (zq.sub zv).c0 + zq.b1 * (zq.sub zv).c1)
+            + (zq.c0 * (zq.sub zv).b0 + zq.c1 * (zq.sub zv).b1)
+            + (zq.a0 * (zq.sub zv).e0 + zq.a1 * (zq.sub zv).e1)| + 36 * 10 ^ 74)
+          (|(zq.f0 * (zq.sub zv).a0 + zq.f1 * (zq.sub zv).a1)
+            + 2 * (zq.c0 * (zq.sub zv).c0 + zq.c1 * (zq.sub zv).c1)
+            + (zq.a0 * (zq.sub zv).f0 + zq.a1 * (zq.sub zv).f1)| + 36 * 10 ^ 74)
+          (8 * nrmZ * 10 ^ 68) εθ.num (εθ.den : ℤ) εφ.num (εφ.den : ℤ) := by
+    rw [budO_cast k1e k2e k3e k4e k5e k6e, t1e, t2e, t3e, t4e, t5e, hrem]
+  -- numerator equality (expanded-cast form)
+  have hAB : (6 * ((εθ.den : ℤ) * εφ.den) ^ 3) * ((dotPO qc.a0P qc.a1P da0 da1 qc.xmN : ℕ) : ℤ)
+      - ((6 * ((εθ.den : ℤ) * εφ.den) ^ 3) * ((dotPO qc.a0N qc.a1N da0 da1 qc.xmP : ℕ) : ℤ)
+        + (6 * ((εθ.den : ℤ) * εφ.den) ^ 3) * (9 * 10 ^ 74)
+        + budN (|zq.b0 * (zq.sub zv).a0 + zq.b1 * (zq.sub zv).a1
+              + (zq.a0 * (zq.sub zv).b0 + zq.a1 * (zq.sub zv).b1)| + 18 * 10 ^ 74)
+            (|zq.c0 * (zq.sub zv).a0 + zq.c1 * (zq.sub zv).a1
+              + (zq.a0 * (zq.sub zv).c0 + zq.a1 * (zq.sub zv).c1)| + 18 * 10 ^ 74)
+            (|zq.d0 * (zq.sub zv).a0 + zq.d1 * (zq.sub zv).a1
+              + 2 * (zq.b0 * (zq.sub zv).b0 + zq.b1 * (zq.sub zv).b1)
+              + (zq.a0 * (zq.sub zv).d0 + zq.a1 * (zq.sub zv).d1)| + 36 * 10 ^ 74)
+            (|zq.e0 * (zq.sub zv).a0 + zq.e1 * (zq.sub zv).a1
+              + (zq.b0 * (zq.sub zv).c0 + zq.b1 * (zq.sub zv).c1)
+              + (zq.c0 * (zq.sub zv).b0 + zq.c1 * (zq.sub zv).b1)
+              + (zq.a0 * (zq.sub zv).e0 + zq.a1 * (zq.sub zv).e1)| + 36 * 10 ^ 74)
+            (|zq.f0 * (zq.sub zv).a0 + zq.f1 * (zq.sub zv).a1
+              + 2 * (zq.c0 * (zq.sub zv).c0 + zq.c1 * (zq.sub zv).c1)
+              + (zq.a0 * (zq.sub zv).f0 + zq.a1 * (zq.sub zv).f1)| + 36 * 10 ^ 74)
+            (8 * nrmZ * 10 ^ 68) εθ.num (εθ.den : ℤ) εφ.num (εφ.den : ℤ))
+      = 6 * ((εθ.den : ℤ) * εφ.den) ^ 3 * (zq.a0 * (zq.sub zv).a0 + zq.a1 * (zq.sub zv).a1)
+        - 6 * ((εθ.den : ℤ) * εφ.den) ^ 3 * (9 * 10 ^ 74)
+        - budN (|zq.b0 * (zq.sub zv).a0 + zq.b1 * (zq.sub zv).a1
+              + (zq.a0 * (zq.sub zv).b0 + zq.a1 * (zq.sub zv).b1)| + 18 * 10 ^ 74)
+            (|zq.c0 * (zq.sub zv).a0 + zq.c1 * (zq.sub zv).a1
+              + (zq.a0 * (zq.sub zv).c0 + zq.a1 * (zq.sub zv).c1)| + 18 * 10 ^ 74)
+            (|zq.d0 * (zq.sub zv).a0 + zq.d1 * (zq.sub zv).a1
+              + 2 * (zq.b0 * (zq.sub zv).b0 + zq.b1 * (zq.sub zv).b1)
+              + (zq.a0 * (zq.sub zv).d0 + zq.a1 * (zq.sub zv).d1)| + 36 * 10 ^ 74)
+            (|zq.e0 * (zq.sub zv).a0 + zq.e1 * (zq.sub zv).a1
+              + (zq.b0 * (zq.sub zv).c0 + zq.b1 * (zq.sub zv).c1)
+              + (zq.c0 * (zq.sub zv).b0 + zq.c1 * (zq.sub zv).b1)
+              + (zq.a0 * (zq.sub zv).e0 + zq.a1 * (zq.sub zv).e1)| + 36 * 10 ^ 74)
+            (|zq.f0 * (zq.sub zv).a0 + zq.f1 * (zq.sub zv).a1
+              + 2 * (zq.c0 * (zq.sub zv).c0 + zq.c1 * (zq.sub zv).c1)
+              + (zq.a0 * (zq.sub zv).f0 + zq.a1 * (zq.sub zv).f1)| + 36 * 10 ^ 74)
+            (8 * nrmZ * 10 ^ 68) εθ.num (εθ.den : ℤ) εφ.num (εφ.den : ℤ) := by
+    linear_combination (6 * ((εθ.den : ℤ) * εφ.den) ^ 3) * hmd
+  -- D2 square-argument casts
+  have Sa2 : ((Nat.add (sqdO da0) (sqdO da1) : ℕ) : ℤ)
+      = (zq.sub zv).a0 * (zq.sub zv).a0 + (zq.sub zv).a1 * (zq.sub zv).a1 := by
+    simp only [natAdd_eq]; push_cast; rw [sqdO_cast hda0 rfl, sqdO_cast hda1 rfl]
+  have Sb2 : ((Nat.add (sqdO db0) (sqdO db1) : ℕ) : ℤ)
+      = (zq.sub zv).b0 * (zq.sub zv).b0 + (zq.sub zv).b1 * (zq.sub zv).b1 := by
+    simp only [natAdd_eq]; push_cast; rw [sqdO_cast hdb0 rfl, sqdO_cast hdb1 rfl]
+  have Sd2 : ((Nat.add (sqdO dd0) (sqdO dd1) : ℕ) : ℤ)
+      = (zq.sub zv).d0 * (zq.sub zv).d0 + (zq.sub zv).d1 * (zq.sub zv).d1 := by
+    simp only [natAdd_eq]; push_cast; rw [sqdO_cast hdd0 rfl, sqdO_cast hdd1 rfl]
+  have Sc2 : ((sqdO dc1 : ℕ) : ℤ)
+      = (zq.sub zv).c0 * (zq.sub zv).c0 + (zq.sub zv).c1 * (zq.sub zv).c1 := by
+    rw [sqdO_cast hdc1 rfl, show (zq.sub zv).c0 = zq.c0 - zv.c0 from rfl, hzc0, hvc0]
+    ring
+  have Se2 : ((sqdO de1 : ℕ) : ℤ)
+      = (zq.sub zv).e0 * (zq.sub zv).e0 + (zq.sub zv).e1 * (zq.sub zv).e1 := by
+    rw [sqdO_cast hde1 rfl, show (zq.sub zv).e0 = zq.e0 - zv.e0 from rfl, hze0, hve0]
+    ring
+  have Sf2 : ((sqdO df1 : ℕ) : ℤ)
+      = (zq.sub zv).f0 * (zq.sub zv).f0 + (zq.sub zv).f1 * (zq.sub zv).f1 := by
+    rw [sqdO_cast hdf1 rfl, show (zq.sub zv).f0 = zq.f0 - zv.f0 from rfl, hzf0, hvf0]
+    ring
+  have nA := nUpO84_dom Sa2
+  have nB := nUpO84_dom Sb2
+  have nC := nUpO84_dom Sc2
+  have nD := nUpO84_dom Sd2
+  have nE := nUpO84_dom Se2
+  have nF := nUpO84_dom Sf2
+  -- D2 domination (expanded-cast form)
+  have hD2 : 6 * ((εθ.den : ℤ) * εφ.den) ^ 3
+        * (sqrtNum84 ((zq.sub zv).a0 * (zq.sub zv).a0 + (zq.sub zv).a1 * (zq.sub zv).a1)
+          + 5 * 10 ^ 6)
+      + budN (sqrtNum84 ((zq.sub zv).b0 * (zq.sub zv).b0 + (zq.sub zv).b1 * (zq.sub zv).b1)
+            + 5 * 10 ^ 6)
+          (sqrtNum84 ((zq.sub zv).c0 * (zq.sub zv).c0 + (zq.sub zv).c1 * (zq.sub zv).c1)
+            + 5 * 10 ^ 6)
+          (sqrtNum84 ((zq.sub zv).d0 * (zq.sub zv).d0 + (zq.sub zv).d1 * (zq.sub zv).d1)
+            + 5 * 10 ^ 6)
+          (sqrtNum84 ((zq.sub zv).e0 * (zq.sub zv).e0 + (zq.sub zv).e1 * (zq.sub zv).e1)
+            + 5 * 10 ^ 6)
+          (sqrtNum84 ((zq.sub zv).f0 * (zq.sub zv).f0 + (zq.sub zv).f1 * (zq.sub zv).f1)
+            + 5 * 10 ^ 6) nrmZ εθ.num (εθ.den : ℤ) εφ.num (εφ.den : ℤ)
+      ≤ (6 * ((εθ.den : ℤ) * εφ.den) ^ 3)
+          * (((nUpO84 (Nat.add (sqdO da0) (sqdO da1)) : ℕ) : ℤ) + 5 * 10 ^ 6)
+        + budN (((nUpO84 (Nat.add (sqdO db0) (sqdO db1)) : ℕ) : ℤ) + 5 * 10 ^ 6)
+            (((nUpO84 (sqdO dc1) : ℕ) : ℤ) + 5 * 10 ^ 6)
+            (((nUpO84 (Nat.add (sqdO dd0) (sqdO dd1)) : ℕ) : ℤ) + 5 * 10 ^ 6)
+            (((nUpO84 (sqdO de1) : ℕ) : ℤ) + 5 * 10 ^ 6)
+            (((nUpO84 (sqdO df1) : ℕ) : ℤ) + 5 * 10 ^ 6) nrmZ
+            εθ.num (εθ.den : ℤ) εφ.num (εφ.den : ℤ) := by
+    refine add_le_add (mul_le_mul_of_nonneg_left (add_le_add nA (le_refl _)) hWnn) ?_
+    exact budN_mono hεθ hed hεφ hfd (add_le_add nB (le_refl _)) (add_le_add nC (le_refl _))
+      (add_le_add nD (le_refl _)) (add_le_add nE (le_refl _)) (add_le_add nF (le_refl _))
+      (le_refl _)
+  -- nonnegativity of the exact D's
+  have hD1Enn : (0 : ℤ) ≤ 6 * ((εθ.den : ℤ) * εφ.den) ^ 3
+        * (sqrtNum84 (zq.a0 * zq.a0 + zq.a1 * zq.a1) + 3 * 10 ^ 6)
+      + budN (sqrtNum84 (zq.b0 * zq.b0 + zq.b1 * zq.b1) + 3 * 10 ^ 6)
+          (sqrtNum84 (zq.c0 * zq.c0 + zq.c1 * zq.c1) + 3 * 10 ^ 6)
+          (sqrtNum84 (zq.d0 * zq.d0 + zq.d1 * zq.d1) + 3 * 10 ^ 6)
+          (sqrtNum84 (zq.e0 * zq.e0 + zq.e1 * zq.e1) + 3 * 10 ^ 6)
+          (sqrtNum84 (zq.f0 * zq.f0 + zq.f1 * zq.f1) + 3 * 10 ^ 6) (10 ^ 16)
+          εθ.num (εθ.den : ℤ) εφ.num (εφ.den : ℤ) := by
+    refine add_nonneg (mul_nonneg hWnn
+      (add_nonneg (sqrtNum84_nonneg _) (by norm_num))) ?_
+    exact budN_nonneg hεθ hed hεφ hfd
+      (add_nonneg (sqrtNum84_nonneg _) (by norm_num))
+      (add_nonneg (sqrtNum84_nonneg _) (by norm_num))
+      (add_nonneg (sqrtNum84_nonneg _) (by norm_num))
+      (add_nonneg (sqrtNum84_nonneg _) (by norm_num))
+      (add_nonneg (sqrtNum84_nonneg _) (by norm_num)) (by norm_num)
+  have hnrmZnn : (0 : ℤ) ≤ nrmZ := by rw [← hnrm]; positivity
+  have hD2Enn : (0 : ℤ) ≤ 6 * ((εθ.den : ℤ) * εφ.den) ^ 3
+        * (sqrtNum84 ((zq.sub zv).a0 * (zq.sub zv).a0 + (zq.sub zv).a1 * (zq.sub zv).a1)
+          + 5 * 10 ^ 6)
+      + budN (sqrtNum84 ((zq.sub zv).b0 * (zq.sub zv).b0 + (zq.sub zv).b1 * (zq.sub zv).b1)
+            + 5 * 10 ^ 6)
+          (sqrtNum84 ((zq.sub zv).c0 * (zq.sub zv).c0 + (zq.sub zv).c1 * (zq.sub zv).c1)
+            + 5 * 10 ^ 6)
+          (sqrtNum84 ((zq.sub zv).d0 * (zq.sub zv).d0 + (zq.sub zv).d1 * (zq.sub zv).d1)
+            + 5 * 10 ^ 6)
+          (sqrtNum84 ((zq.sub zv).e0 * (zq.sub zv).e0 + (zq.sub zv).e1 * (zq.sub zv).e1)
+            + 5 * 10 ^ 6)
+          (sqrtNum84 ((zq.sub zv).f0 * (zq.sub zv).f0 + (zq.sub zv).f1 * (zq.sub zv).f1)
+            + 5 * 10 ^ 6) nrmZ εθ.num (εθ.den : ℤ) εφ.num (εφ.den : ℤ) := by
+    refine add_nonneg (mul_nonneg hWnn
+      (add_nonneg (sqrtNum84_nonneg _) (by norm_num))) ?_
+    exact budN_nonneg hεθ hed hεφ hfd
+      (add_nonneg (sqrtNum84_nonneg _) (by norm_num))
+      (add_nonneg (sqrtNum84_nonneg _) (by norm_num))
+      (add_nonneg (sqrtNum84_nonneg _) (by norm_num))
+      (add_nonneg (sqrtNum84_nonneg _) (by norm_num))
+      (add_nonneg (sqrtNum84_nonneg _) (by norm_num)) hnrmZnn
+  -- cast h1 and h2, distributing only the outer coercions
+  have cAdd : ∀ a b : ℕ, ((Nat.add a b : ℕ) : ℤ) = (a : ℤ) + b := fun a b => by
+    simp only [natAdd_eq]; push_cast; ring
+  have cMul : ∀ a b : ℕ, ((Nat.mul a b : ℕ) : ℤ) = (a : ℤ) * b := fun a b => by
+    simp only [natMul_eq]; push_cast; ring
+  have h1' := (Nat.cast_lt (α := ℤ)).mpr h1
+  simp only [cAdd, cMul] at h1'
+  rw [We, e9, budO_cast k1e k2e k3e k4e k5e k6e, t1e, t2e, t3e, t4e, t5e, hrem] at h1'
+  have h2' := (Nat.cast_lt (α := ℤ)).mpr h2
+  simp only [cAdd, cMul] at h2'
+  rw [We, e9, e65, cLe, cRe, budO_cast k1e k2e k3e k4e k5e k6e,
+    budO_cast k1e k2e k3e k4e k5e k6e, t1e, t2e, t3e, t4e, t5e, hrem, hnrm] at h2'
+  simp only [cAdd, e65] at h2'
+  refine be_pair_mono (le_of_eq hAB) hD1 hD2 hD1Enn hD2Enn hδ (Int.natCast_nonneg _)
+    (Int.natCast_nonneg _) hr.le hWnn ?_ ?_
+  · linarith
+  · ring_nf at h2' ⊢
+    linarith [h2']
+
+
+
+/-- Flat indices are below 90. -/
+private lemma flatIx_lt (k : VertexIndex) : flatIx k < 90 := by
+  have h1 := k.ℓ.isLt
+  have h2 := k.i.isLt
+  have h3 := k.k.isLt
+  unfold flatIx
+  omega
+
+/-- Distinct vertices have distinct flat indices. -/
+private lemma flatIx_ne {k q : VertexIndex} (h : k ≠ q) : flatIx k ≠ flatIx q :=
+  fun he => h (VertexIndex.flat_inj k q he)
+
+set_option maxHeartbeats 3200000 in
+set_option maxRecDepth 65536 in
+/-- The offset tier is sound: `beFastO = true` implies `beCheckN = true`,
+with no side conditions (the guards are part of `beFastO`). -/
+theorem beFastO_imp_beCheckN {Qi : Fin 3 → VertexIndex} {p : Pose ℚ} {εθ εφ δ r : ℚ}
+    (h : beFastO Qi p εθ εφ δ r = true) : beCheckN Qi p εθ εφ δ r = true := by
+  unfold beFastO at h
+  simp only [Bool.and_eq_true, decide_eq_true_eq, List.all_eq_true,
+    List.mem_finRange, forall_const] at h
+  obtain ⟨⟨⟨⟨⟨⟨⟨⟨hst, hct⟩, hsf⟩, hcf⟩, hεθ⟩, hεφ⟩, hδ⟩, hr⟩, hloop⟩ := h
+  unfold beCheckN beCheckNCore
+  simp only [List.all_eq_true, List.mem_finRange, forall_const, decide_eq_true_eq]
+  intro i k hk
+  have hpair := pairLoopO_forall (hloop i) (flatIx k) (flatIx_lt k) (flatIx_ne hk)
+  unfold pairO at hpair
+  -- names
+  have hK := mkRCO_casts (stN := RationalApprox.sinNum13 p.θ₂)
+    (ctN := RationalApprox.cosNum13 p.θ₂) (sfN := RationalApprox.sinNum13 p.φ₂)
+    (cfN := RationalApprox.cosNum13 p.φ₂) (δ := δ) (r := r) hεθ hεφ hδ hr
+  dsimp only at hK
+  obtain ⟨k1e, k2e, k3e, k4e, k5e, k6e, We, cLe, cRe⟩ := hK
+  have hAq := appO_bridge hst hct hsf hcf εθ εφ δ r (Qi i)
+  have hAv := appO_bridge hst hct hsf hcf εθ εφ δ r k
+  dsimp only at hAq hAv
+  obtain ⟨⟨qa0e, qa0b⟩, ⟨qa1e, qa1b⟩, ⟨qb0e, qb0b⟩, ⟨qb1e, qb1b⟩, ⟨qc1e, qc1b⟩,
+    ⟨qd0e, qd0b⟩, ⟨qd1e, qd1b⟩, ⟨qe1e, qe1b⟩, ⟨qf1e, qf1b⟩⟩ := hAq
+  obtain ⟨⟨va0e, va0b⟩, ⟨va1e, va1b⟩, ⟨vb0e, vb0b⟩, ⟨vb1e, vb1b⟩, ⟨vc1e, vc1b⟩,
+    ⟨vd0e, vd0b⟩, ⟨vd1e, vd1b⟩, ⟨ve1e, ve1b⟩, ⟨vf1e, vf1b⟩⟩ := hAv
+  have e63 : ((E6x3 : ℕ) : ℤ) = 3 * 10 ^ 6 := by norm_num [E6x3, Nat.pow_eq]
+  have e62 : ((E6x2 : ℕ) : ℤ) = 2 * 10 ^ 6 := by norm_num [E6x2, Nat.pow_eq]
+  have e16 : ((E16 : ℕ) : ℤ) = 10 ^ 16 := by norm_num [E16, Nat.pow_eq]
+  have cAdd : ∀ a b : ℕ, ((Nat.add a b : ℕ) : ℤ) = (a : ℤ) + b := fun a b => by
+    simp only [natAdd_eq]; push_cast; ring
+  have cMul : ∀ a b : ℕ, ((Nat.mul a b : ℕ) : ℤ) = (a : ℤ) * b := fun a b => by
+    simp only [natMul_eq]; push_cast; ring
+  have hWnn : (0 : ℤ) ≤ 6 * ((εθ.den : ℤ) * εφ.den) ^ 3 := by positivity
+  have hed : (0 : ℤ) ≤ (εθ.den : ℤ) := Int.natCast_nonneg _
+  have hfd : (0 : ℤ) ≤ (εφ.den : ℤ) := Int.natCast_nonneg _
+  -- compact names
+  set rc : RCO := mkRCO (RationalApprox.sinNum13 p.θ₂) (RationalApprox.cosNum13 p.θ₂)
+    (RationalApprox.sinNum13 p.φ₂) (RationalApprox.cosNum13 p.φ₂) εθ εφ δ r with hrc
+  set Q : A6O := appO rc (flatIx (Qi i)) with hQdef
+  set v : A6O := appO rc (flatIx k) with hvdef
+  set zq : App6N := app6N (RationalApprox.sinNum13 p.θ₂) (RationalApprox.cosNum13 p.θ₂)
+    (RationalApprox.sinNum13 p.φ₂) (RationalApprox.cosNum13 p.φ₂) (Qi i) with hzq
+  set zv : App6N := app6N (RationalApprox.sinNum13 p.θ₂) (RationalApprox.cosNum13 p.θ₂)
+    (RationalApprox.sinNum13 p.φ₂) (RationalApprox.cosNum13 p.φ₂) k with hzv
+  -- qcO projections (definitional)
+  have pj : (qcO rc (flatIx (Qi i))).a0P = Q.a0 - BFO ∧
+      (qcO rc (flatIx (Qi i))).a0N = BFO - Q.a0 ∧
+      (qcO rc (flatIx (Qi i))).a1P = Q.a1 - BFO ∧
+      (qcO rc (flatIx (Qi i))).a1N = BFO - Q.a1 ∧
+      (qcO rc (flatIx (Qi i))).b0P = Q.b0 - BFO ∧
+      (qcO rc (flatIx (Qi i))).b0N = BFO - Q.b0 ∧
+      (qcO rc (flatIx (Qi i))).b1P = Q.b1 - BFO ∧
+      (qcO rc (flatIx (Qi i))).b1N = BFO - Q.b1 ∧
+      (qcO rc (flatIx (Qi i))).c1P = Q.c1 - BFO ∧
+      (qcO rc (flatIx (Qi i))).c1N = BFO - Q.c1 ∧
+      (qcO rc (flatIx (Qi i))).d0P = Q.d0 - BFO ∧
+      (qcO rc (flatIx (Qi i))).d0N = BFO - Q.d0 ∧
+      (qcO rc (flatIx (Qi i))).d1P = Q.d1 - BFO ∧
+      (qcO rc (flatIx (Qi i))).d1N = BFO - Q.d1 ∧
+      (qcO rc (flatIx (Qi i))).e1P = Q.e1 - BFO ∧
+      (qcO rc (flatIx (Qi i))).e1N = BFO - Q.e1 ∧
+      (qcO rc (flatIx (Qi i))).f1P = Q.f1 - BFO ∧
+      (qcO rc (flatIx (Qi i))).f1N = BFO - Q.f1 := by
+    refine ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl,
+      rfl, rfl, rfl, rfl⟩
+  obtain ⟨pa0P, pa0N, pa1P, pa1N, pb0P, pb0N, pb1P, pb1N, pc1P, pc1N,
+    pd0P, pd0N, pd1P, pd1N, pe1P, pe1N, pf1P, pf1N⟩ := pj
+  -- splits
+  have sa0d : ((qcO rc (flatIx (Qi i))).a0P : ℤ) - (qcO rc (flatIx (Qi i))).a0N
+      = zq.a0 := by rw [pa0P, pa0N]; exact (split_facts qa0e).1
+  have sa1d : ((qcO rc (flatIx (Qi i))).a1P : ℤ) - (qcO rc (flatIx (Qi i))).a1N
+      = zq.a1 := by rw [pa1P, pa1N]; exact (split_facts qa1e).1
+  have sb0d : ((qcO rc (flatIx (Qi i))).b0P : ℤ) - (qcO rc (flatIx (Qi i))).b0N
+      = zq.b0 := by rw [pb0P, pb0N]; exact (split_facts qb0e).1
+  have sb1d : ((qcO rc (flatIx (Qi i))).b1P : ℤ) - (qcO rc (flatIx (Qi i))).b1N
+      = zq.b1 := by rw [pb1P, pb1N]; exact (split_facts qb1e).1
+  have sc1d : ((qcO rc (flatIx (Qi i))).c1P : ℤ) - (qcO rc (flatIx (Qi i))).c1N
+      = zq.c1 := by rw [pc1P, pc1N]; exact (split_facts qc1e).1
+  have sd0d : ((qcO rc (flatIx (Qi i))).d0P : ℤ) - (qcO rc (flatIx (Qi i))).d0N
+      = zq.d0 := by rw [pd0P, pd0N]; exact (split_facts qd0e).1
+  have sd1d : ((qcO rc (flatIx (Qi i))).d1P : ℤ) - (qcO rc (flatIx (Qi i))).d1N
+      = zq.d1 := by rw [pd1P, pd1N]; exact (split_facts qd1e).1
+  have se1d : ((qcO rc (flatIx (Qi i))).e1P : ℤ) - (qcO rc (flatIx (Qi i))).e1N
+      = zq.e1 := by rw [pe1P, pe1N]; exact (split_facts qe1e).1
+  have sf1d : ((qcO rc (flatIx (Qi i))).f1P : ℤ) - (qcO rc (flatIx (Qi i))).f1N
+      = zq.f1 := by rw [pf1P, pf1N]; exact (split_facts qf1e).1
+  -- offset-correction constants
+  have xm1 : (((qcO rc (flatIx (Qi i))).xmP : ℕ) : ℤ)
+      = BFO * (((qcO rc (flatIx (Qi i))).a0P : ℤ) + ((qcO rc (flatIx (Qi i))).a1P : ℤ)) := by
+    simp only [qcO]
+    simp only [natAdd_eq, natMul_eq]
+    push_cast
+    ring
+  have xm2 : (((qcO rc (flatIx (Qi i))).xmN : ℕ) : ℤ)
+      = BFO * (((qcO rc (flatIx (Qi i))).a0N : ℤ) + ((qcO rc (flatIx (Qi i))).a1N : ℤ)) := by
+    simp only [qcO]
+    simp only [natAdd_eq, natMul_eq]
+    push_cast
+    ring
+  have x11 : (((qcO rc (flatIx (Qi i))).x1P : ℕ) : ℤ)
+      = BFO * (((qcO rc (flatIx (Qi i))).b0P : ℤ) + ((qcO rc (flatIx (Qi i))).b1P : ℤ) + ((qcO rc (flatIx (Qi i))).a0P : ℤ) + ((qcO rc (flatIx (Qi i))).a1P : ℤ)) := by
+    simp only [qcO]
+    simp only [natAdd_eq, natMul_eq]
+    push_cast
+    ring
+  have x12 : (((qcO rc (flatIx (Qi i))).x1N : ℕ) : ℤ)
+      = BFO * (((qcO rc (flatIx (Qi i))).b0N : ℤ) + ((qcO rc (flatIx (Qi i))).b1N : ℤ) + ((qcO rc (flatIx (Qi i))).a0N : ℤ) + ((qcO rc (flatIx (Qi i))).a1N : ℤ)) := by
+    simp only [qcO]
+    simp only [natAdd_eq, natMul_eq]
+    push_cast
+    ring
+  have x21 : (((qcO rc (flatIx (Qi i))).x2P : ℕ) : ℤ)
+      = BFO * (((qcO rc (flatIx (Qi i))).c1P : ℤ) + ((qcO rc (flatIx (Qi i))).a1P : ℤ)) := by
+    simp only [qcO]
+    simp only [natAdd_eq, natMul_eq]
+    push_cast
+    ring
+  have x22 : (((qcO rc (flatIx (Qi i))).x2N : ℕ) : ℤ)
+      = BFO * (((qcO rc (flatIx (Qi i))).c1N : ℤ) + ((qcO rc (flatIx (Qi i))).a1N : ℤ)) := by
+    simp only [qcO]
+    simp only [natAdd_eq, natMul_eq]
+    push_cast
+    ring
+  have x31 : (((qcO rc (flatIx (Qi i))).x3P : ℕ) : ℤ)
+      = BFO * (((qcO rc (flatIx (Qi i))).d0P : ℤ) + ((qcO rc (flatIx (Qi i))).d1P : ℤ) + 2 * ((qcO rc (flatIx (Qi i))).b0P : ℤ) + 2 * ((qcO rc (flatIx (Qi i))).b1P : ℤ) + ((qcO rc (flatIx (Qi i))).a0P : ℤ) + ((qcO rc (flatIx (Qi i))).a1P : ℤ)) := by
+    simp only [qcO]
+    simp only [natAdd_eq, natMul_eq]
+    push_cast
+    ring
+  have x32 : (((qcO rc (flatIx (Qi i))).x3N : ℕ) : ℤ)
+      = BFO * (((qcO rc (flatIx (Qi i))).d0N : ℤ) + ((qcO rc (flatIx (Qi i))).d1N : ℤ) + 2 * ((qcO rc (flatIx (Qi i))).b0N : ℤ) + 2 * ((qcO rc (flatIx (Qi i))).b1N : ℤ) + ((qcO rc (flatIx (Qi i))).a0N : ℤ) + ((qcO rc (flatIx (Qi i))).a1N : ℤ)) := by
+    simp only [qcO]
+    simp only [natAdd_eq, natMul_eq]
+    push_cast
+    ring
+  have x41 : (((qcO rc (flatIx (Qi i))).x4P : ℕ) : ℤ)
+      = BFO * (((qcO rc (flatIx (Qi i))).e1P : ℤ) + ((qcO rc (flatIx (Qi i))).b1P : ℤ) + ((qcO rc (flatIx (Qi i))).c1P : ℤ) + ((qcO rc (flatIx (Qi i))).a1P : ℤ)) := by
+    simp only [qcO]
+    simp only [natAdd_eq, natMul_eq]
+    push_cast
+    ring
+  have x42 : (((qcO rc (flatIx (Qi i))).x4N : ℕ) : ℤ)
+      = BFO * (((qcO rc (flatIx (Qi i))).e1N : ℤ) + ((qcO rc (flatIx (Qi i))).b1N : ℤ) + ((qcO rc (flatIx (Qi i))).c1N : ℤ) + ((qcO rc (flatIx (Qi i))).a1N : ℤ)) := by
+    simp only [qcO]
+    simp only [natAdd_eq, natMul_eq]
+    push_cast
+    ring
+  have x51 : (((qcO rc (flatIx (Qi i))).x5P : ℕ) : ℤ)
+      = BFO * (((qcO rc (flatIx (Qi i))).f1P : ℤ) + 2 * ((qcO rc (flatIx (Qi i))).c1P : ℤ) + ((qcO rc (flatIx (Qi i))).a1P : ℤ)) := by
+    simp only [qcO]
+    simp only [natAdd_eq, natMul_eq]
+    push_cast
+    ring
+  have x52 : (((qcO rc (flatIx (Qi i))).x5N : ℕ) : ℤ)
+      = BFO * (((qcO rc (flatIx (Qi i))).f1N : ℤ) + 2 * ((qcO rc (flatIx (Qi i))).c1N : ℤ) + ((qcO rc (flatIx (Qi i))).a1N : ℤ)) := by
+    simp only [qcO]
+    simp only [natAdd_eq, natMul_eq]
+    push_cast
+    ring
+  -- offset differences
+  have hda0 : (((qcO rc (flatIx (Qi i))).pa0 - v.a0 : ℕ) : ℤ) = (zq.sub zv).a0 + BFO := by
+    rw [show (qcO rc (flatIx (Qi i))).pa0 = Nat.add Q.a0 BFO from rfl,
+      show (zq.sub zv).a0 = zq.a0 - zv.a0 from rfl]
+    exact dsub_cast qa0e va0e qa0b va0b
+  have hda1 : (((qcO rc (flatIx (Qi i))).pa1 - v.a1 : ℕ) : ℤ) = (zq.sub zv).a1 + BFO := by
+    rw [show (qcO rc (flatIx (Qi i))).pa1 = Nat.add Q.a1 BFO from rfl,
+      show (zq.sub zv).a1 = zq.a1 - zv.a1 from rfl]
+    exact dsub_cast qa1e va1e qa1b va1b
+  have hdb0 : (((qcO rc (flatIx (Qi i))).pb0 - v.b0 : ℕ) : ℤ) = (zq.sub zv).b0 + BFO := by
+    rw [show (qcO rc (flatIx (Qi i))).pb0 = Nat.add Q.b0 BFO from rfl,
+      show (zq.sub zv).b0 = zq.b0 - zv.b0 from rfl]
+    exact dsub_cast qb0e vb0e qb0b vb0b
+  have hdb1 : (((qcO rc (flatIx (Qi i))).pb1 - v.b1 : ℕ) : ℤ) = (zq.sub zv).b1 + BFO := by
+    rw [show (qcO rc (flatIx (Qi i))).pb1 = Nat.add Q.b1 BFO from rfl,
+      show (zq.sub zv).b1 = zq.b1 - zv.b1 from rfl]
+    exact dsub_cast qb1e vb1e qb1b vb1b
+  have hdc1 : (((qcO rc (flatIx (Qi i))).pc1 - v.c1 : ℕ) : ℤ) = (zq.sub zv).c1 + BFO := by
+    rw [show (qcO rc (flatIx (Qi i))).pc1 = Nat.add Q.c1 BFO from rfl,
+      show (zq.sub zv).c1 = zq.c1 - zv.c1 from rfl]
+    exact dsub_cast qc1e vc1e qc1b vc1b
+  have hdd0 : (((qcO rc (flatIx (Qi i))).pd0 - v.d0 : ℕ) : ℤ) = (zq.sub zv).d0 + BFO := by
+    rw [show (qcO rc (flatIx (Qi i))).pd0 = Nat.add Q.d0 BFO from rfl,
+      show (zq.sub zv).d0 = zq.d0 - zv.d0 from rfl]
+    exact dsub_cast qd0e vd0e qd0b vd0b
+  have hdd1 : (((qcO rc (flatIx (Qi i))).pd1 - v.d1 : ℕ) : ℤ) = (zq.sub zv).d1 + BFO := by
+    rw [show (qcO rc (flatIx (Qi i))).pd1 = Nat.add Q.d1 BFO from rfl,
+      show (zq.sub zv).d1 = zq.d1 - zv.d1 from rfl]
+    exact dsub_cast qd1e vd1e qd1b vd1b
+  have hde1 : (((qcO rc (flatIx (Qi i))).pe1 - v.e1 : ℕ) : ℤ) = (zq.sub zv).e1 + BFO := by
+    rw [show (qcO rc (flatIx (Qi i))).pe1 = Nat.add Q.e1 BFO from rfl,
+      show (zq.sub zv).e1 = zq.e1 - zv.e1 from rfl]
+    exact dsub_cast qe1e ve1e qe1b ve1b
+  have hdf1 : (((qcO rc (flatIx (Qi i))).pf1 - v.f1 : ℕ) : ℤ) = (zq.sub zv).f1 + BFO := by
+    rw [show (qcO rc (flatIx (Qi i))).pf1 = Nat.add Q.f1 BFO from rfl,
+      show (zq.sub zv).f1 = zq.f1 - zv.f1 from rfl]
+    exact dsub_cast qf1e vf1e qf1b vf1b
+  -- pair norm from the packed table
+  have hnrm : ((Nat.add (Nat.land (Nat.shiftRight (qcO rc (flatIx (Qi i))).qrow
+      (Nat.mul 57 (flatIx k))) M57) E6x2 : ℕ) : ℤ)
+      = sqrtDvCurriedN (Qi i).ℓ (Qi i).i (Qi i).k k.ℓ k.i k.k + 2 * 10 ^ 6 := by
+    have hs := sqrtDvBig_spec (Qi i).ℓ (Qi i).i (Qi i).k k.ℓ k.i k.k
+    dsimp only at hs
+    rw [cAdd, e62,
+      show (qcO rc (flatIx (Qi i))).qrow = Nat.land (Nat.shiftRight sqrtDvBig
+        (Nat.mul 5130 (flatIx (Qi i)))) M5130 from rfl,
+      show M5130 = 2 ^ 5130 - 1 from by norm_num [M5130, Nat.pow_eq],
+      show M57 = 2 ^ 57 - 1 from by norm_num [M57, Nat.pow_eq],
+      show flatIx (Qi i) = 45 * (Qi i).ℓ.val + 15 * (Qi i).i.val + (Qi i).k.val from rfl,
+      show flatIx k = 45 * k.ℓ.val + 15 * k.i.val + k.k.val from rfl, hs]
+  -- D1 domination
+  have T1 : ((Nat.add (sqsO (Q.a0 - BFO) (BFO - Q.a0)) (sqsO (Q.a1 - BFO) (BFO - Q.a1)) : ℕ) : ℤ)
+      = zq.a0 * zq.a0 + zq.a1 * zq.a1 := by
+    rw [cAdd, sqsO_cast (split_facts qa0e).1 (split_facts qa0e).2,
+      sqsO_cast (split_facts qa1e).1 (split_facts qa1e).2]
+  have T2 : ((Nat.add (sqsO (Q.b0 - BFO) (BFO - Q.b0)) (sqsO (Q.b1 - BFO) (BFO - Q.b1)) : ℕ) : ℤ)
+      = zq.b0 * zq.b0 + zq.b1 * zq.b1 := by
+    rw [cAdd, sqsO_cast (split_facts qb0e).1 (split_facts qb0e).2,
+      sqsO_cast (split_facts qb1e).1 (split_facts qb1e).2]
+  have T4 : ((Nat.add (sqsO (Q.d0 - BFO) (BFO - Q.d0)) (sqsO (Q.d1 - BFO) (BFO - Q.d1)) : ℕ) : ℤ)
+      = zq.d0 * zq.d0 + zq.d1 * zq.d1 := by
+    rw [cAdd, sqsO_cast (split_facts qd0e).1 (split_facts qd0e).2,
+      sqsO_cast (split_facts qd1e).1 (split_facts qd1e).2]
+  have T3 : ((sqsO (Q.c1 - BFO) (BFO - Q.c1) : ℕ) : ℤ)
+      = zq.c0 * zq.c0 + zq.c1 * zq.c1 := by
+    rw [sqsO_cast (split_facts qc1e).1 (split_facts qc1e).2,
+      show zq.c0 = 0 from rfl]
+    ring
+  have T5 : ((sqsO (Q.e1 - BFO) (BFO - Q.e1) : ℕ) : ℤ)
+      = zq.e0 * zq.e0 + zq.e1 * zq.e1 := by
+    rw [sqsO_cast (split_facts qe1e).1 (split_facts qe1e).2,
+      show zq.e0 = 0 from rfl]
+    ring
+  have T6 : ((sqsO (Q.f1 - BFO) (BFO - Q.f1) : ℕ) : ℤ)
+      = zq.f0 * zq.f0 + zq.f1 * zq.f1 := by
+    rw [sqsO_cast (split_facts qf1e).1 (split_facts qf1e).2,
+      show zq.f0 = 0 from rfl]
+    ring
+  have hD1 : 6 * ((εθ.den : ℤ) * εφ.den) ^ 3
+        * (sqrtNum84 (zq.a0 * zq.a0 + zq.a1 * zq.a1) + 3 * 10 ^ 6)
+      + budN (sqrtNum84 (zq.b0 * zq.b0 + zq.b1 * zq.b1) + 3 * 10 ^ 6)
+          (sqrtNum84 (zq.c0 * zq.c0 + zq.c1 * zq.c1) + 3 * 10 ^ 6)
+          (sqrtNum84 (zq.d0 * zq.d0 + zq.d1 * zq.d1) + 3 * 10 ^ 6)
+          (sqrtNum84 (zq.e0 * zq.e0 + zq.e1 * zq.e1) + 3 * 10 ^ 6)
+          (sqrtNum84 (zq.f0 * zq.f0 + zq.f1 * zq.f1) + 3 * 10 ^ 6) (10 ^ 16)
+          εθ.num (εθ.den : ℤ) εφ.num (εφ.den : ℤ)
+      ≤ ((qcO rc (flatIx (Qi i))).D1N : ℤ) := by
+    rw [show (qcO rc (flatIx (Qi i))).D1N = Nat.add (Nat.mul rc.W (Nat.add (nUpO84
+        (Nat.add (sqsO (Q.a0 - BFO) (BFO - Q.a0)) (sqsO (Q.a1 - BFO) (BFO - Q.a1)))) E6x3))
+      (budO rc.k1 rc.k2 rc.k3 rc.k4 rc.k5 rc.k6
+        (Nat.add (nUpO84 (Nat.add (sqsO (Q.b0 - BFO) (BFO - Q.b0))
+          (sqsO (Q.b1 - BFO) (BFO - Q.b1)))) E6x3)
+        (Nat.add (nUpO84 (sqsO (Q.c1 - BFO) (BFO - Q.c1))) E6x3)
+        (Nat.add (nUpO84 (Nat.add (sqsO (Q.d0 - BFO) (BFO - Q.d0))
+          (sqsO (Q.d1 - BFO) (BFO - Q.d1)))) E6x3)
+        (Nat.add (nUpO84 (sqsO (Q.e1 - BFO) (BFO - Q.e1))) E6x3)
+        (Nat.add (nUpO84 (sqsO (Q.f1 - BFO) (BFO - Q.f1))) E6x3) E16) from rfl]
+    simp only [cAdd, cMul]
+    rw [We, budO_cast k1e k2e k3e k4e k5e k6e]
+    simp only [cAdd, e63, e16]
+    refine add_le_add (mul_le_mul_of_nonneg_left
+      (add_le_add (nUpO84_dom T1) (le_refl _)) hWnn) ?_
+    exact budN_mono hεθ hed hεφ hfd (add_le_add (nUpO84_dom T2) (le_refl _))
+      (add_le_add (nUpO84_dom T3) (le_refl _)) (add_le_add (nUpO84_dom T4) (le_refl _))
+      (add_le_add (nUpO84_dom T5) (le_refl _)) (add_le_add (nUpO84_dom T6) (le_refl _))
+      (le_refl _)
+  exact pairCore_sound hεθ hεφ hδ hr k1e k2e k3e k4e k5e k6e We cLe cRe
+    sa0d sa1d sb0d sb1d sc1d sd0d sd1d se1d sf1d xm1 xm2 x11 x12 x21 x22
+    x31 x32 x41 x42 x51 x52 hda0 hda1 hdb0 hdb1 hdc1 hdd0 hdd1 hde1 hdf1
+    hnrm rfl rfl rfl rfl rfl rfl hD1 hpair
+
 end OffsetSound
 
+/-- The offset tier first; on rejection fall back to the `Int` tiers of
+`instDecidableBε₂N` (Newton, exact, then ℚ). -/
+instance (priority := 10700) instDecidableBε₂O (Qi : Fin 3 → VertexIndex)
+    (p : Pose ℚ) (εθ εφ δ r : ℚ) :
+    Decidable (Local.TriangleQ.Bε₂ℚ Qi pythonVertexA p εθ εφ δ r
+      RationalApprox.sqrtApprox16.upper_sqrt) :=
+  dite (beFastO Qi p εθ εφ δ r = true)
+    (fun hf => .isTrue (by
+      have hg := hf
+      unfold beFastO at hg
+      simp only [Bool.and_eq_true, decide_eq_true_eq] at hg
+      obtain ⟨⟨⟨⟨⟨⟨⟨⟨_, _⟩, _⟩, _⟩, hεθ⟩, hεφ⟩, hδ⟩, hr⟩, _⟩ := hg
+      exact (Local2Fast.beCheck_iff Qi p εθ εφ δ r).mp
+        (beCheckN_eq Qi p δ (Rat.num_nonneg.mp hεθ) (Rat.num_nonneg.mp hεφ)
+          (Rat.num_pos.mp hr) ▸ beFastO_imp_beCheckN hf)))
+    (fun _ => instDecidableBε₂N Qi p εθ εφ δ r)
+
 end Noperthedron.Solution.Local2Nat
+
+namespace Noperthedron.Solution
+
+/-- Re-derived `Row.ValidLocal₂` decision procedure with the offset tier in
+scope (beats the `Local2Nat` instance). -/
+instance (priority := 10700) (row : Row) : Decidable (Row.ValidLocal₂ row) :=
+  decidable_of_iff _ (Row.validLocal₂_iff row).symm
+
+end Noperthedron.Solution
 
 end

@@ -1205,7 +1205,7 @@ lemma sqrtNum32_nonneg (S : ℤ) : 0 ≤ sqrtNum32 S := by
 
 section FastSound
 
-private lemma budN_mono {a1 a2 a3 a4 a5 rem a1' a2' a3' a4' a5' rem' en ed fn fd : ℤ}
+lemma budN_mono {a1 a2 a3 a4 a5 rem a1' a2' a3' a4' a5' rem' en ed fn fd : ℤ}
     (hen : 0 ≤ en) (hed : 0 ≤ ed) (hfn : 0 ≤ fn) (hfd : 0 ≤ fd)
     (h1 : a1 ≤ a1') (h2 : a2 ≤ a2') (h3 : a3 ≤ a3') (h4 : a4 ≤ a4') (h5 : a5 ≤ a5')
     (hr : rem ≤ rem') :
@@ -1233,7 +1233,7 @@ private lemma budN_mono {a1 a2 a3 a4 a5 rem a1' a2' a3' a4' a5' rem' en ed fn fd
     (mul_le_mul_of_nonneg_left h3 c3)) (mul_le_mul_of_nonneg_left h4 c4))
     (mul_le_mul_of_nonneg_left h5 c5)) (mul_le_mul_of_nonneg_left hr cE)
 
-private lemma budN_nonneg {a1 a2 a3 a4 a5 rem en ed fn fd : ℤ}
+lemma budN_nonneg {a1 a2 a3 a4 a5 rem en ed fn fd : ℤ}
     (hen : 0 ≤ en) (hed : 0 ≤ ed) (hfn : 0 ≤ fn) (hfd : 0 ≤ fd)
     (h1 : 0 ≤ a1) (h2 : 0 ≤ a2) (h3 : 0 ≤ a3) (h4 : 0 ≤ a4) (h5 : 0 ≤ a5)
     (hr : 0 ≤ rem) :
@@ -1242,7 +1242,7 @@ private lemma budN_nonneg {a1 a2 a3 a4 a5 rem en ed fn fd : ℤ}
     hen hed hfn hfd h1 h2 h3 h4 h5 hr
   simpa [budN] using this
 
-private lemma be_pair_mono {numF numE D1F D1E D2F D2E δn rd δd rn W : ℤ}
+lemma be_pair_mono {numF numE D1F D1E D2F D2E δn rd δd rn W : ℤ}
     (hnum : numF ≤ numE) (hD1 : D1E ≤ D1F) (hD2 : D2E ≤ D2F)
     (hD1nn : 0 ≤ D1E) (hD2nn : 0 ≤ D2E)
     (hδ : 0 ≤ δn) (hrd : 0 ≤ rd) (hδd : 0 ≤ δd) (hrn : 0 ≤ rn) (hW : 0 ≤ W)

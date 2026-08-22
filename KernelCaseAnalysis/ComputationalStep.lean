@@ -19,10 +19,11 @@ Everything here is checked by the Lean kernel alone: axioms are `propext`,
 `Classical.choice`, and `Quot.sound` — no `sorry`, no `ofReduceBool`.
 
 This library is deliberately **not** in `defaultTargets`: building it is the
-full kernel verification run (~31 core-hours by the generator's model:
-~25k s of globals, ~77k s of second-order locals, ~8k s of splits; local
-ranges are singletons with a ~4.7 GB per-decide envelope, so expect
-~10-way parallelism on 64 GB — roughly 3 hours wall):
+full kernel verification run (~16 core-hours by the generator's model:
+~25k s of globals, ~25k s of second-order locals via the `Local2NatOffset`
+all-`Nat` tier, ~8k s of splits; local ranges are singletons with a
+~2.8 GB per-decide envelope, so full 16-way parallelism fits in 64 GB —
+roughly 70–90 minutes wall):
 
     lake build KernelCaseAnalysis
 -/

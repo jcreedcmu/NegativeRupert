@@ -90,16 +90,17 @@ def read_node_types():
     assert len(types) == N, len(types)
     return types
 
-# per-row kernel memory (MB) and time (s) model, recalibrated 2026-08-22 for
-# the v7 table: globals/splits keep the 2026-07-10 numbers (unchanged
-# checkers); locals are budgeted at the SECOND-ORDER cost (Row.ValidLocal₂
-# via the Local2Nat Newton tier: ~3.6 s beFastN + ~0.35 s δ₂ + first-order
-# fast-fail, measured at rows 245/905802; peak RSS 4.7 GB ≈ 2 GB above the
-# ~2.6 GB floor). The 670 first-order local rows (of 17,938) are
-# over-budgeted by this — negligible. COST_MB[2] > MB_BUDGET makes every
-# local row its own decide-range, which also caps the per-decide envelope.
+# per-row kernel memory (MB) and time (s) model, recalibrated 2026-08-23 for
+# the Local2NatOffset all-Nat tier: globals/splits keep the 2026-07-10
+# numbers (unchanged checkers); locals are budgeted at the SECOND-ORDER cost
+# (Row.ValidLocal₂ via the beFastO offset tier: ~1.3 s per full row incl.
+# δ₂, measured at row 71419; peak RSS 2.8 GB). The 670 first-order local
+# rows (of 17,938) are over-budgeted by this — negligible. COST_MB[2] >
+# MB_BUDGET keeps every local row its own decide-range (the committed Gen/
+# tree was generated at the 2026-08-22 model and stays VALID — range sizing
+# only depends on COST_MB for locals, and globals/splits are unchanged).
 COST_MB = {1: 25, 2: 2000, 3: 21, 4: 130}
-COST_S  = {1: 0.038, 2: 4.3, 3: 0.018, 4: 0.10}
+COST_S  = {1: 0.038, 2: 1.8, 3: 0.018, 4: 0.10}
 # MB_BUDGET sets per-decide range length (range rows ~= MB_BUDGET/COST_MB),
 # and kernel time per row RISES with range length: the whnf cache accumulated
 # across a decide grows the live heap and hurts locality. Measured 2026-07-17
