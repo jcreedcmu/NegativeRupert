@@ -1,7 +1,7 @@
 module
 
 public import Noperthedron.SolutionTable.Assemble
-public import Noperthedron.Checker.Local2NatOffset
+public import Noperthedron.Checker.Local2NatDelta
 
 @[expose] public section
 

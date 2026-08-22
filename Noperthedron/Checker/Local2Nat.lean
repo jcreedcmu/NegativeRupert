@@ -66,7 +66,7 @@ private lemma sqrtℚUp16_intCast_div32 (S : ℤ) :
     push_cast
     ring
 
-private lemma sqrtℚUp16_intCast_div84 (S : ℤ) :
+lemma sqrtℚUp16_intCast_div84 (S : ℤ) :
     RationalApprox.sqrtℚUp16 ((S : ℚ) / 10 ^ 84) = (sqrtNum84 S : ℚ) / 10 ^ 16 := by
   unfold RationalApprox.sqrtℚUp16 sqrtNum84
   rcases le_or_gt S 0 with hS | hS
@@ -405,7 +405,7 @@ private lemma q_app6 :
 
 /-- All twelve component bridges at once: `app6` at a python vertex is the
 canonical cast of the integer `app6N`. -/
-private lemma app6_intCast :
+lemma app6_intCast :
     app6 (fam2 θ φ) (pythonVertexA a)
       = app6QofN (app6N (sinNum13 θ) (cosNum13 θ) (sinNum13 φ) (cosNum13 φ) a) := by
   rw [q_app6]
