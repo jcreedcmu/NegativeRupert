@@ -958,7 +958,7 @@ end BeSound
 parameterized by the two scaled square-root bounds so the exact core
 (`sqrtNum84`/`sqrtNum32`) and the Newton fast tier (`nUp84`/`nUp32`) share
 one body. -/
-def beCheckNCore (sq84 sq32 : ℤ → ℤ) (Qi : Fin 3 → VertexIndex) (p : Pose ℚ)
+def beCheckNCore (sq84 : ℤ → ℤ) (Qi : Fin 3 → VertexIndex) (p : Pose ℚ)
     (εθ εφ δ r : ℚ) : Bool :=
   let stN : ℤ := sinNum13 p.θ₂
   let ctN : ℤ := cosNum13 p.θ₂
@@ -976,9 +976,6 @@ def beCheckNCore (sq84 sq32 : ℤ → ℤ) (Qi : Fin 3 → VertexIndex) (p : Pos
   (List.finRange 3).all fun i =>
     let Qk := Qi i
     let qv := app6N stN ctN sfN cfN Qk
-    let u0 := pythonVertexNumCurried Qk.ℓ Qk.i Qk.k 0
-    let u1 := pythonVertexNumCurried Qk.ℓ Qk.i Qk.k 1
-    let u2 := pythonVertexNumCurried Qk.ℓ Qk.i Qk.k 2
     let D1N := W * (sq84 (qv.a0 * qv.a0 + qv.a1 * qv.a1) + 3 * 10 ^ 6)
       + budN (sq84 (qv.b0 * qv.b0 + qv.b1 * qv.b1) + 3 * 10 ^ 6)
           (sq84 (qv.c0 * qv.c0 + qv.c1 * qv.c1) + 3 * 10 ^ 6)
@@ -988,13 +985,7 @@ def beCheckNCore (sq84 sq32 : ℤ → ℤ) (Qi : Fin 3 → VertexIndex) (p : Pos
     decide <| ∀ k : VertexIndex, k ≠ Qk →
       let vk := app6N stN ctN sfN cfN k
       let dq := qv.sub vk
-      let w0 := pythonVertexNumCurried k.ℓ k.i k.k 0
-      let w1 := pythonVertexNumCurried k.ℓ k.i k.k 1
-      let w2 := pythonVertexNumCurried k.ℓ k.i k.k 2
-      let du0 := u0 - w0
-      let du1 := u1 - w1
-      let du2 := u2 - w2
-      let nrmN := sq32 (du0 * du0 + du1 * du1 + du2 * du2) + 2 * 10 ^ 6
+      let nrmN := sqrtDvCurriedN Qk.ℓ Qk.i Qk.k k.ℓ k.i k.k + 2 * 10 ^ 6
       let numN := W * (qv.a0 * dq.a0 + qv.a1 * dq.a1) - W * (9 * 10 ^ 74)
         - budN (|(qv.b0 * dq.a0 + qv.b1 * dq.a1) + (qv.a0 * dq.b0 + qv.a1 * dq.b1)|
               + 18 * 10 ^ 74)
@@ -1018,7 +1009,7 @@ def beCheckNCore (sq84 sq32 : ℤ → ℤ) (Qi : Fin 3 → VertexIndex) (p : Pos
 
 /-- The exact integer core. -/
 def beCheckN (Qi : Fin 3 → VertexIndex) (p : Pose ℚ) (εθ εφ δ r : ℚ) : Bool :=
-  beCheckNCore sqrtNum84 sqrtNum32 Qi p εθ εφ δ r
+  beCheckNCore sqrtNum84 Qi p εθ εφ δ r
 
 section BeSound2
 
@@ -1050,7 +1041,7 @@ theorem beCheckN_eq (Qi : Fin 3 → VertexIndex) (p : Pose ℚ) {εθ εφ : ℚ
     with hX
   set Y := X.sub (app6N (sinNum13 p.θ₂) (cosNum13 p.θ₂) (sinNum13 p.φ₂) (cosNum13 p.φ₂) k)
     with hY
-  -- the nrm bridge
+  -- the nrm bridge: the pair distance's upper norm is the `sqrtDv` literal
   have hnrm : RationalApprox.sqrtApprox16.upper_sqrt.f
         ((pythonVertexA (Qi i) 0 - pythonVertexA k 0)
             * (pythonVertexA (Qi i) 0 - pythonVertexA k 0)
@@ -1058,27 +1049,23 @@ theorem beCheckN_eq (Qi : Fin 3 → VertexIndex) (p : Pose ℚ) {εθ εφ : ℚ
             * (pythonVertexA (Qi i) 1 - pythonVertexA k 1)
           + (pythonVertexA (Qi i) 2 - pythonVertexA k 2)
             * (pythonVertexA (Qi i) 2 - pythonVertexA k 2)) + 2 * κℚ
-      = ((sqrtNum32 ((pythonVertexNumCurried (Qi i).ℓ (Qi i).i (Qi i).k 0
-              - pythonVertexNumCurried k.ℓ k.i k.k 0)
-            * (pythonVertexNumCurried (Qi i).ℓ (Qi i).i (Qi i).k 0
-              - pythonVertexNumCurried k.ℓ k.i k.k 0)
-            + (pythonVertexNumCurried (Qi i).ℓ (Qi i).i (Qi i).k 1
-              - pythonVertexNumCurried k.ℓ k.i k.k 1)
-            * (pythonVertexNumCurried (Qi i).ℓ (Qi i).i (Qi i).k 1
-              - pythonVertexNumCurried k.ℓ k.i k.k 1)
-            + (pythonVertexNumCurried (Qi i).ℓ (Qi i).i (Qi i).k 2
-              - pythonVertexNumCurried k.ℓ k.i k.k 2)
-            * (pythonVertexNumCurried (Qi i).ℓ (Qi i).i (Qi i).k 2
-              - pythonVertexNumCurried k.ℓ k.i k.k 2)) + 2 * 10 ^ 6 : ℤ) : ℚ)
+      = ((sqrtDvCurriedN (Qi i).ℓ (Qi i).i (Qi i).k k.ℓ k.i k.k + 2 * 10 ^ 6 : ℤ) : ℚ)
         / 10 ^ 16 := by
-    rw [hv (Qi i) 0, hv (Qi i) 1, hv (Qi i) 2, hv k 0, hv k 1, hv k 2, upper_f_eq,
-      show ∀ a b c d e f : ℤ,
-          ((a:ℚ)/10^16 - (b:ℚ)/10^16) * ((a:ℚ)/10^16 - (b:ℚ)/10^16)
-            + ((c:ℚ)/10^16 - (d:ℚ)/10^16) * ((c:ℚ)/10^16 - (d:ℚ)/10^16)
-            + ((e:ℚ)/10^16 - (f:ℚ)/10^16) * ((e:ℚ)/10^16 - (f:ℚ)/10^16)
-          = (((a - b) * (a - b) + (c - d) * (c - d) + (e - f) * (e - f) : ℤ) : ℚ) / 10 ^ 32
-        from fun a b c d e f => by push_cast; ring,
-      sqrtℚUp16_intCast_div32, hκ2]
+    rw [show RationalApprox.sqrtApprox16.upper_sqrt.f
+          ((pythonVertexA (Qi i) 0 - pythonVertexA k 0)
+              * (pythonVertexA (Qi i) 0 - pythonVertexA k 0)
+            + (pythonVertexA (Qi i) 1 - pythonVertexA k 1)
+              * (pythonVertexA (Qi i) 1 - pythonVertexA k 1)
+            + (pythonVertexA (Qi i) 2 - pythonVertexA k 2)
+              * (pythonVertexA (Qi i) 2 - pythonVertexA k 2))
+        = RationalApprox.sqrtApprox16.upper_sqrt.norm
+            (pythonVertexA (Qi i) - pythonVertexA k) from by
+      rw [norm3_eq]
+      simp only [Pi.sub_apply]]
+    rw [← sqrtDv_eq,
+      show sqrtDv (Qi i) k
+          = ((sqrtDvCurriedN (Qi i).ℓ (Qi i).i (Qi i).k k.ℓ k.i k.k : ℤ) : ℚ) / 10 ^ 16
+        from rfl, hκ2]
     push_cast
     ring
   -- the assembled value bridges
@@ -1204,7 +1191,7 @@ lemma sqrtNum32_le_nUp32 (S : ℤ) : sqrtNum32 S ≤ nUp32 S := by
 
 /-- The Newton fast tier (one-sided: `true` implies `beCheckN`). -/
 def beFastN (Qi : Fin 3 → VertexIndex) (p : Pose ℚ) (εθ εφ δ r : ℚ) : Bool :=
-  beCheckNCore nUp84 nUp32 Qi p εθ εφ δ r
+  beCheckNCore nUp84 Qi p εθ εφ δ r
 
 lemma sqrtNum84_nonneg (S : ℤ) : 0 ≤ sqrtNum84 S := by
   unfold sqrtNum84
@@ -1274,6 +1261,21 @@ private lemma be_pair_mono {numF numE D1F D1E D2F D2E δn rd δd rn W : ℤ}
         _ = numE * W * (δd * rn) := by ring
     linarith
 
+private lemma sqrtDvCurriedN_nonneg (a b : VertexIndex) :
+    0 ≤ sqrtDvCurriedN a.ℓ a.i a.k b.ℓ b.i b.k := by
+  have h : (0:ℚ) ≤ ((sqrtDvCurriedN a.ℓ a.i a.k b.ℓ b.i b.k : ℤ) : ℚ) / 10 ^ 16 := by
+    rw [show ((sqrtDvCurriedN a.ℓ a.i a.k b.ℓ b.i b.k : ℤ) : ℚ) / 10 ^ 16
+        = sqrtDv a b from rfl, sqrtDv_eq]
+    rw [show RationalApprox.sqrtApprox16.upper_sqrt.norm
+          (pythonVertexA a - pythonVertexA b)
+        = RationalApprox.sqrtℚUp16 ((pythonVertexA a - pythonVertexA b)
+            ⬝ᵥ (pythonVertexA a - pythonVertexA b)) from rfl]
+    exact RationalApprox.sqrtℚUp16_nonneg _
+  have h2 : (0:ℚ) ≤ ((sqrtDvCurriedN a.ℓ a.i a.k b.ℓ b.i b.k : ℤ) : ℚ) := by
+    have := mul_le_mul_of_nonneg_right h (show (0:ℚ) ≤ 10 ^ 16 by norm_num)
+    simpa using this
+  exact_mod_cast h2
+
 /-- The fast tier is sound: `beFastN = true` implies `beCheckN = true` in the
 `0 ≤ εθ.num`, `0 ≤ εφ.num`, `0 ≤ δ.num`, `0 < r.num` regime. -/
 theorem beFastN_imp_beCheckN {Qi : Fin 3 → VertexIndex} {p : Pose ℚ} {εθ εφ δ r : ℚ}
@@ -1291,10 +1293,8 @@ theorem beFastN_imp_beCheckN {Qi : Fin 3 → VertexIndex} {p : Pose ℚ} {εθ �
   refine be_pair_mono ?_ ?_ ?_ ?_ ?_ hδ (Int.natCast_nonneg _) (Int.natCast_nonneg _)
     hr.le hW hik.1 hik.2
   -- numF ≤ numE : only the subtracted budget's remainder differs
-  · refine sub_le_sub_left (budN_mono hεθ hed hεφ hfd (le_refl _) (le_refl _) (le_refl _)
-      (le_refl _) (le_refl _) ?_) _
-    refine mul_le_mul_of_nonneg_right (mul_le_mul_of_nonneg_left
-      (add_le_add (sqrtNum32_le_nUp32 _) (le_refl _)) (by norm_num)) (by norm_num)
+  · exact sub_le_sub_left (budN_mono hεθ hed hεφ hfd (le_refl _) (le_refl _) (le_refl _)
+      (le_refl _) (le_refl _) (le_refl _)) _
   -- D1E ≤ D1F
   · refine add_le_add (mul_le_mul_of_nonneg_left
       (add_le_add (sqrtNum84_le_nUp84 _) (le_refl _)) hW) ?_
@@ -1308,8 +1308,7 @@ theorem beFastN_imp_beCheckN {Qi : Fin 3 → VertexIndex} {p : Pose ℚ} {εθ �
     exact budN_mono hεθ hed hεφ hfd
       (add_le_add (sqrtNum84_le_nUp84 _) (le_refl _)) (add_le_add (sqrtNum84_le_nUp84 _) (le_refl _))
       (add_le_add (sqrtNum84_le_nUp84 _) (le_refl _)) (add_le_add (sqrtNum84_le_nUp84 _) (le_refl _))
-      (add_le_add (sqrtNum84_le_nUp84 _) (le_refl _))
-      (add_le_add (sqrtNum32_le_nUp32 _) (le_refl _))
+      (add_le_add (sqrtNum84_le_nUp84 _) (le_refl _)) (le_refl _)
   -- 0 ≤ D1E
   · refine add_nonneg (mul_nonneg hW (add_nonneg (sqrtNum84_nonneg _) (by norm_num))) ?_
     exact budN_nonneg hεθ hed hεφ hfd
@@ -1326,7 +1325,7 @@ theorem beFastN_imp_beCheckN {Qi : Fin 3 → VertexIndex} {p : Pose ℚ} {εθ �
       (add_nonneg (sqrtNum84_nonneg _) (by norm_num))
       (add_nonneg (sqrtNum84_nonneg _) (by norm_num))
       (add_nonneg (sqrtNum84_nonneg _) (by norm_num))
-      (add_nonneg (sqrtNum32_nonneg _) (by norm_num))
+      (add_nonneg (sqrtDvCurriedN_nonneg _ _) (by norm_num))
 
 end FastSound
 
