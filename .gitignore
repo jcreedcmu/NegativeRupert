@@ -4,6 +4,12 @@
 # NativeCaseAnalysis/KernelCaseAnalysis builds; not committed
 /solution_tree_*.csv
 
+__pycache__/
+
+# checkpoints written to the repo root by scripts/make_solution_tree_v{7,8}.py
+/v7_cells.pkl
+/v8_cells.pkl
+
 blueprint/print
 blueprint/web
 blueprint/src/web.paux
