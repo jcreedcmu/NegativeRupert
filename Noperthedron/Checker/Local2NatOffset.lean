@@ -11,8 +11,9 @@ public import Noperthedron.Checker.SqrtDvNat
 
 An all-`Nat` rendering of the `beFastN` pair body, kernel-measured at
 ~2.8× the speed of the `Int` tier (3.8s → 1.27s per second-order local
-row; see `scripts/offset_pairbody_prototype.lean` for the validated
-prototype and the measured-negative design alternatives).
+row; the design was validated, and its measured-negative alternatives
+recorded, in `scripts/offset_pairbody_prototype.lean`, now in git
+history only).
 
 Encoding: `App6N` fields carry offset `BF = 10⁴⁶`, family coefficients
 offset `Bc = 10²⁸`, vertex coordinates come pre-offset by `2⁵⁶` from the

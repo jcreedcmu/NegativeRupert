@@ -39,7 +39,7 @@ Structure (agreed design):
 Every accepted global witness carries the 1e-9 slack margin against the
 exact rational inequality and every local leaf passes the conservative
 float mirror of Row.ValidLocal at margin 1e-9, so the output passes the
-Lean checker.  Run regen/validate_v6.py afterwards (paranoia pass).
+Lean checker.
 
 Usage:
   .venv/bin/python regen/make_solution_tree_v6.py \
