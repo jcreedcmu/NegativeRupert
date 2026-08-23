@@ -1,0 +1,25 @@
+{
+  "v8_total_rows": 975329,
+  "rows_by_nodeType": {
+    "split": 444423,
+    "global_": 510955,
+    "local": 19951
+  },
+  "v7_total_rows": 1119311,
+  "rebuild": {
+    "cells": 74007,
+    "built": 9342,
+    "pool_radius_cell_widths": 12,
+    "ratio": 0.9014,
+    "rows_saved": 95640
+  },
+  "coarsen": {
+    "top_stages": [[4, 15], [1, 5], [3, 5]],
+    "box_shape": [4, 6, 4, 3, 2],
+    "boxes": 375,
+    "all_single_sub_boxes": 1235219,
+    "sub_boxes_certified": 409623,
+    "rows_saved": 48342
+  },
+  "validation": "lake exe constructValidTable solution_tree_v8.csv: ValidTable constructed with 975329 rows (25.8s wall, 16 cores)"
+}

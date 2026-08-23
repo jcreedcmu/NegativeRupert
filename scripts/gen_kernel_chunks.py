@@ -13,11 +13,11 @@ Phases (pass as argv[1]):
 """
 import sys, os
 
-N = 1119311
+N = 975329
 C = 512
 ROWS_PER_LOAD = 8192
-NCHUNKS = (N + C - 1) // C          # 4007
-NLOAD = (N + ROWS_PER_LOAD - 1) // ROWS_PER_LOAD  # 251
+NCHUNKS = (N + C - 1) // C          # 1905
+NLOAD = (N + ROWS_PER_LOAD - 1) // ROWS_PER_LOAD  # 120
 
 os.makedirs('KernelCaseAnalysis/Gen', exist_ok=True)
 
@@ -36,12 +36,12 @@ public meta import Noperthedron.SolutionTable.Load
 @[expose] public section
 
 /-! GENERATED (scripts/gen_kernel_chunks.py): rows [{a}, {b}) of the solution
-tree as literal 512-row chunks. Requires `solution_tree_v7.csv` at the repo
+tree as literal 512-row chunks. Requires `solution_tree_v8.csv` at the repo
 root. -/
 
 namespace Noperthedron.Solution
 
-load_csv_chunks_curried "solution_tree_v7.csv" from {a} to {b} chunkSize {C}
+load_csv_chunks_curried "solution_tree_v8.csv" from {a} to {b} chunkSize {C}
 
 end Noperthedron.Solution
 
@@ -79,7 +79,7 @@ def read_node_types():
     """Row cost classes: 1 = global, 2 = local, 3 = small split
     (nrChildren < 15), 4 = full split (nrChildren >= 15)."""
     types = []
-    with open('solution_tree_v7.csv') as f:
+    with open('solution_tree_v8.csv') as f:
         next(f)
         for line in f:
             parts = line.split(',', 3)

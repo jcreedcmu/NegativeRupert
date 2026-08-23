@@ -10,7 +10,7 @@ would take on rejection, and per-conjunct attribution for local rows.
 
 Samples the row kinds directly from the full solution table:
 
-    lake exe benchRows solution_tree_v6.csv [nGlobal nLocal nSplit]
+    lake exe benchRows solution_tree_v8.csv [nGlobal nLocal nSplit]
 
 (defaults 2000 / 300 / 2000; the CSV parse itself takes a few seconds).
 
@@ -56,7 +56,7 @@ def trigSum (r : Row) : Bool :=
             + RationalApprox.sinℚ p.φ₂ + RationalApprox.cosℚ p.φ₂)
 
 def main (args : List String) : IO Unit := do
-  let csvPath := args[0]?.getD "solution_tree_v6.csv"
+  let csvPath := args[0]?.getD "solution_tree_v8.csv"
   let nG := (args[1]?.bind (·.toNat?)).getD 2000
   let nL := (args[2]?.bind (·.toNat?)).getD 300
   let nS := (args[3]?.bind (·.toNat?)).getD 2000

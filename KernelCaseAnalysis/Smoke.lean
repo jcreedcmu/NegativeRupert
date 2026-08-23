@@ -13,7 +13,7 @@ public meta import Noperthedron.SolutionTable.Load
 
 A small-scale, end-to-end exercise of the kernel-only verification pipeline
 on real solution-table rows, so that `lake build KernelCaseAnalysis` actually
-runs `decide +kernel` checks today (requires `solution_tree_v7.csv` unzipped
+runs `decide +kernel` checks today (requires `solution_tree_v8.csv` unzipped
 at the repo root; the second-order local leaf costs a few kernel-seconds):
 
 * `load_csv_rows` loads rows as literal `Row` definitions (elaboration-time
@@ -33,38 +33,38 @@ namespace Noperthedron.KernelCaseAnalysis.Smoke
 open Noperthedron.Solution
 
 /-! ### Leaf validation
-Rows 8018–8022 contain three global leaves (8018, 8020, 8022) and two splits
-(vacuous for `Row.leafOk`); row 71419 is the first local leaf in the table —
+Rows 1360–1364 contain three global leaves (1361, 1363, 1364) and two splits
+(vacuous for `Row.leafOk`); row 76103 is the first local leaf in the table —
 a second-order one (`Row.ValidLocal` fails, `Row.ValidLocal₂` accepts); row
-1073456 is a first-order local leaf. -/
+949236 is a first-order local leaf. -/
 
-load_csv_rows "solution_tree_v7.csv" from 8018 to 8023
+load_csv_rows "solution_tree_v8.csv" from 1360 to 1365
 
-theorem csvRows_8018_8023_leafOk : csvRows_8018_8023.all Row.leafOk = true := by
+theorem csvRows_1360_1365_leafOk : csvRows_1360_1365.all Row.leafOk = true := by
   decide +kernel
 
 set_option maxHeartbeats 8000000 in
-load_csv_rows "solution_tree_v7.csv" from 71419 to 71420
+load_csv_rows "solution_tree_v8.csv" from 76103 to 76104
 
 set_option maxHeartbeats 8000000 in
-theorem csvRows_71419_71420_leafOk :
-    csvRows_71419_71420.all Row.leafOk = true := by
+theorem csvRows_76103_76104_leafOk :
+    csvRows_76103_76104.all Row.leafOk = true := by
   decide +kernel
 
-load_csv_rows "solution_tree_v7.csv" from 1073456 to 1073457
+load_csv_rows "solution_tree_v8.csv" from 949236 to 949237
 
-theorem csvRows_1073456_1073457_leafOk :
-    csvRows_1073456_1073457.all Row.leafOk = true := by
+theorem csvRows_949236_949237_leafOk :
+    csvRows_949236_949237.all Row.leafOk = true := by
   decide +kernel
 
 /-! ### Split validation through the getter
-The first 16 rows of the tree are all splits whose children (up to row 168)
+The first 16 rows of the tree are all splits whose children (up to row 90)
 lie inside the first 512 rows, so a getter over the loaded prefix suffices.
 `Row.ValidIxAt` is the statement the full run proves for every index, and
 the curried loader/dispatch/getter chain is exactly the one the generated
 `Gen/` files use. -/
 
-load_csv_chunks_curried "solution_tree_v7.csv" from 0 to 512 chunkSize 512
+load_csv_chunks_curried "solution_tree_v8.csv" from 0 to 512 chunkSize 512
 
 assemble_row_dispatch_curried prefixDispatch rows 512 chunkSize 512
 
@@ -79,23 +79,23 @@ theorem prefix_first_splits_validIx :
 
 /-! ### Axiom guards: the standard three only — no `ofReduceBool`, no `sorryAx`. -/
 
-/-- info: 'Noperthedron.KernelCaseAnalysis.Smoke.csvRows_8018_8023_leafOk' depends on axioms: [propext,
+/-- info: 'Noperthedron.KernelCaseAnalysis.Smoke.csvRows_1360_1365_leafOk' depends on axioms: [propext,
  Classical.choice,
  Quot.sound] -/
 #guard_msgs in
-#print axioms csvRows_8018_8023_leafOk
+#print axioms csvRows_1360_1365_leafOk
 
-/-- info: 'Noperthedron.KernelCaseAnalysis.Smoke.csvRows_71419_71420_leafOk' depends on axioms: [propext,
+/-- info: 'Noperthedron.KernelCaseAnalysis.Smoke.csvRows_76103_76104_leafOk' depends on axioms: [propext,
  Classical.choice,
  Quot.sound] -/
 #guard_msgs in
-#print axioms csvRows_71419_71420_leafOk
+#print axioms csvRows_76103_76104_leafOk
 
-/-- info: 'Noperthedron.KernelCaseAnalysis.Smoke.csvRows_1073456_1073457_leafOk' depends on axioms: [propext,
+/-- info: 'Noperthedron.KernelCaseAnalysis.Smoke.csvRows_949236_949237_leafOk' depends on axioms: [propext,
  Classical.choice,
  Quot.sound] -/
 #guard_msgs in
-#print axioms csvRows_1073456_1073457_leafOk
+#print axioms csvRows_949236_949237_leafOk
 
 /-- info: 'Noperthedron.KernelCaseAnalysis.Smoke.prefix_row0_interval' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs in

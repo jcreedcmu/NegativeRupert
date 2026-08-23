@@ -15,12 +15,12 @@ public meta import Noperthedron.SolutionTable.Parse
 
 This library is deliberately **not** in `defaultTargets`, so the default
 build and CI never pay for it. Build it on demand (tens of minutes), with
-`solution_tree_v7.csv` unzipped at the repo root:
+`solution_tree_v8.csv` unzipped at the repo root:
 
     lake build NativeCaseAnalysis
 
 It parses the solution-tree CSV (untrusted, in 64 parallel tasks) and checks
-every one of the 1,119,311 rows with one `native_decide` via the getter-based
+every one of the 975,329 rows with one `native_decide` via the getter-based
 statement machinery of `SolutionTable/Assemble.lean` — the same statements
 the kernel-only route (`KernelCaseAnalysis`) proves chunk-by-chunk over
 literal-encoded rows.
@@ -37,12 +37,12 @@ namespace Noperthedron.NativeCaseAnalysis
 
 open Noperthedron
 
-/-- The solution tree (v7: the second-order-local rebuild of the
-Steininger–Yurkevich tree), embedded at elaboration time. -/
-def solution_csv : String := include_str "../solution_tree_v7.csv"
+/-- The solution tree (v8: the self-iterated, pool-widened, DP-coarsened
+rebuild of the v7 second-order tree), embedded at elaboration time. -/
+def solution_csv : String := include_str "../solution_tree_v8.csv"
 
 /-- The number of rows in the solution tree. -/
-def solutionRows : ℕ := 1119311
+def solutionRows : ℕ := 975329
 
 /-- Parse the CSV (in 64 parallel tasks) and check, in `nTasks` parallel
 tasks, that row 0 carries `rowZero.interval` and that every index below `n`
