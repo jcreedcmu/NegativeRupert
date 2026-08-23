@@ -5,6 +5,7 @@ public import Noperthedron.PoseInterval
 public import Noperthedron.Checker.Global
 public import Noperthedron.Checker.LocalNat
 public import Noperthedron.Checker.LocalFastNat
+public import Noperthedron.Checker.Local2
 
 @[expose] public section
 
@@ -70,6 +71,7 @@ inductive Row.ValidAt (get : ℕ → Row) (size : ℕ) (row : Row) : Prop where
   | asSplit : row.ValidSplitAt get size → Row.ValidAt get size row
   | asGlobal : row.ValidGlobal → Row.ValidAt get size row
   | asLocal : row.ValidLocal → Row.ValidAt get size row
+  | asLocal₂ : row.ValidLocal₂ → Row.ValidAt get size row
 
 instance (get : ℕ → Row) (size : ℕ) (row : Row) : Decidable (Row.ValidAt get size row) :=
   decidable_of_iff _ (Row.validAt_iff get size row).symm

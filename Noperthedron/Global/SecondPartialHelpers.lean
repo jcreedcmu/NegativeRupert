@@ -245,7 +245,8 @@ The result is: `fderiv (⟪f·, w⟫) y d = ⟪fderiv f y d, w⟫` when `w` is c
 -/
 
 /-- fderiv of inner product with constant second argument equals inner product of fderiv -/
-lemma fderiv_inner_const {n : ℕ} (f : E n → ℝ²) (w : ℝ²) (y : E n) (d : E n)
+lemma fderiv_inner_const {n : ℕ} {F : Type*} [NormedAddCommGroup F] [InnerProductSpace ℝ F]
+    (f : E n → F) (w : F) (y : E n) (d : E n)
     (hf : DifferentiableAt ℝ f y) :
     (fderiv ℝ (fun z => ⟪f z, w⟫) y) d = ⟪(fderiv ℝ f y) d, w⟫ := by
   simpa [(hasFDerivAt_const w y).fderiv] using fderiv_inner_apply ℝ hf (differentiableAt_const w) d
@@ -324,7 +325,8 @@ These factor out the lineDeriv_eq_fderiv + HasLineDerivAt pattern.
 -/
 
 /-- Helper for deriv → fderiv composition pattern -/
-lemma hasDerivAt_comp_add (f : ℝ → ℝ²) (f' : ℝ²) (a : ℝ) (hf : HasDerivAt f f' a) :
+lemma hasDerivAt_comp_add {F : Type*} [NormedAddCommGroup F] [NormedSpace ℝ F]
+    (f : ℝ → F) (f' : F) (a : ℝ) (hf : HasDerivAt f f' a) :
     HasDerivAt (fun t => f (a + t)) f' 0 :=
   HasDerivAt.comp_const_add a 0 (by simpa using hf)
 

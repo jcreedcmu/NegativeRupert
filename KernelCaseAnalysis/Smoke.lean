@@ -13,12 +13,13 @@ public meta import Noperthedron.SolutionTable.Load
 
 A small-scale, end-to-end exercise of the kernel-only verification pipeline
 on real solution-table rows, so that `lake build KernelCaseAnalysis` actually
-runs `decide +kernel` checks today (about half a minute; requires
-`solution_tree_v6.csv` unzipped at the repo root):
+runs `decide +kernel` checks today (requires `solution_tree_v7.csv` unzipped
+at the repo root; the second-order local leaf costs a few kernel-seconds):
 
 * `load_csv_rows` loads rows as literal `Row` definitions (elaboration-time
   parsing, no kernel string processing);
-* leaf checks (`Row.leafOk`): three global leaves and one local leaf;
+* leaf checks (`Row.leafOk`): three global leaves, one first-order local
+  leaf, and one second-order local leaf (accepted via `Row.ValidLocal₂`);
 * split checks through the exact production pipeline
   (`load_csv_chunks_curried` / `assemble_row_dispatch_curried` /
   `rowGetterC`) — `Row.ValidIxAt`, the statement shape the full run proves
@@ -33,17 +34,27 @@ open Noperthedron.Solution
 
 /-! ### Leaf validation
 Rows 8018–8022 contain three global leaves (8018, 8020, 8022) and two splits
-(vacuous for `Row.leafOk`); row 1008268 is the first local leaf in the table. -/
+(vacuous for `Row.leafOk`); row 71419 is the first local leaf in the table —
+a second-order one (`Row.ValidLocal` fails, `Row.ValidLocal₂` accepts); row
+1073456 is a first-order local leaf. -/
 
-load_csv_rows "solution_tree_v6.csv" from 8018 to 8023
+load_csv_rows "solution_tree_v7.csv" from 8018 to 8023
 
 theorem csvRows_8018_8023_leafOk : csvRows_8018_8023.all Row.leafOk = true := by
   decide +kernel
 
-load_csv_rows "solution_tree_v6.csv" from 1008268 to 1008269
+set_option maxHeartbeats 8000000 in
+load_csv_rows "solution_tree_v7.csv" from 71419 to 71420
 
-theorem csvRows_1008268_1008269_leafOk :
-    csvRows_1008268_1008269.all Row.leafOk = true := by
+set_option maxHeartbeats 8000000 in
+theorem csvRows_71419_71420_leafOk :
+    csvRows_71419_71420.all Row.leafOk = true := by
+  decide +kernel
+
+load_csv_rows "solution_tree_v7.csv" from 1073456 to 1073457
+
+theorem csvRows_1073456_1073457_leafOk :
+    csvRows_1073456_1073457.all Row.leafOk = true := by
   decide +kernel
 
 /-! ### Split validation through the getter
@@ -53,7 +64,7 @@ lie inside the first 512 rows, so a getter over the loaded prefix suffices.
 the curried loader/dispatch/getter chain is exactly the one the generated
 `Gen/` files use. -/
 
-load_csv_chunks_curried "solution_tree_v6.csv" from 0 to 512 chunkSize 512
+load_csv_chunks_curried "solution_tree_v7.csv" from 0 to 512 chunkSize 512
 
 assemble_row_dispatch_curried prefixDispatch rows 512 chunkSize 512
 
@@ -74,11 +85,17 @@ theorem prefix_first_splits_validIx :
 #guard_msgs in
 #print axioms csvRows_8018_8023_leafOk
 
-/-- info: 'Noperthedron.KernelCaseAnalysis.Smoke.csvRows_1008268_1008269_leafOk' depends on axioms: [propext,
+/-- info: 'Noperthedron.KernelCaseAnalysis.Smoke.csvRows_71419_71420_leafOk' depends on axioms: [propext,
  Classical.choice,
  Quot.sound] -/
 #guard_msgs in
-#print axioms csvRows_1008268_1008269_leafOk
+#print axioms csvRows_71419_71420_leafOk
+
+/-- info: 'Noperthedron.KernelCaseAnalysis.Smoke.csvRows_1073456_1073457_leafOk' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound] -/
+#guard_msgs in
+#print axioms csvRows_1073456_1073457_leafOk
 
 /-- info: 'Noperthedron.KernelCaseAnalysis.Smoke.prefix_row0_interval' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs in

@@ -3,6 +3,12 @@ module
 public import Lean
 public import Noperthedron.SolutionTable.Basic
 public import Noperthedron.SolutionTable.Parse
+-- Kernel-speed instances: `Load` is consumed only by the kernel pipeline
+-- (the generated `KernelCaseAnalysis/Gen` files and `Smoke`), so `leafOk`
+-- and everything downstream decide through the `Local2Nat` integer core.
+-- The native pipeline imports `Assemble`/`Parse` directly and must NOT
+-- acquire this import (see `KernelInstances.lean`).
+public import Noperthedron.SolutionTable.KernelInstances
 -- The `Load` namespace runs at the meta phase (Expr builders + `elab`
 -- commands) and consumes these modules' types/functions there.
 public meta import Lean
@@ -46,12 +52,12 @@ property the final proof needs is checked downstream, on the constructed rows.
 namespace Noperthedron.Solution
 
 /-- Leaf-row validity as a `Bool`: global leaves (`nodeType = 1`) must satisfy
-`Row.ValidGlobal`, local leaves (`nodeType = 2`) must satisfy `Row.ValidLocal`,
-and other rows (structural splits, checked against the full table elsewhere)
-pass vacuously. -/
+`Row.ValidGlobal`, local leaves (`nodeType = 2`) must satisfy `Row.ValidLocal`
+or the second-order `Row.ValidLocal₂`, and other rows (structural splits,
+checked against the full table elsewhere) pass vacuously. -/
 def Row.leafOk (r : Row) : Bool :=
   if r.nodeType = 1 then decide r.ValidGlobal
-  else if r.nodeType = 2 then decide r.ValidLocal
+  else if r.nodeType = 2 then decide r.ValidLocal || decide r.ValidLocal₂
   else true
 
 namespace Load

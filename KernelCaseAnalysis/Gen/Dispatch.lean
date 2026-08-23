@@ -139,129 +139,15 @@ public import KernelCaseAnalysis.Gen.Load133
 public import KernelCaseAnalysis.Gen.Load134
 public import KernelCaseAnalysis.Gen.Load135
 public import KernelCaseAnalysis.Gen.Load136
-public import KernelCaseAnalysis.Gen.Load137
-public import KernelCaseAnalysis.Gen.Load138
-public import KernelCaseAnalysis.Gen.Load139
-public import KernelCaseAnalysis.Gen.Load140
-public import KernelCaseAnalysis.Gen.Load141
-public import KernelCaseAnalysis.Gen.Load142
-public import KernelCaseAnalysis.Gen.Load143
-public import KernelCaseAnalysis.Gen.Load144
-public import KernelCaseAnalysis.Gen.Load145
-public import KernelCaseAnalysis.Gen.Load146
-public import KernelCaseAnalysis.Gen.Load147
-public import KernelCaseAnalysis.Gen.Load148
-public import KernelCaseAnalysis.Gen.Load149
-public import KernelCaseAnalysis.Gen.Load150
-public import KernelCaseAnalysis.Gen.Load151
-public import KernelCaseAnalysis.Gen.Load152
-public import KernelCaseAnalysis.Gen.Load153
-public import KernelCaseAnalysis.Gen.Load154
-public import KernelCaseAnalysis.Gen.Load155
-public import KernelCaseAnalysis.Gen.Load156
-public import KernelCaseAnalysis.Gen.Load157
-public import KernelCaseAnalysis.Gen.Load158
-public import KernelCaseAnalysis.Gen.Load159
-public import KernelCaseAnalysis.Gen.Load160
-public import KernelCaseAnalysis.Gen.Load161
-public import KernelCaseAnalysis.Gen.Load162
-public import KernelCaseAnalysis.Gen.Load163
-public import KernelCaseAnalysis.Gen.Load164
-public import KernelCaseAnalysis.Gen.Load165
-public import KernelCaseAnalysis.Gen.Load166
-public import KernelCaseAnalysis.Gen.Load167
-public import KernelCaseAnalysis.Gen.Load168
-public import KernelCaseAnalysis.Gen.Load169
-public import KernelCaseAnalysis.Gen.Load170
-public import KernelCaseAnalysis.Gen.Load171
-public import KernelCaseAnalysis.Gen.Load172
-public import KernelCaseAnalysis.Gen.Load173
-public import KernelCaseAnalysis.Gen.Load174
-public import KernelCaseAnalysis.Gen.Load175
-public import KernelCaseAnalysis.Gen.Load176
-public import KernelCaseAnalysis.Gen.Load177
-public import KernelCaseAnalysis.Gen.Load178
-public import KernelCaseAnalysis.Gen.Load179
-public import KernelCaseAnalysis.Gen.Load180
-public import KernelCaseAnalysis.Gen.Load181
-public import KernelCaseAnalysis.Gen.Load182
-public import KernelCaseAnalysis.Gen.Load183
-public import KernelCaseAnalysis.Gen.Load184
-public import KernelCaseAnalysis.Gen.Load185
-public import KernelCaseAnalysis.Gen.Load186
-public import KernelCaseAnalysis.Gen.Load187
-public import KernelCaseAnalysis.Gen.Load188
-public import KernelCaseAnalysis.Gen.Load189
-public import KernelCaseAnalysis.Gen.Load190
-public import KernelCaseAnalysis.Gen.Load191
-public import KernelCaseAnalysis.Gen.Load192
-public import KernelCaseAnalysis.Gen.Load193
-public import KernelCaseAnalysis.Gen.Load194
-public import KernelCaseAnalysis.Gen.Load195
-public import KernelCaseAnalysis.Gen.Load196
-public import KernelCaseAnalysis.Gen.Load197
-public import KernelCaseAnalysis.Gen.Load198
-public import KernelCaseAnalysis.Gen.Load199
-public import KernelCaseAnalysis.Gen.Load200
-public import KernelCaseAnalysis.Gen.Load201
-public import KernelCaseAnalysis.Gen.Load202
-public import KernelCaseAnalysis.Gen.Load203
-public import KernelCaseAnalysis.Gen.Load204
-public import KernelCaseAnalysis.Gen.Load205
-public import KernelCaseAnalysis.Gen.Load206
-public import KernelCaseAnalysis.Gen.Load207
-public import KernelCaseAnalysis.Gen.Load208
-public import KernelCaseAnalysis.Gen.Load209
-public import KernelCaseAnalysis.Gen.Load210
-public import KernelCaseAnalysis.Gen.Load211
-public import KernelCaseAnalysis.Gen.Load212
-public import KernelCaseAnalysis.Gen.Load213
-public import KernelCaseAnalysis.Gen.Load214
-public import KernelCaseAnalysis.Gen.Load215
-public import KernelCaseAnalysis.Gen.Load216
-public import KernelCaseAnalysis.Gen.Load217
-public import KernelCaseAnalysis.Gen.Load218
-public import KernelCaseAnalysis.Gen.Load219
-public import KernelCaseAnalysis.Gen.Load220
-public import KernelCaseAnalysis.Gen.Load221
-public import KernelCaseAnalysis.Gen.Load222
-public import KernelCaseAnalysis.Gen.Load223
-public import KernelCaseAnalysis.Gen.Load224
-public import KernelCaseAnalysis.Gen.Load225
-public import KernelCaseAnalysis.Gen.Load226
-public import KernelCaseAnalysis.Gen.Load227
-public import KernelCaseAnalysis.Gen.Load228
-public import KernelCaseAnalysis.Gen.Load229
-public import KernelCaseAnalysis.Gen.Load230
-public import KernelCaseAnalysis.Gen.Load231
-public import KernelCaseAnalysis.Gen.Load232
-public import KernelCaseAnalysis.Gen.Load233
-public import KernelCaseAnalysis.Gen.Load234
-public import KernelCaseAnalysis.Gen.Load235
-public import KernelCaseAnalysis.Gen.Load236
-public import KernelCaseAnalysis.Gen.Load237
-public import KernelCaseAnalysis.Gen.Load238
-public import KernelCaseAnalysis.Gen.Load239
-public import KernelCaseAnalysis.Gen.Load240
-public import KernelCaseAnalysis.Gen.Load241
-public import KernelCaseAnalysis.Gen.Load242
-public import KernelCaseAnalysis.Gen.Load243
-public import KernelCaseAnalysis.Gen.Load244
-public import KernelCaseAnalysis.Gen.Load245
-public import KernelCaseAnalysis.Gen.Load246
-public import KernelCaseAnalysis.Gen.Load247
-public import KernelCaseAnalysis.Gen.Load248
-public import KernelCaseAnalysis.Gen.Load249
-public import KernelCaseAnalysis.Gen.Load250
 
 /-! GENERATED (scripts/gen_kernel_chunks.py): the digit-curried dispatch over
-all 4007 loaded chunks and the row getter for the kernel run. -/
+all 2187 loaded chunks and the row getter for the kernel run. -/
 
 @[expose] public section
 
 namespace Noperthedron.Solution
 
-assemble_row_dispatch_curried tableDispatch rows 2051521 chunkSize 512
+assemble_row_dispatch_curried tableDispatch rows 1119311 chunkSize 512
 
 /-- The full-table row getter: seven `Fin 8` digit levels per access
 (`O(log)`), no `List` walk. -/

@@ -1,5 +1,6 @@
 import Noperthedron.SolutionTable.Basic
 import Noperthedron.SolutionTable.Parse
+import Noperthedron.SolutionTable.Assemble
 
 /-! Timing harness for the *live* per-row checks: the production `Decidable`
 instances (`Row.ValidGlobal` / `Row.ValidLocal` / `Row.ValidSplitAt`, i.e.
@@ -60,9 +61,25 @@ def main (args : List String) : IO Unit := do
   let nL := (args[2]?.bind (·.toNat?)).getD 300
   let nS := (args[3]?.bind (·.toNat?)).getD 2000
   let csv ← IO.FS.readFile csvPath
+  let tParse0 ← IO.monoNanosNow
   let table ← match parseSolutionTablePar csv 64 with
     | .ok t => pure t
     | .error e => throw (IO.userError s!"parse error: {e}")
+  let tParse1 ← IO.monoNanosNow
+  IO.println s!"parse: {(tParse1 - tParse0) / 1000000}ms"
+  -- `full`: time the entire production check (what native_decide evaluates)
+  if args.contains "full" then
+    let counts := table.foldl (init := (0, 0, 0, 0)) fun (g, l, s, o) r =>
+      match r.nodeType with
+      | 1 => (g + 1, l, s, o)
+      | 2 => (g, l + 1, s, o)
+      | 3 => (g, l, s + 1, o)
+      | _ => (g, l, s, o + 1)
+    IO.println s!"nodeType counts (global, local, split, other): {counts}"
+    let t0 ← IO.monoNanosNow
+    let ok := rowsValidIxAtParB (fun j => table[j]!) table.size 512
+    let t1 ← IO.monoNanosNow
+    IO.println s!"full rowsValidIxAtParB(512): {ok} in {(t1 - t0) / 1000000}ms"
   let g := sample table 1 nG
   let l := sample table 2 nL
   let s := sample table 3 nS
@@ -103,5 +120,19 @@ def main (args : List String) : IO Unit := do
     decide (RationalApprox.LocalTheorem.BoundRℚ r.r r.epsilon r.interval.centerPose
       (pythonVertexA ∘ r.Qi) RationalApprox.sqrtApprox16))
   bench "local:  trig only          " l trigSum
+  -- second-order locals (the dominant local kind since v7): the live
+  -- instance, then per-conjunct attribution for the ℚ (Local2Fast) route.
+  -- (The Local2Nat integer core is kernel-only; importing it here would
+  -- flip the live instances away from what native_decide actually runs.)
+  bench "local2: ValidLocal₂ (live) " l (fun r => decide r.ValidLocal₂)
+  bench "local2: δ₂                 " l (fun r => decide (0 ≤ r.δ₂))
+  bench "local2: ℚ aeCheck X₂       " l (fun r =>
+    Local2Fast.aeCheck r.θ₂ r.φ₂ (pythonVertexA ∘ r.Qi) r.εθ₂ r.εφ₂ r.sigma_Q.val)
+  bench "local2: ℚ spanCheck Q      " l (fun r =>
+    Local2Fast.spanCheck r.θ₂ r.φ₂ (pythonVertexA ∘ r.Qi) r.εθ₂ r.εφ₂)
+  bench "local2: ℚ brCheck          " l (fun r =>
+    Local2Fast.brCheck r.r r.interval.centerPose (pythonVertexA ∘ r.Qi) r.εθ₂ r.εφ₂)
+  bench "local2: ℚ beCheck (incl δ₂)" l (fun r =>
+    Local2Fast.beCheck r.Qi r.interval.centerPose r.εθ₂ r.εφ₂ r.δ₂ r.r)
   bench "split:  ValidSplitAt (live)" s (fun r =>
     decide (r.ValidSplitAt getRow table.size))

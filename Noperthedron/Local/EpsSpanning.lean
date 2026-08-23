@@ -9,6 +9,7 @@ public import Noperthedron.Bounding
 public import Noperthedron.Local.Prelims
 public import Noperthedron.Local.OriginInTriangle
 public import Noperthedron.Local.Spanp
+public import Noperthedron.Global.SpanProducts
 
 @[expose] public section
 
@@ -53,43 +54,13 @@ lemma triangle_ineq_aux
     {d x y : ℝ} (hd : 0 < d) (hy : d < y) (hx : |x - y| ≤ d) : 0 < x := by
   grind
 
-/-- [SY25] Lemma 28 -/
-theorem vecX_spanning {ε θ θ_ φ φ_ : ℝ} (P : Triangle)
-    (hθ : |θ - θ_| ≤ ε) (hφ : |φ - φ_| ≤ ε)
-    (hSpanning: P.Spanning θ_ φ_ ε)
-    (hP : ∀ i, ‖P i‖ ≤ 1)
+/-- The core of [SY25] Lemma 28: once the three consecutive spanning products
+are positive at the pose itself, `vecX` lies in the positive span of the
+triangle (via [SY25] Lemma 26). -/
+theorem spanp_of_pos {θ φ : ℝ} (P : Triangle)
+    (h₁ : ∀ i : Fin 3, 0 < ⟪rotR (π/2) (rotM θ φ (P i)), rotM θ φ (P (i + 1))⟫)
     (hX : ∀ i, 0 < ⟪vecX θ φ, P i⟫) :
     vecX θ φ ∈ Spanp P := by
-  obtain ⟨hε, hlt⟩ := hSpanning
-  have h₁ : ∀ i, 0 < ⟪rotR (π/2) (rotM θ φ (P i)), rotM θ φ (P (i + 1))⟫ := by
-    intro i
-    -- lemma 24 -> Local.abs_sub_inner_bars_le
-    have h₂ :=
-      Local.abs_sub_inner_bars_le
-        (rotR (π/2) ∘L rotM θ φ) (rotM θ φ)
-        (rotR (π/2) ∘L rotM θ_ φ_) (rotM θ_ φ_)
-        (P i) (P (i + 1))
-
-    specialize hlt i
-
-    rw [←ContinuousLinearMap.comp_sub] at h₂
-    grw [hP, hP] at h₂
-    grw [ContinuousLinearMap.opNorm_comp_le (rotR (π / 2)) (rotM θ_ φ_)] at h₂
-    grw [ContinuousLinearMap.opNorm_comp_le] at h₂
-    simp only [Bounding.rotR_norm_one, Bounding.rotM_norm_one, mul_one, one_mul] at h₂
-
-    -- lemma 13 -> Bounding.norm_M_sub_lt
-    have h₃ := Bounding.norm_M_sub_lt hε hθ hφ
-    grw [h₃.le, h₃.le] at h₂
-    have h₄ : √2 * ε + √2 * ε + √2 * ε * (√2 * ε) = 2 * ε * (√2 + ε) := by
-      rw [show √2 * ε * (√2 * ε) = √2^2 * ε^2 by ring]
-      simp only [Nat.ofNat_nonneg, Real.sq_sqrt]
-      ring
-    rw [h₄] at h₂
-    clear h₃ h₄
-    have hd : 0 < 2 * ε * (√2 + ε) := by positivity
-    exact triangle_ineq_aux hd hlt h₂
-
   -- apply lemma 26
   obtain ⟨a, b, c, ha, hb, hc, habc⟩ := Local.origin_in_triangle (h₁ 0) (h₁ 1) (h₁ 2)
   let S := a • (P 0) + b • (P 1) + c • (P 2)
@@ -140,6 +111,75 @@ theorem vecX_spanning {ε θ θ_ φ φ_ : ℝ} (P : Triangle)
   · intro i
     fin_cases i <;> simp <;> positivity
   · simp [Fin.sum_univ_three, h₅, S, smul_smul]
+
+/-- [SY25] Lemma 28 -/
+theorem vecX_spanning {ε θ θ_ φ φ_ : ℝ} (P : Triangle)
+    (hθ : |θ - θ_| ≤ ε) (hφ : |φ - φ_| ≤ ε)
+    (hSpanning: P.Spanning θ_ φ_ ε)
+    (hP : ∀ i, ‖P i‖ ≤ 1)
+    (hX : ∀ i, 0 < ⟪vecX θ φ, P i⟫) :
+    vecX θ φ ∈ Spanp P := by
+  obtain ⟨hε, hlt⟩ := hSpanning
+  refine spanp_of_pos P ?_ hX
+  intro i
+  -- lemma 24 -> Local.abs_sub_inner_bars_le
+  have h₂ :=
+    Local.abs_sub_inner_bars_le
+      (rotR (π/2) ∘L rotM θ φ) (rotM θ φ)
+      (rotR (π/2) ∘L rotM θ_ φ_) (rotM θ_ φ_)
+      (P i) (P (i + 1))
+
+  specialize hlt i
+
+  rw [←ContinuousLinearMap.comp_sub] at h₂
+  grw [hP, hP] at h₂
+  grw [ContinuousLinearMap.opNorm_comp_le (rotR (π / 2)) (rotM θ_ φ_)] at h₂
+  grw [ContinuousLinearMap.opNorm_comp_le] at h₂
+  simp only [Bounding.rotR_norm_one, Bounding.rotM_norm_one, mul_one, one_mul] at h₂
+
+  -- lemma 13 -> Bounding.norm_M_sub_lt
+  have h₃ := Bounding.norm_M_sub_lt hε hθ hφ
+  grw [h₃.le, h₃.le] at h₂
+  have h₄ : √2 * ε + √2 * ε + √2 * ε * (√2 * ε) = 2 * ε * (√2 + ε) := by
+    rw [show √2 * ε * (√2 * ε) = √2^2 * ε^2 by ring]
+    simp only [Nat.ofNat_nonneg, Real.sq_sqrt]
+    ring
+  rw [h₄] at h₂
+  clear h₃ h₄
+  have hd : 0 < 2 * ε * (√2 + ε) := by positivity
+  exact triangle_ineq_aux hd hlt h₂
+
+/-- **Second-order spanning condition**: each consecutive spanning product at
+the center exceeds its own second-order variation budget over the per-axis
+box `(εθ, εφ)`. Replaces the Lipschitz margin `2ε(√2+ε)` of
+`Triangle.Spanning`. -/
+def Triangle.Spanning₂ (P : Triangle) (θ_ φ_ εθ εφ : ℝ) : Prop :=
+  ∀ i : Fin 3, GlobalTheorem.ΔprodMM (rotR (π/2)) (P i) (P (i + 1)) εθ εφ θ_ φ_
+    < ⟪rotR (π/2) (rotM θ_ φ_ (P i)), rotM θ_ φ_ (P (i + 1))⟫
+
+lemma spanning₂_neg {P : Triangle} {θ_ φ_ εθ εφ : ℝ} (e : ℕ)
+    (h : P.Spanning₂ θ_ φ_ εθ εφ) :
+    Triangle.Spanning₂ (fun i ↦ (-1 : ℝ)^e • P i) θ_ φ_ εθ εφ := by
+  intro i
+  have hlt := h i
+  simpa [Triangle.Spanning₂, GlobalTheorem.ΔprodMM_neg_one_pow_smul, map_smul,
+    GlobalTheorem.inner_neg_one_pow_smul_smul] using hlt
+
+/-- [SY25] Lemma 28, second-order version: no norm hypothesis on `P` is
+needed since the budget carries `‖P i‖` explicitly. -/
+theorem vecX_spanning₂ {εθ εφ θ θ_ φ φ_ : ℝ} (P : Triangle)
+    (hεθ : 0 ≤ εθ) (hεφ : 0 ≤ εφ)
+    (hθ : |θ - θ_| ≤ εθ) (hφ : |φ - φ_| ≤ εφ)
+    (hSpanning : P.Spanning₂ θ_ φ_ εθ εφ)
+    (hX : ∀ i, 0 < ⟪vecX θ φ, P i⟫) :
+    vecX θ φ ∈ Spanp P := by
+  refine spanp_of_pos P ?_ hX
+  intro i
+  have h₂ := GlobalTheorem.inner_prod_MM_sub_le (rotR (π/2))
+    (le_of_eq (Bounding.rotR_norm_one _)) (v := P i) (w := P (i + 1)) hεθ hεφ hθ hφ
+  have hlt := hSpanning i
+  have := abs_le.mp h₂
+  linarith [this.1]
 
 end Local
 end

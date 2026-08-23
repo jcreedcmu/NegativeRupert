@@ -328,5 +328,61 @@ theorem bounded_partials_control_difference2 {n : ℕ} (f : E n → ℝ)
       + (1/2) * ∑ i, ∑ j, ε i * ε j * |nth_partial i (nth_partial j f) x|
       + M * (∑ i, ε i)^3 / 6 := by ring
 
+/-- Second-order control of the variation of a **vector-valued** function,
+by scalarizing along the unit direction of the difference: bounds on the
+directional projections' partials at `x` (uniform in the direction `u`)
+control `‖v x - v y‖` to second order with a cubic remainder.  This is the
+engine behind the second-order local certificate's `Δ`-terms, instantiated
+with `b1`/`b2` the norms of the (rotation-family) partial vectors at `x`. -/
+theorem norm_sub_control_difference2 {n m : ℕ} (v : E n → E m)
+    (x y : E n) (ε : Fin n → ℝ) (hε : ∀ i, 0 ≤ ε i)
+    (hdiff : (i : Fin n) → |x i - y i| ≤ ε i)
+    {M : ℝ} (b1 : Fin n → ℝ) (b2 : Fin n → Fin n → ℝ)
+    (hb1 : ∀ i, 0 ≤ b1 i) (hb2 : ∀ i j, 0 ≤ b2 i j) (hM : 0 ≤ M)
+    (h : ∀ u : E m, ‖u‖ = 1 →
+      ContDiff ℝ 3 (fun z => ⟪v z, u⟫) ∧
+      third_partials_bounded (fun z => ⟪v z, u⟫) M ∧
+      (∀ i, |nth_partial i (fun z => ⟪v z, u⟫) x| ≤ b1 i) ∧
+      (∀ i j, |nth_partial i (nth_partial j (fun z => ⟪v z, u⟫)) x| ≤ b2 i j)) :
+    ‖v x - v y‖ ≤ ∑ i, ε i * b1 i
+      + (1/2) * ∑ i, ∑ j, ε i * ε j * b2 i j
+      + M * (∑ i, ε i)^3 / 6 := by
+  rcases eq_or_ne (v x) (v y) with heq | hne
+  · rw [heq, sub_self, norm_zero]
+    have h1 : (0:ℝ) ≤ ∑ i, ε i * b1 i :=
+      Finset.sum_nonneg fun i _ => mul_nonneg (hε i) (hb1 i)
+    have h2 : (0:ℝ) ≤ ∑ i, ∑ j, ε i * ε j * b2 i j :=
+      Finset.sum_nonneg fun i _ => Finset.sum_nonneg fun j _ =>
+        mul_nonneg (mul_nonneg (hε i) (hε j)) (hb2 i j)
+    have h3 : (0:ℝ) ≤ (∑ i, ε i)^3 :=
+      pow_nonneg (Finset.sum_nonneg fun i _ => hε i) 3
+    have h4 : (0:ℝ) ≤ M * (∑ i, ε i)^3 / 6 :=
+      div_nonneg (mul_nonneg hM h3) (by norm_num)
+    linarith
+  · set u : E m := ‖v x - v y‖⁻¹ • (v x - v y) with hu_def
+    have hu : ‖u‖ = 1 := norm_smul_inv_norm (sub_ne_zero.mpr hne)
+    obtain ⟨hc, htpb, hb1', hb2'⟩ := h u hu
+    have key := bounded_partials_control_difference2 _ hc x y ε hε hdiff htpb
+    have hval : ⟪v x - v y, u⟫ = ‖v x - v y‖ := by
+      rw [hu_def, real_inner_smul_right, real_inner_self_eq_norm_mul_norm]
+      have hn : ‖v x - v y‖ ≠ 0 := norm_ne_zero_iff.mpr (sub_ne_zero.mpr hne)
+      field_simp
+    calc ‖v x - v y‖
+        = ⟪v x - v y, u⟫ := hval.symm
+      _ = (fun z => ⟪v z, u⟫) x - (fun z => ⟪v z, u⟫) y := by
+          simp [inner_sub_left]
+      _ ≤ |(fun z => ⟪v z, u⟫) x - (fun z => ⟪v z, u⟫) y| := le_abs_self _
+      _ ≤ ∑ i, ε i * |nth_partial i (fun z => ⟪v z, u⟫) x|
+            + (1/2) * ∑ i, ∑ j, ε i * ε j *
+                |nth_partial i (nth_partial j (fun z => ⟪v z, u⟫)) x|
+            + M * (∑ i, ε i)^3 / 6 := key
+      _ ≤ ∑ i, ε i * b1 i + (1/2) * ∑ i, ∑ j, ε i * ε j * b2 i j
+            + M * (∑ i, ε i)^3 / 6 := by
+          gcongr with i _ i _ j _
+          · exact hε i
+          · exact hb1' i
+          · exact mul_nonneg (hε i) (hε j)
+          · exact hb2' i j
+
 end GlobalTheorem
 end
