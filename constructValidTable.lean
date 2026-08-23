@@ -16,11 +16,11 @@ import Noperthedron.SolutionTable.KernelInstances
   evaluates in NativeCaseAnalysis/ComputationalStep.lean, but compiled to native
   code, so it is considerably faster.
 
-  Running on the solution tree from solution_tree_v7.zip takes about half a
+  Running on the solution tree from solution_tree_v8.zip takes about half a
   minute on a 16-core machine.
 
   To get the solution tree, make sure you have git-lfs installed and you've fetched
-  the full solution_tree_v7.zip file. then unzip it into solution_tree_v7.csv.
+  the full solution_tree_v8.zip file. then unzip it into solution_tree_v8.csv.
 -/
 
 open Noperthedron.Solution

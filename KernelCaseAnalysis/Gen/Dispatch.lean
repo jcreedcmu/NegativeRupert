@@ -122,32 +122,15 @@ public import KernelCaseAnalysis.Gen.Load116
 public import KernelCaseAnalysis.Gen.Load117
 public import KernelCaseAnalysis.Gen.Load118
 public import KernelCaseAnalysis.Gen.Load119
-public import KernelCaseAnalysis.Gen.Load120
-public import KernelCaseAnalysis.Gen.Load121
-public import KernelCaseAnalysis.Gen.Load122
-public import KernelCaseAnalysis.Gen.Load123
-public import KernelCaseAnalysis.Gen.Load124
-public import KernelCaseAnalysis.Gen.Load125
-public import KernelCaseAnalysis.Gen.Load126
-public import KernelCaseAnalysis.Gen.Load127
-public import KernelCaseAnalysis.Gen.Load128
-public import KernelCaseAnalysis.Gen.Load129
-public import KernelCaseAnalysis.Gen.Load130
-public import KernelCaseAnalysis.Gen.Load131
-public import KernelCaseAnalysis.Gen.Load132
-public import KernelCaseAnalysis.Gen.Load133
-public import KernelCaseAnalysis.Gen.Load134
-public import KernelCaseAnalysis.Gen.Load135
-public import KernelCaseAnalysis.Gen.Load136
 
 /-! GENERATED (scripts/gen_kernel_chunks.py): the digit-curried dispatch over
-all 2187 loaded chunks and the row getter for the kernel run. -/
+all 1905 loaded chunks and the row getter for the kernel run. -/
 
 @[expose] public section
 
 namespace Noperthedron.Solution
 
-assemble_row_dispatch_curried tableDispatch rows 1119311 chunkSize 512
+assemble_row_dispatch_curried tableDispatch rows 975329 chunkSize 512
 
 /-- The full-table row getter: seven `Fin 8` digit levels per access
 (`O(log)`), no `List` walk. -/

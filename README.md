@@ -18,7 +18,7 @@ The proof of the main theorem, given existence of a valid solution table, lives 
 Construction of a valid solution table requires a large case analysis. We provide
 three different versions:
 
-1. A kernel-only proof [KernelCaseAnalysis/ProofOfMainTheorem.lean](KernelCaseAnalysis/ProofOfMainTheorem.lean) that depends only on the standard 3 axioms `[propext, Classical.choice, Quot.sound]`. This proof takes ~80 minutes to check on a 16-core machine.
+1. A kernel-only proof [KernelCaseAnalysis/ProofOfMainTheorem.lean](KernelCaseAnalysis/ProofOfMainTheorem.lean) that depends only on the standard 3 axioms `[propext, Classical.choice, Quot.sound]`. This proof takes ~70 minutes to check on a 16-core machine.
 
 2. A `native_decide` proof [NativeCaseAnalysis/ProofOfMainTheorem.lean](NativeCaseAnalysis/ProofOfMainTheorem.lean) that takes ~2.5 minutes on a 16-core machine.
 
@@ -36,10 +36,10 @@ lake build
 To check the solution table, first make sure that you have `git-lfs`. Then unzip the table:
 
 ```
-unzip solution_tree_v6.zip
+unzip solution_tree_v8.zip
 ```
 
-To run the expensive kernel check (~24 core hours):
+To run the expensive kernel check (~15 core hours):
 ```
 lake build KernelCaseAnalysis
 ```
@@ -49,10 +49,10 @@ To run the less expensive `native_decide` check (~40 core minutes):
 lake build NativeCaseAnalysis
 ```
 
-To run the even less expensive native executable check (~8 core minutes) :
+To run the even less expensive native executable check (~7 core minutes) :
 
 ```
-lake exe constructValidTable solution_tree_v6.csv
+lake exe constructValidTable solution_tree_v8.csv
 ```
 
 
