@@ -1228,6 +1228,7 @@ private lemma flatIx_ne {k q : VertexIndex} (h : k ≠ q) : flatIx k ≠ flatIx 
 
 set_option maxHeartbeats 3200000 in
 set_option maxRecDepth 65536 in
+set_option exponentiation.threshold 5200 in
 /-- The offset tier is sound: `beFastO = true` implies `beCheckN = true`,
 with no side conditions (the guards are part of `beFastO`). -/
 theorem beFastO_imp_beCheckN {Qi : Fin 3 → VertexIndex} {p : Pose ℚ} {εθ εφ δ r : ℚ}
