@@ -8,6 +8,11 @@ import Noperthedron.Checker.ApproxSqrt
 import Noperthedron.Checker.Global
 import Noperthedron.Checker.KappaApprox
 import Noperthedron.Checker.Local
+import Noperthedron.Checker.Local2
+import Noperthedron.Checker.Local2Fast
+import Noperthedron.Checker.Local2Nat
+import Noperthedron.Checker.Local2NatDelta
+import Noperthedron.Checker.Local2NatOffset
 import Noperthedron.Checker.LocalFastNat
 import Noperthedron.Checker.LocalNat
 import Noperthedron.Checker.RowZero
@@ -28,7 +33,10 @@ import Noperthedron.Global.RotationPartials.RotMOuter
 import Noperthedron.Global.RotationPartials.Rotproj
 import Noperthedron.Global.RotationPartials.SecondPartialInner
 import Noperthedron.Global.RotationPartials.SecondPartialOuter
+import Noperthedron.Global.SecondOrderBounds
 import Noperthedron.Global.SecondPartialHelpers
+import Noperthedron.Global.SpanProducts
+import Noperthedron.Global.VecXPartials
 import Noperthedron.Local
 import Noperthedron.Local.Congruent
 import Noperthedron.Local.Coss
@@ -61,6 +69,8 @@ import Noperthedron.RationalApprox.MatrixBounds
 import Noperthedron.RationalApprox.NewtonSqrt
 import Noperthedron.RationalApprox.RationalGlobal
 import Noperthedron.RationalApprox.RationalLocal
+import Noperthedron.RationalApprox.RationalLocal2
+import Noperthedron.RationalApprox.SecondOrderXBounds
 import Noperthedron.RationalApprox.TrigInt
 import Noperthedron.RationalApprox.TrigLemmas
 import Noperthedron.RealMod
@@ -73,6 +83,7 @@ import Noperthedron.SolutionTable.Assemble
 import Noperthedron.SolutionTable.Basic
 import Noperthedron.SolutionTable.Defs
 import Noperthedron.SolutionTable.Global
+import Noperthedron.SolutionTable.KernelInstances
 import Noperthedron.SolutionTable.Load
 import Noperthedron.SolutionTable.Local
 import Noperthedron.SolutionTable.Parse

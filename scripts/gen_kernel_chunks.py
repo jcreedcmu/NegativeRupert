@@ -265,11 +265,19 @@ end
 def gen_root():
     # Everything in Gen/ is transitively reachable from ProofOfMainTheorem
     # (ProofOfMainTheorem -> ComputationalStep -> Gen.Final -> Combine* ->
-    # Validate* -> Dispatch -> Load*), so the root only needs the two capstones.
+    # Validate* -> Dispatch -> Load*), but CI's `lake exe mk_all --check`
+    # requires the root to list every module of the library explicitly, in
+    # mk_all's own format — emit exactly that.
+    mods = []
+    for dirpath, _, files in os.walk('KernelCaseAnalysis'):
+        for fn in files:
+            if fn.endswith('.lean'):
+                rel = os.path.join(dirpath, fn)[:-len('.lean')]
+                mods.append(rel.replace(os.sep, '.'))
     with open('KernelCaseAnalysis.lean', 'w') as f:
-        f.write("module\n\n")
-        f.write("public import KernelCaseAnalysis.ProofOfMainTheorem\n")
-        f.write("public import KernelCaseAnalysis.Smoke\n")
+        f.write("module  -- shake: keep-all --deprecated_module: ignore\n\n")
+        for m in sorted(mods):
+            f.write(f"public import {m}\n")
 
 phase = sys.argv[1] if len(sys.argv) > 1 else 'all'
 only = int(sys.argv[2]) if len(sys.argv) > 2 else None
