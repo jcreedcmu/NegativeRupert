@@ -878,10 +878,7 @@ theorem fastNat_imp_checkN {Qi : Fin 3 → VertexIndex} {p : Pose ℚ} {ε δ r 
   have habs11 : (-(RationalApprox.sinNum13 p.θ₂ * RationalApprox.cosNum13 p.φ₂)).natAbs
       ≤ 2 ^ 87 := by omega
   have habs12 : (RationalApprox.sinNum13 p.φ₂ * 10 ^ 13).natAbs ≤ 2 ^ 87 := by omega
-  have h142 : (0:ℤ) ≤ 142 * (ε.den : ℤ) + 100 * ε.num := by
-    have h1 : (0:ℤ) ≤ 142 * (ε.den : ℤ) := by positivity
-    have h2 : (0:ℤ) ≤ 100 * ε.num := by linarith
-    linarith
+  have h142 : (0:ℤ) ≤ 142 * (ε.den : ℤ) + 100 * ε.num := by positivity
   have hetnn : (0:ℤ) ≤ ε.num * (142 * (ε.den : ℤ) + 100 * ε.num) * 10 ^ 10 :=
     mul_nonneg (mul_nonneg hεn h142) (by norm_num)
   have hboundnn : (0:ℤ) ≤ (100 * δ.num * (ε.den : ℤ) + 224 * ε.num * (δ.den : ℤ))
@@ -896,11 +893,7 @@ theorem fastNat_imp_checkN {Qi : Fin 3 → VertexIndex} {p : Pose ℚ} {ε δ r 
   have hR2nn : (0:ℤ) ≤ (100 * (ε.den : ℤ) * 10 ^ 16) ^ 2
       * (100 * (δ.den : ℤ) * (ε.den : ℤ) * r.num) := by positivity
   have hcDNnn : (0:ℤ) ≤ 200 * (ε.den : ℤ) * 10 ^ 3 + 200 * (ε.den : ℤ)
-      + 284 * ε.num * 10 ^ 16 + 600 * (ε.den : ℤ) * 10 ^ 6 := by
-    have : (0:ℤ) ≤ 284 * ε.num * 10 ^ 16 := by
-      have : (0:ℤ) ≤ 284 * ε.num := by linarith
-      positivity
-    positivity
+      + 284 * ε.num * 10 ^ 16 + 600 * (ε.den : ℤ) * 10 ^ 6 := by positivity
   have hen284nn : (0:ℤ) ≤ 284 * ε.num * 10 ^ 16 := by
     have : (0:ℤ) ≤ 284 * ε.num := by linarith
     positivity

@@ -58,39 +58,14 @@ noncomputable def ΔrotRM (P : ℝ³) (εα εθ εφ θ_ φ_ : ℝ) : ℝ :=
 lemma ΔrotM_nonneg {P : ℝ³} {εθ εφ θ_ φ_ : ℝ} (hεθ : 0 ≤ εθ) (hεφ : 0 ≤ εφ) :
     0 ≤ ΔrotM P εθ εφ θ_ φ_ := by
   unfold ΔrotM
-  refine add_nonneg (add_nonneg (add_nonneg ?_ ?_) ?_) ?_
-  · exact mul_nonneg hεθ (norm_nonneg _)
-  · exact mul_nonneg hεφ (norm_nonneg _)
-  · refine mul_nonneg (by norm_num) (add_nonneg (add_nonneg ?_ ?_) ?_)
-    · exact mul_nonneg (sq_nonneg _) (norm_nonneg _)
-    · exact mul_nonneg (mul_nonneg (by norm_num)
-        (mul_nonneg hεθ hεφ)) (norm_nonneg _)
-    · exact mul_nonneg (sq_nonneg _) (norm_nonneg _)
-  · exact div_nonneg (mul_nonneg (norm_nonneg _)
-      (pow_nonneg (add_nonneg hεθ hεφ) 3)) (by norm_num)
+  positivity
 
 /-- The inner variation budget is nonnegative on nonnegative radii. -/
 lemma ΔrotRM_nonneg {P : ℝ³} {εα εθ εφ θ_ φ_ : ℝ}
     (hεα : 0 ≤ εα) (hεθ : 0 ≤ εθ) (hεφ : 0 ≤ εφ) :
     0 ≤ ΔrotRM P εα εθ εφ θ_ φ_ := by
   unfold ΔrotRM
-  refine add_nonneg (add_nonneg (add_nonneg (add_nonneg ?_ ?_) ?_) ?_) ?_
-  · exact mul_nonneg hεα (norm_nonneg _)
-  · exact mul_nonneg hεθ (norm_nonneg _)
-  · exact mul_nonneg hεφ (norm_nonneg _)
-  · refine mul_nonneg (by norm_num) ?_
-    refine add_nonneg (add_nonneg (add_nonneg (add_nonneg (add_nonneg ?_ ?_) ?_) ?_) ?_) ?_
-    · exact mul_nonneg (sq_nonneg _) (norm_nonneg _)
-    · exact mul_nonneg (mul_nonneg (by norm_num)
-        (mul_nonneg hεα hεθ)) (norm_nonneg _)
-    · exact mul_nonneg (mul_nonneg (by norm_num)
-        (mul_nonneg hεα hεφ)) (norm_nonneg _)
-    · exact mul_nonneg (sq_nonneg _) (norm_nonneg _)
-    · exact mul_nonneg (mul_nonneg (by norm_num)
-        (mul_nonneg hεθ hεφ)) (norm_nonneg _)
-    · exact mul_nonneg (sq_nonneg _) (norm_nonneg _)
-  · exact div_nonneg (mul_nonneg (norm_nonneg _)
-      (pow_nonneg (add_nonneg (add_nonneg hεα hεθ) hεφ) 3)) (by norm_num)
+  positivity
 
 /-- **Second-order variation of the outer applied vector.**  The per-axis
 first-order charges are the norms of the derivative-family vectors at the

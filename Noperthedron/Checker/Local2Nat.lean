@@ -205,10 +205,7 @@ private lemma ae_test_iff (dXN dXtN dXfN dXttN dXtfN sg : ℤ)
       < 6 * ((εθ.den : ℤ) * εφ.den) ^ 3 * (sg * dXN))
     ↔ dVecX dX dXt dXf dXtt dXtf εθ εφ + 3 * κℚ < sgq * dX := by
   have hκ : (κℚ : ℚ) = 1 / 10 ^ 10 := rfl
-  have hWpos : (0:ℚ) < 6 * ((εθ.den : ℚ) * (εφ.den : ℚ)) ^ 3 := by
-    have h1 : (0:ℚ) < (εθ.den : ℚ) := by exact_mod_cast εθ.pos
-    have h2 : (0:ℚ) < (εφ.den : ℚ) := by exact_mod_cast εφ.pos
-    positivity
+  have hWpos : (0:ℚ) < 6 * ((εθ.den : ℚ) * (εφ.den : ℚ)) ^ 3 := by positivity
   have hb := budN_div_eq (|dXtN| + 3 * 10 ^ 32) (|dXfN| + 3 * 10 ^ 32)
     (|dXttN| + 3 * 10 ^ 32) (|dXtfN| + 3 * 10 ^ 32) (|dXN| + 3 * 10 ^ 32) (10 ^ 42)
     (a1 := |dXt| + 3 * κℚ) (a2 := |dXf| + 3 * κℚ) (a3 := |dXtt| + 3 * κℚ)
@@ -477,10 +474,7 @@ private lemma span_test_iff (PθN PφN PθθN PθφN PφφN f0N : ℤ)
             + εφ^2 * (|Pφφ| + 4 * (5 * κℚ)))
         + 8 * 1 * (εθ + εφ)^3 / 6 + 5 * κℚ < f0 := by
   have hκ : (κℚ : ℚ) = 1 / 10 ^ 10 := rfl
-  have hWpos : (0:ℚ) < 6 * ((εθ.den : ℚ) * (εφ.den : ℚ)) ^ 3 := by
-    have h1 : (0:ℚ) < (εθ.den : ℚ) := by exact_mod_cast εθ.pos
-    have h2 : (0:ℚ) < (εφ.den : ℚ) := by exact_mod_cast εφ.pos
-    positivity
+  have hWpos : (0:ℚ) < 6 * ((εθ.den : ℚ) * (εφ.den : ℚ)) ^ 3 := by positivity
   have hb := budN_div_eq (|PθN| + 10 * 10 ^ 74) (|PφN| + 10 * 10 ^ 74)
     (|PθθN| + 20 * 10 ^ 74) (|PθφN| + 20 * 10 ^ 74) (|PφφN| + 20 * 10 ^ 74) (8 * 10 ^ 84)
     (a1 := |Pθ| + 2 * (5 * κℚ)) (a2 := |Pφ| + 2 * (5 * κℚ)) (a3 := |Pθθ| + 4 * (5 * κℚ))
@@ -655,10 +649,7 @@ private lemma br_test_iff (b0N b1N c0N c1N d0N d1N e0N e1N f0N f1N a0N a1N rn : 
             (RationalApprox.round13 qa0 * RationalApprox.round13 qa0
               + RationalApprox.round13 qa1 * RationalApprox.round13 qa1) := by
   have hκ : (κℚ : ℚ) = 1 / 10 ^ 10 := rfl
-  have hWpos : (0:ℚ) < 6 * ((εθ.den : ℚ) * (εφ.den : ℚ)) ^ 3 := by
-    have h1 : (0:ℚ) < (εθ.den : ℚ) := by exact_mod_cast εθ.pos
-    have h2 : (0:ℚ) < (εφ.den : ℚ) := by exact_mod_cast εφ.pos
-    positivity
+  have hWpos : (0:ℚ) < 6 * ((εθ.den : ℚ) * (εφ.den : ℚ)) ^ 3 := by positivity
   have hrdQ : (0:ℚ) < (rd : ℚ) := by
     exact_mod_cast Nat.pos_of_ne_zero hrd
   -- sqrt atoms
@@ -1122,14 +1113,11 @@ theorem beCheckN_eq (Qi : Fin 3 → VertexIndex) (p : Pose ℚ) {εθ εφ : ℚ
             * (pythonVertexA (Qi i) 1 - pythonVertexA k 1)
           + (pythonVertexA (Qi i) 2 - pythonVertexA k 2)
             * (pythonVertexA (Qi i) 2 - pythonVertexA k 2))
-      rw [upper_f_eq]
-      have hκp : (0:ℚ) < 2 * κℚ := by norm_num [κℚ]
-      linarith
+      positivity
     have h2 : (0:ℚ) ≤ Local2Fast.dRotMs RationalApprox.sqrtApprox16.upper_sqrt (5 * κℚ)
         (app6QofN Y) εθ εφ _ :=
       dRotMs_nonneg _ εθ εφ (by norm_num [κℚ]) hnrm_nn hεθ hεφ
-    have h3 : (0:ℚ) < 5 * κℚ := by norm_num [κℚ]
-    linarith
+    positivity
 
 end BeSound2
 
@@ -1153,8 +1141,7 @@ def nUp (m : ℕ) : ℕ :=
   else Nat.sqrt m + 1
 
 private lemma sqrt_le_of_le {m s : ℕ} (h : m ≤ s * s) : Nat.sqrt m ≤ s :=
-  le_trans (Nat.sqrt_le_sqrt h)
-    (le_of_eq (by rw [show s * s = s ^ 2 from (sq s).symm]; exact Nat.sqrt_eq' s))
+  le_trans (Nat.sqrt_le_sqrt h) (le_of_eq (Nat.sqrt_eq s))
 
 lemma sqrt_succ_le_nUp (m : ℕ) : Nat.sqrt m + 1 ≤ nUp m := by
   unfold nUp

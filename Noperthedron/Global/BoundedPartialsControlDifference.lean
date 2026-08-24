@@ -356,9 +356,7 @@ theorem norm_sub_control_difference2 {n m : ℕ} (v : E n → E m)
         mul_nonneg (mul_nonneg (hε i) (hε j)) (hb2 i j)
     have h3 : (0:ℝ) ≤ (∑ i, ε i)^3 :=
       pow_nonneg (Finset.sum_nonneg fun i _ => hε i) 3
-    have h4 : (0:ℝ) ≤ M * (∑ i, ε i)^3 / 6 :=
-      div_nonneg (mul_nonneg hM h3) (by norm_num)
-    linarith
+    positivity
   · set u : E m := ‖v x - v y‖⁻¹ • (v x - v y) with hu_def
     have hu : ‖u‖ = 1 := norm_smul_inv_norm (sub_ne_zero.mpr hne)
     obtain ⟨hc, htpb, hb1', hb2'⟩ := h u hu
