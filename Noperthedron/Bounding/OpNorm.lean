@@ -35,14 +35,8 @@ theorem rotR_norm_one (α : ℝ) : ‖rotR α‖ = 1 :=
 
 theorem rotR'_preserves_norm (α : ℝ) :
     ∀ (v : E 2), ‖rotR' α v‖ = ‖v‖ := by
-  intro v
-  have heq : rotR' α v = rotR (α + Real.pi/2) v := by
-    simp only [rotR', rotR'_mat, rotR, rotR_mat]
-    simp only [LinearMap.coe_toContinuousLinearMap']
-    ext i
-    fin_cases i <;> simp [Matrix.vecHead, Matrix.vecTail, Real.sin_add_pi_div_two, Real.cos_add_pi_div_two]
-  rw [heq]
-  exact rotR_preserves_norm (α + Real.pi/2) v
+  rw [rotR'_eq_rotR_add_pi_div_two]
+  exact rotR_preserves_norm _
 
 theorem rotR'_norm_one (α : ℝ) : ‖rotR' α‖ = 1 :=
   norm_one_of_preserves_norm (rotR'_preserves_norm α)

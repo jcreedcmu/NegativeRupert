@@ -183,6 +183,13 @@ noncomputable
 def rotR' (α : ℝ) : ℝ² →L[ℝ] ℝ² :=
   (rotR'_mat α).toEuclideanLin.toContinuousLinearMap
 
+/-- Differentiating a planar rotation adds a quarter turn. -/
+lemma rotR'_eq_rotR_add_pi_div_two (α : ℝ) :
+    rotR' α = rotR (α + π / 2) := by
+  ext v i
+  fin_cases i <;> simp [rotR', rotR'_mat, rotR, rotR_mat,
+    Matrix.vecHead, Matrix.vecTail, sin_add_pi_div_two, cos_add_pi_div_two]
+
 -- [SY25] § 1.1 Definition 2
 noncomputable
 def vecX (θ : ℝ) (φ : ℝ) : ℝ³ :=

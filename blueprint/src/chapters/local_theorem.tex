@@ -185,8 +185,12 @@ See \cite{polyhedron.without.rupert}, Lemma 33.
 
 \begin{proof}
 \leanok
-From \cite{polyhedron.without.rupert}, Lemma 35.
-Note that $P^t P = Q^t Q$ is equivalent to saying that $\langle P_i,P_j\rangle = \langle Q_i,Q_j\rangle$ for all $1 \leq i,j \leq 3$. Moreover, the condition on invertibility of $Q$ can be dropped, however then the proof becomes somewhat less straightforward.
+An isometry preserves inner products, so congruence implies equality of the Gram matrices.
+Conversely, since the $Q_i$ form a basis, define a linear map $L$ by $L(Q_i)=P_i$.
+The equality $P^t P = Q^t Q$ says that
+$\langle L(Q_i),L(Q_j)\rangle=\langle Q_i,Q_j\rangle$ for every $i,j$.
+Expanding arbitrary vectors in this basis shows that $L$ preserves all inner products,
+and hence is the required linear isometry.
 
     If $P_1, P_2, P_3$ and $Q_1, Q_2, Q_3$ are congruent then $\langle P_i,P_j\rangle = \langle LQ_i,LQ_j\rangle = \langle Q_i,Q_j\rangle$, thus $P^t P = Q^t Q$.
     For the other direction, we claim that $L \coloneqq PQ^{-1}$ is orthonormal and satisfies that $P_i = LQ_i$ for all $i=1,2,3$.
