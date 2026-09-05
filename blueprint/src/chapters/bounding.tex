@@ -109,7 +109,23 @@ Corrigendum: the triangle inquality only implies greater than *or equal to*.
 \end{lemma}
 
 \begin{proof}
-\uses{lem:sqrt2, lem:RxRy, lem:RaRa}
+\uses{lem:RxRy}
 \leanok
-See \cite{polyhedron.without.rupert}, Lemma 16.
+Write $R_z$ and $R_y$ for rotations about the third and second axes.
+After dropping the norm-one projection and canceling the common rotations,
+it suffices to bound
+\[
+  \|R_z(\alpha-\alphab)R_y(\phi)
+       -R_y(\phib)R_z(\theta-\thetab)\|.
+\]
+Insert $R_y(\Phi)$ with the ordinary midpoint $\Phi=(\phi+\phib)/2$.
+On each side, the two angle changes are bounded by $\varepsilon$ and
+$\varepsilon/2$. Lemma~\ref{lem:RxRy}, applied after canceling the common
+rotations, bounds each difference strictly by
+$\sqrt{\varepsilon^2+(\varepsilon/2)^2}=\sqrt{5}\varepsilon/2$.
+If both angle changes vanish, strictness follows from $\varepsilon>0$;
+otherwise it follows from the equality condition in that lemma.
+The triangle inequality gives the result. The weighted intermediate angle
+used in \cite{polyhedron.without.rupert}, Lemma 16, is not needed for this
+uniform bound.
 \end{proof}
