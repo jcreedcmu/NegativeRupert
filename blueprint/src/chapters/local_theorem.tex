@@ -25,7 +25,7 @@ See \cite{polyhedron.without.rupert}, Lemma 21.
 \begin{lemma} \label{lem:langles}
   \lean{Local.langles}
   \leanok
-Let $V_1,V_2,V_3,Y,Z \in \R^3$ with $\|Y \|=\| Z \|$ and $Y,Z \in \mathrm{span}^+(V_1,V_2,V_3)$. Then there exists an $i$ with
+Let $V_1,V_2,V_3,Y,Z \in \R^3$ with $\|Y \|=\| Z \|$ and $Z \in \mathrm{span}^+(V_1,V_2,V_3)$. Then there exists an $i$ with
 \[
     \langle V_i, Y \rangle \leq \langle V_i, Z \rangle.
 \]
@@ -33,7 +33,12 @@ Let $V_1,V_2,V_3,Y,Z \in \R^3$ with $\|Y \|=\| Z \|$ and $Y,Z \in \mathrm{span}^
 
 \begin{proof}
 \leanok
-See \cite{polyhedron.without.rupert}, Lemma 23.
+Write $Z=\sum_i c_iV_i$ with all $c_i>0$. If every claimed inequality failed,
+then $\langle Z,Z\rangle<\langle Z,Y\rangle$ by taking the positive weighted sum.
+But Cauchy--Schwarz gives
+$\langle Z,Y\rangle\leq\|Z\|\|Y\|=\|Z\|^2$, a contradiction.
+Thus the assumption that $Y$ also lies in the positive cone in
+\cite{polyhedron.without.rupert}, Lemma 23, is unnecessary.
 \end{proof}
 
 \begin{lemma} \label{lem:scalarprodbars}

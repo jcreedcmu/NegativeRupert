@@ -83,24 +83,23 @@ theorem abs_sub_inner_bars_le {m n : ℕ} (A B A_ B_ : Euc(m) →L[ℝ] Euc(n)) 
 /-- [SY25] Lemma 25 -/
 theorem abs_sub_inner_le {m n : ℕ} (A B : Euc(m) →L[ℝ] Euc(n)) (P₁ P₂ : Euc(m)) :
     |⟪A P₁, A P₂⟫ - ⟪B P₁, B P₂⟫| ≤ ‖P₁‖ * ‖P₂‖ * ‖A - B‖ * (‖A‖ + ‖B‖ + ‖A - B‖) := by
-  -- Exactly the same proof as the one for `abs_sub_inner_bars_le` yields:
-  have h₁ : |⟪A P₁, A P₂⟫ - ⟪B P₁, B P₂⟫| ≤
-      ‖P₁‖ * ‖P₂‖ * ‖A - B‖ * (2 * ‖B‖ + ‖A - B‖) := by
-    have := abs_sub_inner_bars_le A A B B P₁ P₂
-    linarith [mul_comm ‖A - B‖ ‖B‖]
-  -- Exchanging A and B, however, also gives the same inequality with 2 * ‖A‖ instead
-  -- of 2 * ‖B‖.
-  have h₂ : |⟪A P₁, A P₂⟫ - ⟪B P₁, B P₂⟫| ≤
-      ‖P₁‖ * ‖P₂‖ * ‖A - B‖ * (2 * ‖A‖ + ‖A - B‖) := by
-    simp only [norm_sub_rev A B, abs_sub_comm ⟪A P₁, A P₂⟫ ⟪B P₁, B P₂⟫]
-    have := abs_sub_inner_bars_le B B A A P₁ P₂
-    linarith [mul_comm ‖B - A‖ ‖A‖]
-  -- Taking the arithmetic mean of these two upper bounds produces the desired
-  -- symmetric inequality.
-  have heq : ‖P₁‖ * ‖P₂‖ * ‖A - B‖ * (2 * ‖B‖ + ‖A - B‖) +
-      ‖P₁‖ * ‖P₂‖ * ‖A - B‖ * (2 * ‖A‖ + ‖A - B‖) =
-      2 * (‖P₁‖ * ‖P₂‖ * ‖A - B‖ * (‖A‖ + ‖B‖ + ‖A - B‖)) := by ring
-  linarith
+  -- Add and subtract the mixed inner product. This already gives the sharper
+  -- bound with `‖A‖ + ‖B‖`; the final step recovers the stated bound.
+  have hsplit : ⟪A P₁, A P₂⟫ - ⟪B P₁, B P₂⟫ =
+      ⟪(A - B) P₁, A P₂⟫ + ⟪B P₁, (A - B) P₂⟫ := by
+    simp only [sub_apply, inner_sub_left, inner_sub_right]
+    ring
+  calc
+    _ ≤ |⟪(A - B) P₁, A P₂⟫| + |⟪B P₁, (A - B) P₂⟫| := by
+      rw [hsplit]; exact abs_add_le _ _
+    _ ≤ ‖(A - B) P₁‖ * ‖A P₂‖ + ‖B P₁‖ * ‖(A - B) P₂‖ :=
+      add_le_add (abs_real_inner_le_norm _ _) (abs_real_inner_le_norm _ _)
+    _ ≤ (‖A - B‖ * ‖P₁‖) * (‖A‖ * ‖P₂‖) +
+        (‖B‖ * ‖P₁‖) * (‖A - B‖ * ‖P₂‖) := by
+      gcongr <;> exact ContinuousLinearMap.le_opNorm _ _
+    _ = ‖P₁‖ * ‖P₂‖ * ‖A - B‖ * (‖A‖ + ‖B‖) := by ring
+    _ ≤ _ := mul_le_mul_of_nonneg_left (le_add_of_nonneg_right (norm_nonneg _))
+      (by positivity)
 
 end Local
 end

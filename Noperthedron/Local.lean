@@ -231,25 +231,19 @@ theorem local_theorem {ι : Type} [Fintype ι] [Nonempty ι]
     rw [← pow_add, show σQ + (σP + σQ) = σP + 2 * σQ by ring,
         pow_add, pow_mul]
     norm_num
-  have h₁ : Y ∈ Spanp P_ ∧ Z ∈ Spanp P_ := by
-    constructor
-    · have h₄ (i) : 0 < ⟪vecX p.θ₁ p.φ₁, P_ i⟫ :=
-        Bounding.XPgt0 (hP_ i) hε hθ₁ hφ₁
-          (by simpa [P_, Pose.vecX₁, ← real_inner_smul_right] using hσP₂ i)
-      refine vecX_spanning P_ hθ₁ hφ₁ ?_ hP_ h₄
-      exact spanning_neg σP span₁
-    · have h₅ (i) : 0 < ⟪vecX p.θ₂ p.φ₂, Q_ i⟫ :=
-        Bounding.XPgt0 (hQ_ i) hε hθ₂ hφ₂
-          (by simpa [Q_, Pose.vecX₂, ← real_inner_smul_right] using hσQ₂ i)
-      have h₆ : vecX p.θ₂ p.φ₂ ∈ Spanp Q_ := by
-        refine vecX_spanning Q_ hθ₂ hφ₂ ?_ hQ_ h₅
-        exact spanning_neg σQ span₂
-      simp only [Spanp, Set.mem_ofPred_eq, Z] at h₆ ⊢
-      obtain ⟨c, hc₁, hc₂⟩ := h₆
-      use c, hc₁
-      simp [hc₂, map_sum, map_smul, ←hPQ_]
+  have h₁ : Z ∈ Spanp P_ := by
+    have h₅ (i) : 0 < ⟪vecX p.θ₂ p.φ₂, Q_ i⟫ :=
+      Bounding.XPgt0 (hQ_ i) hε hθ₂ hφ₂
+        (by simpa [Q_, Pose.vecX₂, ← real_inner_smul_right] using hσQ₂ i)
+    have h₆ : vecX p.θ₂ p.φ₂ ∈ Spanp Q_ := by
+      refine vecX_spanning Q_ hθ₂ hφ₂ ?_ hQ_ h₅
+      exact spanning_neg σQ span₂
+    simp only [Spanp, Set.mem_ofPred_eq, Z] at h₆ ⊢
+    obtain ⟨c, hc₁, hc₂⟩ := h₆
+    use c, hc₁
+    simp [hc₂, map_sum, map_smul, ←hPQ_]
   suffices h₂ : ∀ i, ⟪Z, P_ i⟫ < ⟪Y, P_ i⟫ by
-    obtain ⟨i, h₃⟩ := langles (hY.trans hZ.symm) h₁.1 h₁.2
+    obtain ⟨i, h₃⟩ := langles (hY.trans hZ.symm) h₁
     rw [real_inner_comm Y (P_ i), real_inner_comm Z (P_ i)] at h₃
     exact lt_iff_not_ge.mp (h₂ i) h₃
   intro i
@@ -467,17 +461,15 @@ theorem local_theorem₂ {ι : Type} [Fintype ι] [Nonempty ι]
     rw [show Q_ i = (-1:ℝ)^σQ • (Q i) from rfl,
       GlobalTheorem.ΔvecX_neg_one_pow_smul, real_inner_smul_right]
     exact hσQ₂ i
-  have h₁ : Y ∈ Spanp P_ ∧ Z ∈ Spanp P_ := by
-    constructor
-    · exact vecX_spanning₂ P_ hεθ₁ hεφ₁ hθ₁ hφ₁ (spanning₂_neg σP span₁) h₄
-    · have h₆ : vecX p.θ₂ p.φ₂ ∈ Spanp Q_ :=
-        vecX_spanning₂ Q_ hεθ₂ hεφ₂ hθ₂ hφ₂ (spanning₂_neg σQ span₂) h₅
-      simp only [Spanp, Set.mem_ofPred_eq, Z] at h₆ ⊢
-      obtain ⟨c, hc₁, hc₂⟩ := h₆
-      use c, hc₁
-      simp [hc₂, map_sum, map_smul, ←hPQ_]
+  have h₁ : Z ∈ Spanp P_ := by
+    have h₆ : vecX p.θ₂ p.φ₂ ∈ Spanp Q_ :=
+      vecX_spanning₂ Q_ hεθ₂ hεφ₂ hθ₂ hφ₂ (spanning₂_neg σQ span₂) h₅
+    simp only [Spanp, Set.mem_ofPred_eq, Z] at h₆ ⊢
+    obtain ⟨c, hc₁, hc₂⟩ := h₆
+    use c, hc₁
+    simp [hc₂, map_sum, map_smul, ←hPQ_]
   suffices h₂ : ∀ i, ⟪Z, P_ i⟫ < ⟪Y, P_ i⟫ by
-    obtain ⟨i, h₃⟩ := langles (hY.trans hZ.symm) h₁.1 h₁.2
+    obtain ⟨i, h₃⟩ := langles (hY.trans hZ.symm) h₁
     rw [real_inner_comm Y (P_ i), real_inner_comm Z (P_ i)] at h₃
     exact lt_iff_not_ge.mp (h₂ i) h₃
   intro i
