@@ -52,44 +52,27 @@ Bessel's inequality in coordinates: if the rows `a = (a0, a1, a2)` and
 `b = (b0, b1, b2)` are orthogonal and each have norm at most one, then
 `(a ⬝ᵥ v)² + (b ⬝ᵥ v)² ≤ ‖v‖²`.
 
-The certificate combines the Lagrange identity (Cauchy–Schwarz) for each row
-with the Gram determinant identity
-`|a|²|b|²|v|² = |b|²(a⬝v)² + |a|²(b⬝v)² + det[a;b;v]²`, which holds when `a ⬝ᵥ b = 0`.
+Subtract the two orthogonal components from `v`. The squared norm of the
+residual, plus the nonnegative corrections for rows shorter than one,
+is exactly the defect in Bessel's inequality.
 -/
 private lemma inner_sq_add_inner_sq_le {a0 a1 a2 b0 b1 b2 x y z : ℝ}
     (horth : a0 * b0 + a1 * b1 + a2 * b2 = 0)
     (h0 : a0^2 + a1^2 + a2^2 ≤ 1) (h1 : b0^2 + b1^2 + b2^2 ≤ 1) :
     (a0*x + a1*y + a2*z)^2 + (b0*x + b1*y + b2*z)^2 ≤ x^2 + y^2 + z^2 := by
-  -- Cauchy–Schwarz for each row, via the Lagrange identity.
-  have hP : 0 ≤ (a0^2+a1^2+a2^2) * (x^2+y^2+z^2) - (a0*x + a1*y + a2*z)^2 := by
-    have h : (a0^2+a1^2+a2^2) * (x^2+y^2+z^2) - (a0*x + a1*y + a2*z)^2
-        = (a0*y - a1*x)^2 + (a0*z - a2*x)^2 + (a1*z - a2*y)^2 := by ring
-    rw [h]; positivity
-  have hQ : 0 ≤ (b0^2+b1^2+b2^2) * (x^2+y^2+z^2) - (b0*x + b1*y + b2*z)^2 := by
-    have h : (b0^2+b1^2+b2^2) * (x^2+y^2+z^2) - (b0*x + b1*y + b2*z)^2
-        = (b0*y - b1*x)^2 + (b0*z - b2*x)^2 + (b1*z - b2*y)^2 := by ring
-    rw [h]; positivity
-  have e1 : 0 ≤ (1 - (b0^2+b1^2+b2^2)) *
-      ((a0^2+a1^2+a2^2) * (x^2+y^2+z^2) - (a0*x + a1*y + a2*z)^2) :=
-    mul_nonneg (by linarith) hP
-  have e2 : 0 ≤ (1 - (a0^2+a1^2+a2^2)) *
-      ((b0^2+b1^2+b2^2) * (x^2+y^2+z^2) - (b0*x + b1*y + b2*z)^2) :=
-    mul_nonneg (by linarith) hQ
-  have e3 : 0 ≤ (1 - (a0^2+a1^2+a2^2)) * ((1 - (b0^2+b1^2+b2^2)) * (x^2+y^2+z^2)) :=
-    mul_nonneg (by linarith) (mul_nonneg (by linarith) (by positivity))
-  -- The defect decomposes into the nonnegative pieces above plus the square of
-  -- det[a;b;v]; orthogonality of the rows enters through the Gram identity.
-  have key : x^2+y^2+z^2 - (a0*x + a1*y + a2*z)^2 - (b0*x + b1*y + b2*z)^2
-      = (1 - (b0^2+b1^2+b2^2)) *
-          ((a0^2+a1^2+a2^2) * (x^2+y^2+z^2) - (a0*x + a1*y + a2*z)^2)
-      + (1 - (a0^2+a1^2+a2^2)) *
-          ((b0^2+b1^2+b2^2) * (x^2+y^2+z^2) - (b0*x + b1*y + b2*z)^2)
-      + (1 - (a0^2+a1^2+a2^2)) * ((1 - (b0^2+b1^2+b2^2)) * (x^2+y^2+z^2))
-      + (a0*(b1*z - b2*y) - a1*(b0*z - b2*x) + a2*(b0*y - b1*x))^2 := by
-    linear_combination ((a0*b0 + a1*b1 + a2*b2) * (x^2+y^2+z^2)
-      - 2 * (a0*x + a1*y + a2*z) * (b0*x + b1*y + b2*z)) * horth
-  linarith [e1, e2, e3, key,
-    sq_nonneg (a0*(b1*z - b2*y) - a1*(b0*z - b2*x) + a2*(b0*y - b1*x))]
+  let α := a0*x + a1*y + a2*z
+  let β := b0*x + b1*y + b2*z
+  have hres : 0 ≤ x^2 + y^2 + z^2 - α^2 - β^2 := by
+    have identity : x^2 + y^2 + z^2 - α^2 - β^2 =
+        (x - α*a0 - β*b0)^2 + (y - α*a1 - β*b1)^2 + (z - α*a2 - β*b2)^2
+        + (1 - (a0^2 + a1^2 + a2^2)) * α^2
+        + (1 - (b0^2 + b1^2 + b2^2)) * β^2 := by
+      dsimp [α, β]
+      linear_combination -2 * (a0*x + a1*y + a2*z) * (b0*x + b1*y + b2*z) * horth
+    rw [identity]
+    positivity
+  dsimp [α, β] at hres
+  linarith
 
 /--
 A `2 × 3` matrix whose rows are orthogonal to each other and have norm at most

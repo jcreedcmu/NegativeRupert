@@ -40,6 +40,23 @@ theorem pythagoras {θ φ : ℝ} (P : Euc(3)) :
   rw [h1, h2, ← h3]
   linarith [h4]
 
+/-- A vector killed by the projection is its component along the viewing direction. -/
+theorem eq_smul_vecX_of_rotM_eq_zero {θ φ : ℝ} {P : Euc(3)} (hP : rotM θ φ P = 0) :
+    P = ⟪vecX θ φ, P⟫ • vecX θ φ := by
+  have hnorm := pythagoras (θ := θ) (φ := φ) P
+  rw [hP, norm_zero, zero_pow (by norm_num)] at hnorm
+  apply sub_eq_zero.mp
+  apply norm_eq_zero.mp
+  have hsq := norm_sub_sq_real P (⟪vecX θ φ, P⟫ • vecX θ φ)
+  rw [norm_smul, Bounding.vecX_norm_one, mul_one, Real.norm_eq_abs, sq_abs,
+    real_inner_smul_right, real_inner_comm (vecX θ φ) P] at hsq
+  apply sq_eq_zero_iff.mp
+  calc
+    ‖P - ⟪vecX θ φ, P⟫ • vecX θ φ‖ ^ 2 =
+        ‖P‖ ^ 2 - 2 * (⟪vecX θ φ, P⟫ * ⟪vecX θ φ, P⟫) + ⟪vecX θ φ, P⟫ ^ 2 := hsq
+    _ = ‖P‖ ^ 2 - ⟪vecX θ φ, P⟫ ^ 2 := by ring
+    _ = 0 := hnorm.symm
+
 /-- [SY25] Lemma 24 -/
 theorem abs_sub_inner_bars_le {m n : ℕ} (A B A_ B_ : Euc(m) →L[ℝ] Euc(n)) (P₁ P₂ : Euc(m)) :
     |⟪A P₁, B P₂⟫ - ⟪A_ P₁, B_ P₂⟫| ≤

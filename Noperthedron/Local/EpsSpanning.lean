@@ -64,44 +64,14 @@ theorem spanp_of_pos {θ φ : ℝ} (P : Triangle)
   -- apply lemma 26
   obtain ⟨a, b, c, ha, hb, hc, habc⟩ := Local.origin_in_triangle (h₁ 0) (h₁ 1) (h₁ 2)
   let S := a • (P 0) + b • (P 1) + c • (P 2)
-  -- both S and vecX θ φ are in the kernel of rotM θ φ
-  -- therefore S = λ * vecX θ φ for some λ.
-  have h₂ : ∃ lam : ℝ, S = lam • vecX θ φ := by
-    by_cases hSz : S = 0
-    · use 0; simpa
-    have h₆ : rotM θ φ S = 0 := by
-      unfold S
-      simpa
-   -- Since $S$ is orthogonal to the plane spanned by $rotM θ φ$, it must be parallel to $vecX θ φ$.
-    have hS_orthogonal : ⟪S, S⟫ = ⟪vecX θ φ, S⟫ ^ 2 := by
-      have hS_orthogonal : ‖rotM θ φ S‖ ^ 2 = ‖S‖ ^ 2 - ⟪vecX θ φ, S⟫ ^ 2 := by
-        exact pythagoras S
-      simp_all [inner_self_eq_norm_sq_to_K]
-      linarith
-    simp only [inner_self_eq_norm_sq_to_K, Real.ringHom_apply] at hS_orthogonal
-    rw [sq_eq_sq_iff_abs_eq_abs, abs_norm, ← Real.norm_eq_abs] at hS_orthogonal
-    rw [←one_mul ‖S‖, ← Bounding.vecX_norm_one θ φ] at hS_orthogonal
-    symm at hS_orthogonal
-    have hXnz : vecX θ φ ≠ 0 := by
-      intro H
-      apply_fun (fun x ↦ ‖x‖) at H
-      simp [Bounding.vecX_norm_one] at H
-    rw [norm_inner_eq_norm_iff hXnz hSz] at hS_orthogonal
-    obtain ⟨r, hr₁, hr₂⟩ := hS_orthogonal
-    use r
-  obtain ⟨lam, hlam⟩ := h₂
+  -- The positive combination has zero projection, hence equals its component along vecX.
+  have hS : rotM θ φ S = 0 := by simpa [S]
+  let lam := ⟪vecX θ φ, S⟫
+  have hlam : S = lam • vecX θ φ := eq_smul_vecX_of_rotM_eq_zero hS
   have h₄ : 0 < lam := by
-    have h₃ : lam = ⟪vecX θ φ, lam • vecX θ φ⟫ := by
-      rw [real_inner_smul_self_right]
-      simp [Bounding.vecX_norm_one]
-    rw [← hlam] at h₃
-    unfold S at h₃
-    simp only [inner_add_right, real_inner_smul_right] at h₃
-    rw [h₃]
-    have hX0 := hX 0
-    have hX1 := hX 1
-    have hX2 := hX 2
-    positivity
+    dsimp [lam, S]
+    simp only [inner_add_right, real_inner_smul_right]
+    positivity [hX 0, hX 1, hX 2]
   have h₅ : vecX θ φ = lam⁻¹ • S := by
     rw [hlam, smul_smul, inv_eq_one_div, one_div_mul_cancel h₄.ne.symm]
     simp
