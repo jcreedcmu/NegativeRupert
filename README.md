@@ -70,6 +70,14 @@ To run a server hosting the html, run
 leanblueprint serve
 ```
 
+## Nopert #76
+
+A separate program on this branch attempts to prove that Tom Murphy VII's
+Nopert #76 is not Rupert, with the same certificate-table architecture.
+Its Lean development is in [Noperthedron/Nopert76](Noperthedron/Nopert76);
+start with [its README](Noperthedron/Nopert76/README.md) for status, data
+locations, and how to resume the paused searches.
+
 ## License Information
 
 Portions of this project use Apache License 2.0–licensed code from
